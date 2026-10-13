@@ -1,12 +1,14 @@
 'use client';
 import Link from 'next/link';
-import { Gift, Lock } from 'lucide-react';
+import { Gift, Lock, Wallet } from 'lucide-react';
 import type { GiftType } from '@surveyflow/shared';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, Input, Textarea } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
-import { useT } from '@/lib/i18n/client';
+import { useWallet, unitCost } from '@/components/wallet/use-wallet';
+import { fcfa } from '@/lib/format';
+import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 import type { DraftErrors, SurveyDraft } from './types';
 
@@ -18,6 +20,39 @@ const OPTIONS: Array<{ value: GiftType; key: 'b.gift.none' | 'b.gift.airtime' | 
   { value: 'prize_draw', key: 'b.gift.draw', auto: true },
   { value: 'custom', key: 'b.gift.custom', auto: false },
 ];
+
+/** Airtime / Mobile Money gifts are paid by the owner from the prepaid wallet: show exactly what that means before they commit. */
+function GiftCostPanel({ gift }: { gift: SurveyDraft['gift'] }) {
+  const t = useT();
+  const locale = useLocale();
+  const { wallet } = useWallet();
+  const amount = Number(gift.giftAmountFCFA);
+  if (!wallet || !Number.isFinite(amount) || amount < 100) return null;
+  const unit = unitCost(amount, wallet.feePercent);
+  const covers = Math.floor(wallet.balanceFCFA / unit);
+  const cap = Number(gift.giftMaxCount) > 0 ? Math.floor(Number(gift.giftMaxCount)) : null;
+  const empty = covers === 0;
+  const low = !empty && cap !== null && wallet.balanceFCFA < cap * unit;
+  return (
+    <section aria-label={t('w.cost.title')} className="flex flex-col gap-3 rounded-2xl border border-line bg-canvas p-4 sm:col-span-2" data-testid="gift-cost-panel">
+      <h3 className="flex items-center gap-2 text-sm font-bold"><Wallet className="h-4 w-4 text-leaf" aria-hidden />{t('w.cost.title')}</h3>
+      <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr]">
+        <dt className="text-muted-foreground">{t('w.cost.unit')}</dt>
+        <dd className="font-semibold tabular-nums">{fcfa(unit, locale)} FCFA <span className="font-normal text-muted-foreground">({t('w.cost.unitDetail', { amount: fcfa(amount, locale), fee: fcfa(unit - amount, locale) })})</span></dd>
+        <dt className="text-muted-foreground">{t('w.cost.balance')}</dt>
+        <dd className="font-semibold tabular-nums">{fcfa(wallet.balanceFCFA, locale)} FCFA <span className="font-normal text-muted-foreground">({t('w.cost.covers', { n: fcfa(covers, locale) })})</span></dd>
+        {cap !== null && <><dt className="text-muted-foreground">{t('w.cost.max')}</dt><dd className="font-semibold tabular-nums">{fcfa(cap * unit, locale)} FCFA <span className="font-normal text-muted-foreground">({t('w.cost.maxDetail', { n: fcfa(cap, locale), unit: fcfa(unit, locale) })})</span></dd></>}
+      </dl>
+      {cap === null && <p className="text-sm text-muted-foreground">{t('w.cost.noCap')}</p>}
+      {(empty || low) && (
+        <p role="alert" className="rounded-xl bg-amber-soft px-4 py-3 text-sm text-amber-ink">
+          {empty ? t('w.cost.empty') : t('w.cost.low')}{' '}
+          <a href="/billing#wallet" target="_blank" rel="noopener noreferrer" className="font-bold underline">{t('w.cost.topup')}</a>
+        </p>
+      )}
+    </section>
+  );
+}
 
 export function GiftSettings({ draft, onChange, errors, canAutomate }: { draft: SurveyDraft; onChange: (d: SurveyDraft) => void; errors: DraftErrors; canAutomate: boolean }) {
   const t = useT();
@@ -44,6 +79,7 @@ export function GiftSettings({ draft, onChange, errors, canAutomate }: { draft: 
             );
           })}
         </RadioGroup>
+        {g.giftType === 'none' && canAutomate && <p className="text-sm text-muted-foreground">{t('w.cost.offHint')}</p>}
         {!canAutomate && (
           <p className="rounded-xl bg-amber-soft px-4 py-3 text-sm text-amber-ink">
             {t('b.gift.upgrade')} <Link href="/billing" className="font-bold underline">{t('common.upgrade')}</Link>
@@ -62,6 +98,7 @@ export function GiftSettings({ draft, onChange, errors, canAutomate }: { draft: 
                 <Input id="giftAmount" type="number" inputMode="numeric" min={100} max={20000} step={50} value={g.giftAmountFCFA} onChange={(e) => set({ giftAmountFCFA: e.target.value })} aria-invalid={!!errors.gift.giftAmountFCFA} />
               </Field>
             )}
+            {money && canAutomate && <GiftCostPanel gift={g} />}
             {money && (
               <fieldset className="flex flex-col gap-2 sm:col-span-2">
                 <legend className="mb-1 text-sm font-semibold">{t('b.gift.delivery')}</legend>

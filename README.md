@@ -36,16 +36,19 @@ In demo mode (`WHATSAPP_MODE=mock`, `PSP_MOCK=true`, `GIFT_PROVIDER=mock`) nothi
   *participant's phone* against the real, signature-checked webhook code path — tap buttons, answer, skip 25 h to trigger
   abandonment.
 * Subscribing opens a **demo checkout** (`/billing/mock-checkout`) that exercises the real verification + activation path.
-* Gifts are "delivered" by a mock provider.
+* Gifts are "delivered" by a mock provider. **The survey owner pays for gifts** from a prepaid wallet (Billing → Gift wallet, topped up
+  through the same mock checkout). The seeded demo account has a funded wallet; a fresh account starts at 0, so its participants get a plain
+  thank-you until it is topped up — see `docs/DECISIONS.md` §3.1.
 
-For a production-like preview: `npm run build && npm start`.
+For a production-like preview: `npm run build && npm start` (the API reads the root `.env`; set `DATABASE_URL`/`REDIS_URL` there or in the environment).
 
 ## Going live (checklist)
 
-1. Postgres + Redis; `npx prisma migrate deploy` (the initial migration is in `apps/api/prisma/migrations`, verified against the schema).
+1. Postgres + Redis; `npx prisma migrate deploy` (`apps/api/prisma/migrations`: `init` + `gift_wallet`, applied from scratch and diffed against the schema — no drift).
 2. Set **production** env: `NODE_ENV=production`, `JWT_SECRET`, `TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`), `NEXTAUTH_SECRET`,
    `WHATSAPP_MODE=live`, `META_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, PSP keys, `GIFT_PROVIDER=campay`. **The API refuses to start**
-   in production with mock modes, a missing app secret, or weak secrets.
+   in production with mock modes, a missing app secret, or weak secrets. Set `GIFT_FEE_PERCENT` from the real provider tariffs (default 5 is a
+   placeholder) and settle the legal/treasury questions in `docs/DECISIONS.md` §3.1 **before accepting real wallet top-ups**.
 3. Meta: point the app's webhook at `https://<api>/api/webhook/whatsapp`, subscribe to `messages`, configure Embedded Signup.
 4. Each PSP: sandbox pass first (see the table in `docs/DECISIONS.md` §4) — Campay and PayUnit especially.
 5. Replace the draft `/privacy` and `/terms` with counsel-approved text; set `NEXT_PUBLIC_SALES_WHATSAPP` for the agencies CTA.
@@ -77,6 +80,7 @@ node scripts/e2e-ui.mjs /tmp/e2e # real-browser end-to-end run against the runni
 
 `POST auth/register` · `POST auth/login` · `GET|PATCH auth/me` · `GET|POST surveys` · `GET|PUT|DELETE surveys/:id` ·
 `POST surveys/:id/{publish,pause,resume,close,duplicate,send,audience,remind,draw}` · `GET surveys/:id/{analytics,responses,recipients,gifts,sync}` ·
+`POST surveys/:id/gifts/{retry,release}` · `GET wallet` · `POST wallet/topup` ·
 `GET surveys/:id/export/{pdf,excel}` · `POST|DELETE surveys/:id/sync/google-sheets` · `GET contacts` · `POST contacts[/import|/bulk-delete|/bulk-tag]` ·
 `GET|POST webhook/whatsapp` · `POST payments/initiate` · `GET payments[/:id]` · `GET|POST payments/webhook/:psp` ·
 `GET subscription` · `PUT subscription/upgrade` · `POST subscription/{cancel,reactivate}` · `GET|POST whatsapp/accounts…` · `GET integrations/google…`

@@ -1,12 +1,13 @@
 import { customAlphabet } from 'nanoid';
 import type { PaymentTransaction, Plan, Prisma } from '@prisma/client';
-import { ANNUAL_MONTHS_CHARGED, PLANS, currencyForCountry, planPrice, toWaId, type Currency, type PaidPlanKey, type PaymentMethod } from '@surveyflow/shared';
+import { ANNUAL_MONTHS_CHARGED, PLANS, WALLET_TOPUP_MAX_FCFA, WALLET_TOPUP_MIN_FCFA, currencyForCountry, planPrice, toWaId, type Currency, type PaidPlanKey, type PaymentMethod } from '@surveyflow/shared';
 import { env } from '../../config/env';
 import { AppError, badRequest, conflict, notFound } from '../../lib/errors';
 import { prisma } from '../../lib/prisma';
 import { notifyOwner } from '../notify';
+import { creditWallet } from '../wallet';
 import { pspRouter, type PSPRouter } from './router';
-import { PspError, type VerifyResult } from './types';
+import { PspError, type PSPAdapter, type VerifyResult } from './types';
 
 // Alphanumeric only: CinetPay rejects `_ # / $ &` in transaction ids.
 const refId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 22);
@@ -29,7 +30,7 @@ export function addMonths(d: Date, n: number): Date {
 }
 
 export const txDto = (t: PaymentTransaction) => ({
-  id: t.id, reference: t.reference, plan: t.plan, interval: t.interval, method: t.method, psp: t.pspProvider,
+  id: t.id, reference: t.reference, purpose: t.purpose, plan: t.plan, interval: t.interval, method: t.method, psp: t.pspProvider,
   amount: t.amount, currency: t.currency, status: t.status, checkoutUrl: t.status === 'pending' ? t.checkoutUrl : null,
   paymentToken: t.status === 'pending' && !t.checkoutUrl ? t.pspReference : null, createdAt: t.createdAt, paidAt: t.paidAt, failReason: t.failReason,
 });
@@ -67,18 +68,27 @@ export async function initiatePayment(userId: string, input: InitiateInput, rout
   const tx = await prisma.paymentTransaction.create({
     data: {
       subscriptionId: user.subscription.id, userId, pspProvider: chain[0]!.name, amount, currency: payCurrency, status: 'pending',
-      reference: `sf${refId()}`, plan: input.plan as Plan, interval: input.interval, method: input.method, phone: phone || null,
+      reference: `sf${refId()}`, purpose: 'subscription', plan: input.plan as Plan, interval: input.interval, method: input.method, phone: phone || null,
     },
   });
+  return dispatchCheckout(tx, chain, user, `SurveyFlow ${PLANS[input.plan].key} (${input.interval})`, phone);
+}
 
+/**
+ * Walks the PSP failover chain for an already-created pending transaction. Shared by subscriptions and gift top-ups so
+ * both get the same failover, the same reference rules and the same "mark failed if nobody answers" behaviour.
+ */
+async function dispatchCheckout(
+  tx: PaymentTransaction, chain: PSPAdapter[], user: { name: string; email: string }, description: string, phone: string,
+): Promise<PaymentTransaction> {
   const returnUrl = `${env.webOrigins[0]}/billing/return?ref=${tx.reference}`;
   const notifyUrl = (psp: string) => `${env.PUBLIC_API_URL}/api/payments/webhook/${psp}`;
   let lastErr: Error | null = null;
   for (const adapter of chain) {
     try {
       const r = await adapter.initiatePayment({
-        amount, currency: payCurrency, method: input.method, reference: tx.reference, customerName: user.name, customerEmail: user.email,
-        customerPhone: toWaId(phone || '0'), description: `SurveyFlow ${PLANS[input.plan].key} (${input.interval})`, returnUrl, notifyUrl: notifyUrl(adapter.name),
+        amount: tx.amount, currency: tx.currency as Currency, method: tx.method as PaymentMethod, reference: tx.reference, customerName: user.name, customerEmail: user.email,
+        customerPhone: toWaId(phone || '0'), description, returnUrl, notifyUrl: notifyUrl(adapter.name),
       });
       return prisma.paymentTransaction.update({ where: { id: tx.id }, data: { pspProvider: adapter.name, pspReference: r.pspReference ?? r.paymentToken ?? null, checkoutUrl: r.checkoutUrl ?? null } });
     } catch (err) {
@@ -89,6 +99,47 @@ export async function initiatePayment(userId: string, input: InitiateInput, rout
   }
   await prisma.paymentTransaction.update({ where: { id: tx.id }, data: { status: 'failed', failReason: (lastErr?.message ?? 'psp_unavailable').slice(0, 300) } });
   throw new AppError(502, 'psp_unavailable', 'We could not reach any payment provider. Please try again in a moment.');
+}
+
+export interface TopupInput {
+  amountFCFA: number;
+  method: PaymentMethod;
+  phone?: string;
+}
+
+/**
+ * Gift-wallet top-up. The wallet is in FCFA and gifts only exist in the FCFA zone, so the charge is always in XAF/XOF
+ * (1:1) — no FX rate is ever invented. The amount is validated here; the client never decides pricing.
+ */
+export async function initiateGiftTopup(userId: string, input: TopupInput, router: PSPRouter = pspRouter): Promise<PaymentTransaction> {
+  const amount = input.amountFCFA;
+  if (!Number.isInteger(amount) || amount < WALLET_TOPUP_MIN_FCFA || amount > WALLET_TOPUP_MAX_FCFA) {
+    throw badRequest('invalid_amount', `Top-up must be between ${WALLET_TOPUP_MIN_FCFA.toLocaleString('en')} and ${WALLET_TOPUP_MAX_FCFA.toLocaleString('en')} FCFA`);
+  }
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { subscription: true } });
+  if (!user.subscription) throw notFound('Subscription');
+
+  const dup = await prisma.paymentTransaction.findFirst({
+    where: { userId, purpose: 'gift_topup', amount, method: input.method, status: 'pending', createdAt: { gt: new Date(Date.now() - 10 * 60_000) } },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (dup) return dup;
+
+  const currency: Currency = user.preferredCurrency === 'XOF' ? 'XOF' : 'XAF';
+  const chain = router.chain({ country: user.country, currency, method: input.method, preferred: user.preferredPSP });
+  if (!chain.length) throw new AppError(503, 'no_psp_available', 'No payment provider is available for this country / payment method right now');
+
+  const phone = (input.phone ?? user.phone ?? '').trim();
+  if (input.method === 'mobile_money' && !/^\+?\d{8,15}$/.test(phone.replace(/[\s-]/g, ''))) {
+    throw badRequest('phone_required', 'Enter the Mobile Money phone number to charge');
+  }
+  const tx = await prisma.paymentTransaction.create({
+    data: {
+      subscriptionId: user.subscription.id, userId, pspProvider: chain[0]!.name, amount, currency, status: 'pending',
+      reference: `sf${refId()}`, purpose: 'gift_topup', plan: null, interval: 'monthly', method: input.method, phone: phone || null,
+    },
+  });
+  return dispatchCheckout(tx, chain, user, 'SurveyFlow gift wallet top-up', phone);
 }
 
 export type SettleOutcome = 'activated' | 'already_settled' | 'failed' | 'pending' | 'amount_mismatch';
@@ -120,11 +171,17 @@ export async function settleTransaction(txId: string, v: VerifyResult, log: { wa
       where: { id: txId, status: 'pending' }, data: { status: 'success', paidAt: new Date(), pspReference: v.pspReference ?? tx.pspReference },
     });
     if (claimed.count === 0) return false; // another delivery got here first
-    await activateSubscription(db, tx, v.pspReference ?? tx.pspReference ?? undefined);
+    if (tx.purpose === 'gift_topup') {
+      // Credit what we ASKED for (tx.amount), not what the PSP says it collected: an overpayment must not mint wallet balance.
+      await creditWallet(db, tx.userId, tx.amount, 'topup', tx.id, `Top-up (${tx.method === 'card' ? 'card' : 'Mobile Money'} · ${tx.pspProvider})`);
+    } else {
+      await activateSubscription(db, tx, v.pspReference ?? tx.pspReference ?? undefined);
+    }
     return true;
   });
   if (activated) {
-    void notifyOwner(tx.userId, `✅ SurveyFlow: payment received. Your ${tx.plan} plan is active.`).catch(() => undefined);
+    const msg = tx.purpose === 'gift_topup' ? `✅ SurveyFlow: ${tx.amount.toLocaleString('en')} FCFA added to your gift wallet.` : `✅ SurveyFlow: payment received. Your ${tx.plan} plan is active.`;
+    void notifyOwner(tx.userId, msg).catch(() => undefined);
     return 'activated';
   }
   return 'already_settled';
@@ -133,6 +190,7 @@ export async function settleTransaction(txId: string, v: VerifyResult, log: { wa
 async function activateSubscription(db: Prisma.TransactionClient, tx: PaymentTransaction, pspTxId?: string) {
   const sub = await db.subscription.findUniqueOrThrow({ where: { id: tx.subscriptionId } });
   const now = new Date();
+  if (!tx.plan) throw new Error(`subscription payment ${tx.id} has no plan`);
   const plan = tx.plan as PaidPlanKey;
   // Renewing the same plan before it ends extends from the current end; an upgrade/new purchase starts now.
   const renewing = sub.plan === plan && ['active', 'past_due'].includes(sub.status) && sub.currentPeriodEnd > now && sub.amountFCFA > 0;

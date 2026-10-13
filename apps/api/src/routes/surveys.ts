@@ -1,13 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
-import { normalizeQuestion, publishProblems, surveyInputSchema, TEMPLATE_NAMES, type SurveyInput } from '@surveyflow/shared';
+import { PAID_GIFT_TYPES, normalizeQuestion, publishProblems, surveyInputSchema, TEMPLATE_NAMES, type SurveyInput } from '@surveyflow/shared';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { assertCanActivateSurvey, assertCanSendMessages, assertFeature, assertNotSuspended, loadAccount, messagesRemaining } from '../services/subscription/limits';
 import { enqueueInvitations, enqueueReminders } from '../services/whatsapp/sender';
 import { isTemplateApproved } from '../services/whatsapp/accounts';
-import { retryFailedGifts } from '../services/gifts';
+import { assertNoGiftsInFlight, releaseUnfundedGifts, retryFailedGifts } from '../services/gifts';
+import { giftReadiness } from '../services/wallet';
 import { randomInt } from 'node:crypto';
 
 const GIFT_AUTOMATION = new Set(['airtime', 'momo', 'discount', 'prize_draw']);
@@ -137,6 +138,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
   app.delete('/api/surveys/:id', auth, async (req, reply) => {
     const s = await owned(req.userId, (req.params as { id: string }).id);
     if (s.status === 'active') throw conflict('survey_active', 'Pause or close the survey before deleting it');
+    await assertNoGiftsInFlight({ surveyId: s.id });
     await prisma.survey.delete({ where: { id: s.id } });
     return reply.code(204).send();
   });
@@ -170,7 +172,9 @@ export default async function surveyRoutes(app: FastifyInstance) {
     assertCanActivateSurvey(ctx);
     if (GIFT_AUTOMATION.has(s.giftType)) assertFeature(ctx, 'giftAutomation', 'Gift automation');
     await prisma.survey.update({ where: { id: s.id }, data: { status: 'active', publishedAt: new Date() } });
-    return dto(await owned(req.userId, s.id));
+    // Non-blocking: publishing with an empty wallet is legitimate (top up next), but never silently.
+    const gift = await giftReadiness(req.userId, s);
+    return { ...dto(await owned(req.userId, s.id)), giftWarning: gift?.empty ? { code: 'gift_wallet_empty', ...gift } : null };
   });
 
   for (const [action, from, to] of [
@@ -215,7 +219,8 @@ export default async function surveyRoutes(app: FastifyInstance) {
     assertCanSendMessages(ctx, contacts.length); // 402 with the upgrade hint when over the plan's message quota
     const when = body.scheduledAt && body.scheduledAt > new Date() ? body.scheduledAt : new Date();
     const queued = await enqueueInvitations(s, contacts.map((c) => c.id), when);
-    return { queued, scheduledFor: when, messagesRemaining: messagesRemaining(ctx) - queued };
+    const gift = await giftReadiness(req.userId, s, queued);
+    return { queued, scheduledFor: when, messagesRemaining: messagesRemaining(ctx) - queued, gift, giftWarning: gift && !gift.sufficient ? { code: gift.empty ? 'gift_wallet_empty' : 'gift_wallet_low', ...gift } : null };
   });
 
   /** Exact audience for the send panel: how many invitations this selection would queue, and what it costs in quota. */
@@ -226,7 +231,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
     const ctx = await loadAccount(req.userId);
     const total = await prisma.contact.count({ where: { userId: req.userId } });
     const optedOut = await prisma.contact.count({ where: { userId: req.userId, optedOutAt: { not: null } } });
-    return { eligible: eligible.length, totalContacts: total, optedOut, messagesRemaining: messagesRemaining(ctx) };
+    return { eligible: eligible.length, totalContacts: total, optedOut, messagesRemaining: messagesRemaining(ctx), gift: await giftReadiness(req.userId, s, eligible.length) };
   });
 
   app.post('/api/surveys/:id/remind', auth, async (req) => {
@@ -247,17 +252,42 @@ export default async function surveyRoutes(app: FastifyInstance) {
 
   app.get('/api/surveys/:id/gifts', auth, async (req) => {
     const s = await owned(req.userId, (req.params as { id: string }).id);
-    const items = await prisma.giftDelivery.findMany({ where: { surveyId: s.id }, orderBy: { createdAt: 'desc' }, take: 200, include: { contact: { select: { name: true, phone: true } } } });
-    const draw = await prisma.prizeDrawEntry.count({ where: { surveyId: s.id } });
+    const paid = { surveyId: s.id, giftType: { in: [...PAID_GIFT_TYPES] } };
+    const [items, draw, byStatus, held] = await Promise.all([
+      prisma.giftDelivery.findMany({ where: { surveyId: s.id }, orderBy: { createdAt: 'desc' }, take: 200, include: { contact: { select: { name: true, phone: true } } } }),
+      prisma.prizeDrawEntry.count({ where: { surveyId: s.id } }),
+      prisma.giftDelivery.groupBy({ by: ['status'], where: paid, _count: { _all: true }, _sum: { amountFCFA: true, feeFCFA: true } }),
+      // unknown outcome: debited and deliberately never auto-refunded or retried
+      prisma.giftDelivery.aggregate({ where: { ...paid, status: 'failed', refundedAt: null }, _count: { _all: true }, _sum: { amountFCFA: true, feeFCFA: true } }),
+    ]);
+    // What this survey has cost the owner so far = delivered + in the provider pipeline + unknown-outcome (debited, not refunded).
+    const cost = (statuses: string[]) => byStatus.filter((g) => statuses.includes(g.status)).reduce((a, g) => ({ count: a.count + g._count._all, fcfa: a.fcfa + (g._sum.amountFCFA ?? 0) + (g._sum.feeFCFA ?? 0) }), { count: 0, fcfa: 0 });
+    const failed = cost(['failed']);
+    const needsCheck = { count: held._count._all, fcfa: (held._sum.amountFCFA ?? 0) + (held._sum.feeFCFA ?? 0) };
     return {
       drawEntries: draw,
-      items: items.map((g) => ({ id: g.id, type: g.giftType, value: g.giftValue, status: g.status, sentAt: g.sentAt, error: g.errorMessage, contact: g.contact.name, code: g.code })),
+      money: {
+        sent: cost(['sent']), inFlight: cost(['pending']), unfunded: cost(['unfunded']),
+        failedRefunded: failed.count - needsCheck.count,            // definite failures: money went back to the wallet
+        needsCheck,                                                  // unknown outcome: still debited, never auto-retried
+      },
+      items: items.map((g) => ({
+        id: g.id, type: g.giftType, value: g.giftValue, status: g.status, sentAt: g.sentAt, error: g.errorMessage, contact: g.contact.name, code: g.code,
+        costFCFA: g.amountFCFA ? g.amountFCFA + g.feeFCFA : null, refunded: !!g.refundedAt,
+      })),
     };
   });
 
+  /** Re-queue definitely-failed gifts (re-debits the wallet; stops being possible when the balance cannot cover them). */
   app.post('/api/surveys/:id/gifts/retry', auth, async (req) => {
     const s = await owned(req.userId, (req.params as { id: string }).id);
-    return { requeued: await retryFailedGifts(s.id) };
+    return retryFailedGifts(s.id);
+  });
+
+  /** After a top-up: pay the backlog of participants who finished while the wallet was empty. Explicit, never automatic. */
+  app.post('/api/surveys/:id/gifts/release', auth, async (req) => {
+    const s = await owned(req.userId, (req.params as { id: string }).id);
+    return releaseUnfundedGifts(s.id);
   });
 
   /** Prize draw: cryptographically random pick among entries that have not won yet. */

@@ -16,7 +16,7 @@ export default async function subscriptionRoutes(app: FastifyInstance) {
   app.get('/api/subscription', auth, async (req) => {
     const summary = await accountSummary(req.userId);
     const currency = (summary.user.preferredCurrency || currencyForCountry(summary.user.country)) as Currency;
-    const invoices = await prisma.paymentTransaction.findMany({ where: { userId: req.userId, status: 'success' }, orderBy: { paidAt: 'desc' }, take: 24 });
+    const invoices = await prisma.paymentTransaction.findMany({ where: { userId: req.userId, status: 'success', purpose: 'subscription' }, orderBy: { paidAt: 'desc' }, take: 24 });
     return {
       ...summary,
       currency,

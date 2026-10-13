@@ -2,15 +2,16 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import { AlertTriangle, ChevronDown, CreditCard, LogOut, Settings, Sparkles } from 'lucide-react';
+import { AlertTriangle, ChevronDown, CreditCard, LogOut, Settings, Sparkles, Wallet } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import { LanguageToggle } from '@/components/language-toggle';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useWallet } from '@/components/wallet/use-wallet';
 import { useAccount } from '@/lib/account';
-import { dateShort } from '@/lib/format';
+import { dateShort, fcfa } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 
@@ -19,6 +20,7 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
   const locale = useLocale();
   const pathname = usePathname();
   const { account } = useAccount();
+  const { wallet } = useWallet();
 
   const nav = [
     { href: '/dashboard', label: t('app.nav.dashboard') },
@@ -54,6 +56,11 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
           </nav>
           <div className="ml-auto flex items-center gap-3 sm:ml-0">
             {account && <Link href="/billing" className="hidden sm:inline"><Badge variant={account.plan.key === 'trial' ? 'amber' : 'default'}>{t(`plan.${account.plan.key as 'trial'}`)}</Badge></Link>}
+            {account?.plan.features.giftAutomation && wallet && (
+              <Link href="/billing#wallet" className="hidden sm:inline" aria-label={`${t('w.title')}: ${fcfa(wallet.balanceFCFA, locale)} FCFA`}>
+                <Badge variant={wallet.balanceFCFA === 0 ? 'amber' : 'neutral'}><Wallet className="mr-1 h-3.5 w-3.5" aria-hidden />{fcfa(wallet.balanceFCFA, locale)}</Badge>
+              </Link>
+            )}
             <LanguageToggle />
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-2 rounded-xl border border-line-2 bg-white py-1.5 pl-1.5 pr-3 text-sm font-semibold" aria-label={t('app.account')}>

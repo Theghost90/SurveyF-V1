@@ -367,7 +367,7 @@ describe('gifts', () => {
   });
 
   it('delivers airtime exactly once and ONLY airtime (the spec switch fell through to discount + draw)', async () => {
-    const w = await buildWorld(app, { plan: 'growth', gift: airtime });
+    const w = await buildWorld(app, { plan: 'growth', gift: airtime, wallet: 10_000 });
     await complete(w, 0);
     const gifts = await prisma.giftDelivery.findMany();
     expect(gifts).toHaveLength(1);
@@ -405,7 +405,7 @@ describe('gifts', () => {
   });
 
   it('respects the gift budget cap: later completers get a plain thank-you, never a promise we cannot keep', async () => {
-    const w = await buildWorld(app, { plan: 'growth', gift: { ...airtime, giftMaxCount: 1 } });
+    const w = await buildWorld(app, { plan: 'growth', gift: { ...airtime, giftMaxCount: 1 }, wallet: 10_000 });
     await complete(w, 0);
     await complete(w, 1);
     expect(await prisma.giftDelivery.count()).toBe(1);
@@ -414,7 +414,7 @@ describe('gifts', () => {
 
   it('never retries an ambiguous provider failure automatically (could pay twice)', async () => {
     const { setGiftProvider, GiftError } = await import('../src/services/gifts/providers');
-    const w = await buildWorld(app, { plan: 'growth', gift: airtime });
+    const w = await buildWorld(app, { plan: 'growth', gift: airtime, wallet: 10_000 });
     await complete(w, 0);
     let calls = 0;
     setGiftProvider({ name: 'flaky', sendMoMo: async () => ({ providerRef: 'x' }), sendAirtime: async () => { calls++; throw new GiftError('timeout after send', true); } });

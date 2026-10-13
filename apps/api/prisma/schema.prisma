@@ -66,6 +66,9 @@ enum GiftStatus {
   pending
   sent
   failed
+  // ADDED: participant finished but the owner's wallet could not cover the gift. The participant got a plain
+  // thank-you (never a promise we can't keep); the owner can top up and release these.
+  unfunded
 }
 
 enum SubscriptionStatus {
@@ -98,6 +101,9 @@ model User {
   locale            String    @default("fr") // ADDED: UI + platform-message language
   trialEndsAt       DateTime? // ADDED
   onboardingDoneAt  DateTime? // ADDED
+  // ADDED: prepaid gift wallet. The SURVEY OWNER funds gifts (airtime / Mobile Money), never SurveyFlow.
+  // Only ever changed with a guarded UPDATE (see services/wallet.ts), so it cannot go negative.
+  giftBalanceFCFA Int @default(0)
 
   whatsappAccounts WhatsAppAccount[]
   surveys          Survey[]
@@ -107,6 +113,7 @@ model User {
   googleConnection GoogleConnection?
   messageLogs      MessageLog[]
   sheetSyncs       SheetSync[]
+  walletEntries    WalletEntry[]
 }
 
 model WhatsAppAccount {
@@ -300,6 +307,11 @@ model GiftDelivery {
   scheduledFor DateTime @default(now())
   createdAt    DateTime @default(now())
 
+  // ADDED (gift wallet)
+  feeFCFA           Int       @default(0) // pass-through fee charged to the owner's wallet on top of amountFCFA
+  refundedAt        DateTime? // set when a DEFINITE failure returned amountFCFA+feeFCFA to the wallet (ambiguous failures stay debited)
+  notifyViaTemplate Boolean   @default(false) // released after a top-up: the 24h window is closed, so notify with a template
+
   survey  Survey  @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
@@ -361,7 +373,8 @@ model PaymentTransaction {
   // ADDED
   userId      String
   reference   String   @unique // our internal id sent to the PSP
-  plan        Plan
+  purpose     String   @default("subscription") // subscription | gift_topup
+  plan        Plan? // null for gift top-ups
   interval    String   @default("monthly")
   method      String // mobile_money | card | bank_transfer
   phone       String?
@@ -374,6 +387,25 @@ model PaymentTransaction {
 
   @@index([userId, createdAt])
   @@index([pspProvider, pspReference])
+}
+
+// ADDED: append-only ledger of the gift wallet (audit trail; the balance itself lives on User).
+// Idempotency comes from the guarded state transitions that create entries (payment pending→success,
+// gift pending→failed, gift unfunded→pending), not from this table.
+model WalletEntry {
+  id           String   @id @default(cuid())
+  userId       String
+  deltaFCFA    Int // + top-up / refund, − gift debit
+  balanceAfter Int
+  kind         String // topup | gift_debit | gift_refund
+  refId        String? // PaymentTransaction.id or GiftDelivery.id
+  note         String?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([refId]) // heldByGift(): a refund sums the ledger rows of ONE gift
 }
 
 // ADDED: one row per business-initiated (template) message. This is the unit the

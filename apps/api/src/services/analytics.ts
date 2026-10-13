@@ -132,7 +132,7 @@ export async function computeAnalytics(surveyId: string, userId: string) {
     orderBy: { sentAt: 'desc' }, take: 50,
   });
 
-  const gifts = { pending: 0, sent: 0, failed: 0 } as Record<string, number>;
+  const gifts = { pending: 0, sent: 0, failed: 0, unfunded: 0 } as Record<string, number>;
   for (const g of giftGroups) gifts[g.status] = g._count._all;
 
   return {

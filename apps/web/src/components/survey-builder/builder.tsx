@@ -82,10 +82,12 @@ export function SurveyBuilder({ id }: { id: string }) {
     if (!(await save())) return;
     setBusy('publish');
     try {
-      await api(`/surveys/${id}/publish`, { method: 'POST' });
+      const pub = await api<{ giftWarning?: { code: string } | null }>(`/surveys/${id}/publish`, { method: 'POST' });
       await mutate();
       void refreshAccount();
-      toast.success(t('b.published'));
+      // Publishing with an empty gift wallet is allowed, but never silently: nobody would get their gift.
+      if (pub.giftWarning?.code === 'gift_wallet_empty') toast.warning(t('w.published.empty'), { duration: 12_000, action: { label: t('w.topup'), onClick: () => window.open('/billing#wallet', '_blank', 'noopener') } });
+      else toast.success(t('b.published'));
       setTimeout(() => document.getElementById('send')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
     } catch (err) {
       if (err instanceof ApiError && (err.code === 'plan_limit' || err.code === 'plan_feature' || err.code === 'subscription_suspended')) {

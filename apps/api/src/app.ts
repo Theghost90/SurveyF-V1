@@ -19,6 +19,7 @@ import webhookRoutes from './routes/webhook-whatsapp';
 import whatsappRoutes from './routes/whatsapp';
 import paymentRoutes from './routes/payments';
 import subscriptionRoutes from './routes/subscription';
+import walletRoutes from './routes/wallet';
 import googleRoutes from './routes/google';
 import devRoutes from './routes/dev';
 
@@ -107,6 +108,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(whatsappRoutes);
   await app.register(paymentRoutes);
   await app.register(subscriptionRoutes);
+  await app.register(walletRoutes);
   await app.register(googleRoutes);
   if (!env.isProd) await app.register(devRoutes);
 

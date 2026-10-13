@@ -54,6 +54,9 @@ const schema = z.object({
 
   // --- gifts ---
   GIFT_PROVIDER: z.enum(['mock', 'campay']).optional(),
+  // Pass-through fee on each gift (payout + collection costs), charged to the owner's wallet. PLACEHOLDER until the real
+  // provider tariffs are known — see docs/DECISIONS.md. 0 would make SurveyFlow absorb fees on every gift.
+  GIFT_FEE_PERCENT: z.coerce.number().min(0).max(30).default(5),
 
   // --- Google ---
   GOOGLE_CLIENT_ID: z.string().optional(),

@@ -4,6 +4,7 @@ import { parse } from 'csv-parse/sync';
 import { z } from 'zod';
 import { normalizePhone, COUNTRY_CONFIG, DEFAULT_COUNTRY } from '@surveyflow/shared';
 import { badRequest, notFound } from '../lib/errors';
+import { assertNoGiftsInFlight } from '../services/gifts';
 import { prisma } from '../lib/prisma';
 
 const MAX_IMPORT_ROWS = 5_000;
@@ -81,6 +82,7 @@ export default async function contactRoutes(app: FastifyInstance) {
 
   app.delete('/api/contacts/:id', auth, async (req, reply) => {
     const { id } = req.params as { id: string };
+    await assertNoGiftsInFlight({ contactId: id, survey: { userId: req.userId } });
     const r = await prisma.contact.deleteMany({ where: { id, userId: req.userId } });
     if (!r.count) throw notFound('Contact');
     return reply.code(204).send();
@@ -88,6 +90,7 @@ export default async function contactRoutes(app: FastifyInstance) {
 
   app.post('/api/contacts/bulk-delete', auth, async (req) => {
     const { ids } = z.object({ ids: z.array(z.string()).min(1).max(5000) }).parse(req.body);
+    await assertNoGiftsInFlight({ contactId: { in: ids }, survey: { userId: req.userId } });
     return { deleted: (await prisma.contact.deleteMany({ where: { userId: req.userId, id: { in: ids } } })).count };
   });
 

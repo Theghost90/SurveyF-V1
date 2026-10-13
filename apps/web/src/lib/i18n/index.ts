@@ -3,6 +3,7 @@ import { en as appEn, fr as appFr } from './app';
 import { en as builderEn, fr as builderFr } from './builder';
 import { en as insightsEn, fr as insightsFr } from './insights';
 import { en as accountEn, fr as accountFr } from './account';
+import { en as walletEn, fr as walletFr } from './wallet';
 
 export const LOCALES = ['en', 'fr'] as const;
 export type Locale = (typeof LOCALES)[number];
@@ -10,8 +11,8 @@ export const DEFAULT_LOCALE: Locale = 'en';
 export const LOCALE_COOKIE = 'sf_lang';
 
 const dictionaries = {
-  en: { ...marketingEn, ...appEn, ...builderEn, ...insightsEn, ...accountEn },
-  fr: { ...marketingFr, ...appFr, ...builderFr, ...insightsFr, ...accountFr },
+  en: { ...marketingEn, ...appEn, ...builderEn, ...insightsEn, ...accountEn, ...walletEn },
+  fr: { ...marketingFr, ...appFr, ...builderFr, ...insightsFr, ...accountFr, ...walletFr },
 } as const;
 
 export type TKey = keyof (typeof dictionaries)['en'];

@@ -4,6 +4,7 @@ import { buildApp } from '../src/app';
 import { prisma } from '../src/lib/prisma';
 import { redis } from '../src/lib/redis';
 import { runSendWorkerOnce } from '../src/services/whatsapp/sender';
+import { creditWallet } from '../src/services/wallet';
 
 export const APP_SECRET = 'test-app-secret';
 let counter = 0;
@@ -65,6 +66,21 @@ export async function setPlan(userId: string, plan: 'trial' | 'starter' | 'growt
   });
 }
 
+/** Funds the gift wallet through the same code path a settled top-up uses, so balance and ledger stay consistent. */
+export async function fundWallet(userId: string, amount: number) {
+  await prisma.$transaction((tx) => creditWallet(tx, userId, amount, 'topup', `test-topup-${Date.now()}`, 'test top-up'));
+}
+
+/** balance == sum(ledger) and never negative: the two properties the wallet must hold after ANY sequence of operations. */
+export async function walletState(userId: string) {
+  const [u, agg, entries] = await Promise.all([
+    prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { giftBalanceFCFA: true } }),
+    prisma.walletEntry.aggregate({ where: { userId }, _sum: { deltaFCFA: true } }),
+    prisma.walletEntry.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
+  ]);
+  return { balance: u.giftBalanceFCFA, ledgerSum: agg._sum.deltaFCFA ?? 0, entries };
+}
+
 export const sampleQuestions = () => [
   { text: 'How satisfied are you with our service?', type: 'button', required: true, options: [{ id: 'vs', label: 'Very satisfied' }, { id: 'ne', label: 'Neutral' }, { id: 'un', label: 'Unsatisfied' }] },
   { text: 'Which product do you use most?', type: 'list', required: true, options: ['Product A', 'Product B', 'Product C', 'Product D'].map((label, i) => ({ id: `p${i}`, label })) },
@@ -80,8 +96,9 @@ export interface World {
 }
 
 /** Owner + simulated WhatsApp number + N contacts + a published survey, invitations sent (worker run). */
-export async function buildWorld(app: FastifyInstance, opts: { contacts?: number; plan?: 'trial' | 'starter' | 'growth' | 'business'; gift?: Record<string, unknown>; send?: boolean; questions?: unknown[] } = {}): Promise<World> {
+export async function buildWorld(app: FastifyInstance, opts: { contacts?: number; plan?: 'trial' | 'starter' | 'growth' | 'business'; gift?: Record<string, unknown>; send?: boolean; questions?: unknown[]; wallet?: number } = {}): Promise<World> {
   const owner = await registerOwner(app, { plan: opts.plan });
+  if (opts.wallet) await fundWallet(owner.userId, opts.wallet);
   const acct = await owner.post('/api/whatsapp/accounts/mock');
   if (acct.status !== 201) throw new Error('mock account: ' + JSON.stringify(acct));
   const phoneNumberId = acct.items[0].phoneNumberId as string;

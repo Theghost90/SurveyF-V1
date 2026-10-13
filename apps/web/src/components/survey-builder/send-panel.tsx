@@ -20,6 +20,7 @@ import { formatPhone } from '@surveyflow/shared';
 
 interface ContactRow { id: string; name: string; phone: string; tags: string[]; optedOut: boolean }
 interface Contacts { total: number; tags: string[]; items: ContactRow[] }
+interface GiftReadiness { unitCostFCFA: number; balanceFCFA: number; giftsCovered: number; worstCaseFCFA: number | null; sufficient: boolean; empty: boolean }
 interface Accounts { items: Array<{ id: string; status: string; displayPhone: string | null; templates: Array<{ name: string; language: string; status: string }> }> }
 
 export function SendPanel({ surveyId, status, language, onPublish, publishing, dirty }: { surveyId: string; status: string; language: string; onPublish: () => void; publishing: boolean; dirty: boolean }) {
@@ -46,7 +47,7 @@ export function SendPanel({ surveyId, status, language, onPublish, publishing, d
   const selection = useMemo(() => (mode === 'all' ? { all: true } : mode === 'select' ? { contactIds: [...selected] } : { tags: [...tags] }), [mode, selected, tags]);
   const empty = mode === 'select' ? selected.size === 0 : mode === 'tags' ? tags.size === 0 : false;
   // Exact count from the server: it knows who is already invited, opted out, or without consent.
-  const { data: audience } = useSWR<{ eligible: number; messagesRemaining: number }>(status === 'active' && !empty ? [`/surveys/${surveyId}/audience`, JSON.stringify(selection), result?.queued ?? 0] : null, ([url]: [string]) => api(url, { body: selection }));
+  const { data: audience } = useSWR<{ eligible: number; messagesRemaining: number; gift?: GiftReadiness | null }>(status === 'active' && !empty ? [`/surveys/${surveyId}/audience`, JSON.stringify(selection), result?.queued ?? 0] : null, ([url]: [string]) => api(url, { body: selection }));
   const remaining = audience?.messagesRemaining ?? (account ? Math.max(0, account.plan.limits.messagesPerMonth - account.usage.messages) : null);
   const target = empty ? 0 : (audience?.eligible ?? 0);
 
@@ -135,6 +136,14 @@ export function SendPanel({ surveyId, status, language, onPublish, publishing, d
                 <Send className="h-4 w-4" aria-hidden />{t('b.send.cta')}
               </Button>
             </div>
+            {audience?.gift && target > 0 && (
+              <p role={audience.gift.sufficient ? undefined : 'alert'} className={cn('rounded-xl px-4 py-3 text-sm', audience.gift.sufficient ? 'bg-canvas text-body' : 'bg-amber-soft text-amber-ink')}>
+                {audience.gift.empty ? t('w.send.giftEmpty') : audience.gift.sufficient
+                  ? t('w.send.gift', { max: fcfa(audience.gift.worstCaseFCFA ?? 0, locale), n: target, balance: fcfa(audience.gift.balanceFCFA, locale) })
+                  : t('w.send.giftLow', { max: fcfa(audience.gift.worstCaseFCFA ?? 0, locale), n: target, balance: fcfa(audience.gift.balanceFCFA, locale) })}
+                {!audience.gift.sufficient && <> <a href="/billing#wallet" target="_blank" rel="noopener noreferrer" className="font-bold underline">{t('w.send.topup')}</a></>}
+              </p>
+            )}
             {dirty && <p className="text-xs text-amber-ink">{t('b.send.saveFirst')}</p>}
             {result && <p role="status" className="rounded-xl bg-mint/60 p-3 text-sm font-semibold text-leaf">{t('b.send.queued', { n: result.queued })} <Link href={`/surveys/${surveyId}/analytics`} className="underline">{t('b.analytics')}</Link></p>}
           </>

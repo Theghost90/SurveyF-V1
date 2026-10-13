@@ -51,7 +51,7 @@ export const en = {
   'gifts.discountText': 'A unique code in the thank-you message, ready for your next order.',
   'gifts.draw': 'Prize draw',
   'gifts.drawText': 'Everyone who finishes is entered; draw a winner in one click.',
-  'gifts.note': 'Gift automation is included from the Growth plan. Each survey has a gift budget cap so a campaign never overspends.',
+  'gifts.note': 'Gift automation is included from the Growth plan. You fund a prepaid gift wallet and choose, survey by survey, whether to offer a gift. Set a maximum per survey so a campaign never overspends.',
 
   'agencies.title': 'Running a field study or impact assessment?',
   'agencies.text': 'NGOs, institutions and research agencies: tell us your sample size and timeline, and we’ll set up the right volume and gift budget with you.',
@@ -164,7 +164,7 @@ export const fr: Record<keyof typeof en, string> = {
   'gifts.discountText': 'Un code unique dans le message de remerciement, pour la prochaine commande.',
   'gifts.draw': 'Tirage au sort',
   'gifts.drawText': 'Tous ceux qui terminent participent ; tirez un gagnant en un clic.',
-  'gifts.note': 'L’automatisation des cadeaux est incluse à partir du forfait Growth. Chaque sondage a un plafond de cadeaux pour ne jamais dépasser votre budget.',
+  'gifts.note': 'L’automatisation des cadeaux est incluse à partir du forfait Growth. Vous alimentez un portefeuille cadeaux prépayé et choisissez, sondage par sondage, d’offrir un cadeau ou non. Fixez un maximum par sondage pour ne jamais dépasser votre budget.',
 
   'agencies.title': 'Vous menez une étude terrain ou une évaluation d’impact ?',
   'agencies.text': 'ONG, institutions et cabinets d’études : indiquez-nous la taille de votre échantillon et votre calendrier, nous calibrons avec vous le volume et le budget cadeaux.',

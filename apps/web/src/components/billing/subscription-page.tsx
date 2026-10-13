@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { PageHeader } from '@/components/page-header';
 import { planFeatures } from '@/components/marketing/pricing-client';
+import { WalletCard } from '@/components/wallet/wallet-card';
 import type { Account } from '@/lib/account';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { dateShort, fcfa, money } from '@/lib/format';
@@ -82,7 +83,9 @@ export function SubscriptionPage({ initialPlan, initialInterval }: { initialPlan
         </CardContent>
       </Card>
 
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+      <WalletCard canUse={!!plan.features.giftAutomation} phone={data.user.phone} />
+
+      <div id="plans" className="mb-4 flex scroll-mt-24 flex-wrap items-end justify-between gap-3">
         <h2 className="text-2xl font-extrabold tracking-[-0.02em]">{t('bill.choose')}</h2>
         <div className="flex rounded-full border border-line-2 bg-white p-[3px] text-[13px] font-semibold" role="group" aria-label={t('pricing.billing')}>
           {(['monthly', 'annual'] as const).map((v) => <button key={v} type="button" aria-pressed={interval === v} onClick={() => setInterval_(v)} className={cn('min-h-[34px] rounded-full px-3', interval === v ? 'bg-ink text-white' : 'text-muted-foreground')}>{v === 'monthly' ? t('pricing.monthly') : t('pricing.annual')}</button>)}

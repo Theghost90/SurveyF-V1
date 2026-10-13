@@ -17,7 +17,7 @@ build environment · ❌ not built in V1.
 | Hero CTA "Watch a survey in 60 seconds" | — | No video asset exists | Replaced with "See how it works" (anchor). |
 | "Builder Bot & Analytics Bot", "Quick numbers on WhatsApp", "47 new answers on your WhatsApp" | Builder is a **web dashboard**; the only bot command is `START` | Marketed as features | **Removed from the copy** — not built, and selling them would be a false claim. |
 | "Keep your WhatsApp Business number (Coexistence)" | Embedded Signup | Marketed | Reworded to "your own WhatsApp Business number". Coexistence needs a specific Meta configuration that I could not verify. |
-| `[TO CONFIRM]` placeholders ("Gift budget billed separately", Excel/PDF on Starter) | Starter has exports; gifts are Growth+ | Placeholders | Followed the spec; the unresolved gift-billing question is in §3. |
+| `[TO CONFIRM]` placeholders ("Gift budget billed separately", Excel/PDF on Starter) | Starter has exports; gifts are Growth+ | Placeholders | Followed the spec. Who pays for gifts is now decided — the survey owner, via a prepaid wallet (§3.1). |
 | Pricing slider ticks | — | Labels 100 / 500 / 3,000 / 15,000 evenly spaced under a **linear** slider, so the "3,000" label sits at 66% while the thumb reaches 3,000 at 19% | **Fixed**: piecewise-linear slider, tier boundaries at even thirds, so ticks and thumb agree. |
 
 ## 2. Spec errors found and how they were handled
@@ -83,6 +83,7 @@ Each of these is covered by an automated test (see `apps/api/tests`).
 - **Send queue** (DB, `FOR UPDATE SKIP LOCKED`) with per-number throttling and backoff — a single blast would exceed Meta's
   messaging tiers. **Gift safety**: ambiguous provider failures (timeouts) are *never* auto-retried (a retry could pay twice);
   per-survey gift cap; no gift automation on the free trial (a free trial that can pay out is a farming vector).
+  **Gift money is the owner's, not ours**: a prepaid gift wallet is debited atomically when a participant completes (§3.1).
 - **Security**: tokens AES-256-GCM encrypted at rest; login rate-limited per (email, IP) *and* per account; the API never trusts
   a client-sent price; participants' free text is HTML-escaped in the PDF, written as text cells in Excel and with
   `valueInputOption=RAW` in Google Sheets (no formula injection); the PDF renderer blocks all network requests.
@@ -98,9 +99,8 @@ Each of these is covered by an automated test (see `apps/api/tests`).
 
 ## 3. Open business decisions (need an owner)
 
-1. **Who pays for gifts?** There is no wallet/prepaid balance in the spec. As built, airtime/MoMo gifts go out through *the
-   platform's* provider account, so SurveyFlow fronts the money. The pricing page (`[TO CONFIRM]` in the design) leaves it open.
-   Options: prepaid gift wallet per owner (recommended), or invoice after the fact. Until decided, per-survey gift caps are the only protection.
+1. **Who pays for gifts? — DECIDED: the survey owner (SurveyFlow's customer), and the owner chooses per survey whether to
+   offer a gift at all.** Implementation and what it leaves open: §3.1 below.
 2. **Free-tier economics** under `TRIAL_EXPIRY_POLICY=starter` (see §2.9).
 3. **Meta category.** Survey invitations are declared `UTILITY` (per spec). Meta may re-categorise mass survey invitations as
    `MARKETING`, which is priced differently — check the per-message cost against the 9,500 FCFA Starter before launch.
@@ -109,15 +109,68 @@ Each of these is covered by an automated test (see `apps/api/tests`).
 6. **Legal pages** (`/privacy`, `/terms`) are *drafts describing what the software does* and are labelled as such. Counsel must
    replace them. The data-protection reference (Cameroon Law No. 2024/017) should be confirmed by counsel.
 
+### 3.1 Resolved: the survey owner pays for gifts (prepaid gift wallet)
+
+**Why a prepaid wallet and not "invoice afterwards":** Mobile Money has no card-on-file. Billing the owner after the fact means
+SurveyFlow pays participants first and chases the owner for the money, which is exactly the exposure the answer was meant to remove.
+
+**How it works**
+
+- Gifts are **opt-in per survey** (default "No gift"). Only airtime and Mobile Money cost money; discount codes, prize draws
+  and thank-you messages are free to everyone. Paid gifts need a plan with gift automation (Growth+).
+- The owner tops up an **FCFA wallet** (2,000–1,000,000) through the same PSP layer as subscriptions (failover,
+  verify-with-the-PSP-before-credit, idempotent settlement, amount check). Charged in XAF/XOF 1:1, so no FX rate is invented.
+  An over-payment credits only the amount asked; an under-payment is rejected.
+- When a participant completes, **the gift is debited in the same database transaction that marks them completed**
+  (`UPDATE … WHERE balance >= cost`, one statement — concurrent completions cannot overspend). Only then does the thank-you
+  promise the gift. **If the wallet cannot cover it, the participant gets a plain thank-you** (never a promised gift we cannot pay)
+  and the gift is parked as `unfunded`.
+- **Unfunded gifts are released by the owner explicitly** ("Pay these gifts" in analytics), never automatically: a top-up meant
+  for survey B must not be silently spent on survey A's backlog. They are announced with the approved template (the 24 h
+  window is closed by then).
+- **Refunds:** a *definite* provider rejection (after 3 attempts) refunds the wallet, and the refund amount comes from the
+  ledger (what that gift actually holds), so a gift that was never charged can never mint balance. An **ambiguous** failure
+  (timeout after sending) keeps the debit, is never auto-retried (a retry could pay twice) and is shown as "to verify".
+- **Cost shown before commitment:** unit cost (amount + fee), balance, how many gifts it covers, and the highest possible spend
+  (cap × unit cost) in the builder; the send panel previews worst-case exposure for the exact audience. Publishing or sending
+  with too little balance is **allowed but never silent** (warning, not a block — the owner may top up right after).
+  Owners get one "wallet is empty" WhatsApp notice per day when participants were left unrewarded.
+- **Integrity:** `balance == sum(ledger)` and `balance >= 0` are asserted after every wallet test; the balance also has a
+  database `CHECK (>= 0)`. Surveys and contacts with a debited, undelivered gift cannot be deleted (the cascade would erase the
+  money trail).
+
+**What this decision opens (all need an owner — none are solved by code):**
+
+1. **The fee is a placeholder.** `GIFT_FEE_PERCENT` defaults to 5 % to cover payout + collection costs. The real PSP/Campay tariffs
+   are unknown here. At 0 % SurveyFlow silently loses money on every gift; set it from the actual contracts before launch.
+2. **Holding customer money and paying third parties may be a regulated activity** (e-money / payment-services rules in CEMAC and
+   UEMOA). Whether a prepaid, spend-only wallet needs a licence or must be run through a licensed partner is a question for counsel,
+   not for the code. Do not launch paid gifts before it is answered.
+3. **Treasury float.** Top-ups arrive in the PSP accounts that collect them; payouts leave from the gift provider's balance.
+   The sum of all wallet balances is a liability SurveyFlow must be able to cover. Monitor
+   `SELECT sum("giftBalanceFCFA") FROM "User"` against the provider balance. There is no automatic reconciliation.
+4. **Unspent balance cannot be withdrawn in V1** (and a top-up is refused on plans without gift automation, so a lapsed plan
+   cannot strand new money). Refund policy for leftover balance is a legal/commercial call.
+5. **"To verify" gifts have no resolution screen.** Support must check the provider by reference (`sf-gift-<id>`) and then
+   refund or confirm by hand; there is no admin UI in V1.
+6. **Unfunded gifts do not expire.** An owner can release a months-old backlog; the participant then receives an unexpected gift
+   notice. Consider a cut-off (e.g. 30 days).
+7. **Payout path is still unverified** (§4): the Campay airtime / Mobile Money calls were written from documentation. With the
+   owner's money now behind them, they must pass a sandbox run before real funds are accepted.
+
 ## 4. What is verified and what is not
 
 **Verified in this environment** (real Postgres + Redis + headless Chromium):
-87 automated tests (20 shared + 67 API: state machine, signed + duplicate + concurrent webhooks, abandonment/resume, STOP, analytics, gifts,
+105 automated tests (20 shared + 85 API: state machine, signed + duplicate + concurrent webhooks, abandonment/resume, STOP, analytics, gifts, the gift wallet (guarded debit under parallel completions, refunds, release/retry double-clicks, deletion guards),
 plan limits, payments incl. forged/under-paid/duplicate webhooks, failover, lifecycle, Excel/PDF/Sheets with Google stubbed),
 a 23-step real-browser end-to-end run (register → onboarding → builder → publish → send → simulated participant →
-analytics → PDF/Excel download → mock checkout → FR/EN → mobile widths), the initial DB migration on an empty database
-(no drift), and the production bundles. Several tests were mutation-checked (disabling the dedupe, lock, signature check and
-amount check makes the matching test fail).
+analytics → PDF/Excel download → mock checkout → FR/EN → mobile widths), a 12-step wallet run (`scripts/e2e-wallet.mjs`: empty wallet →
+warnings → participant finishes unpaid → top-up → release → delivered with a template notice → FR → mobile), both DB migrations applied
+from scratch (no drift; the `CHECK (balance >= 0)` rejects an overdraw), and the production bundles. Several tests were
+mutation-checked (disabling the dedupe, lock, signature check, amount check, the wallet's balance guard, the release/retry
+compare-and-set or the ledger-based refund makes the matching test fail — one wallet test was first found vacuous this way and fixed).
+The browser runs print benign `Failed to fetch RSC payload` / `CLIENT_FETCH_ERROR` console lines from prefetches aborted by rapid
+navigation in the mobile steps (no 5xx anywhere); not verified against the pre-wallet build.
 
 **Written from documentation but NOT exercised against the real service** — the build environment has no credentials and
 its network policy blocks these hosts. Treat each as "needs a sandbox pass":
@@ -128,7 +181,8 @@ its network policy blocks these hosts. Treat each as "needs a sandbox pass":
 | Flutterwave v3 | Endpoints confirmed by documentation search; not called. |
 | Notch Pay, CinetPay | Init/verify endpoints confirmed by documentation search; **webhook signature schemes are unconfirmed** (safe default: bad signature ⇒ rejected; the status poll still activates paid subscriptions). |
 | **Campay, PayUnit** | **Lowest confidence**: paths/fields written from memory (PayUnit's endpoint paths and Campay's airtime endpoint especially). Do not enable without sandbox verification. |
-| Campay airtime/MoMo gifts | The spec says Campay can send airtime; the endpoint used is unverified. |
+| Campay airtime/MoMo gifts | The spec says Campay can send airtime; the endpoint used is unverified. **Higher stakes now: owners' prepaid money is what pays through it.** |
+| Gift fee, wallet legality, treasury float | Not code questions — see §3.1 items 1–3. |
 | Google OAuth + Sheets | Implemented on plain REST; exercised only with Google stubbed. |
 | Puppeteer on Docker/Fly/Railway | Works here with the bundled Chromium; the Dockerfile installs `chromium` but has not been built (no Docker daemon). |
 

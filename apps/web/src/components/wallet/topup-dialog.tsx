@@ -1,0 +1,98 @@
+'use client';
+import { useState } from 'react';
+import { CreditCard, Smartphone } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Field, Input } from '@/components/ui/input';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { api, errorMessage } from '@/lib/api';
+import { fcfa } from '@/lib/format';
+import { useLocale, useT } from '@/lib/i18n/client';
+import { cn } from '@/lib/utils';
+import type { WalletData } from './use-wallet';
+
+/**
+ * Wallet top-up checkout. Same payment layer as plans: the server fixes the currency and validates the amount, and the
+ * balance is credited only after the PSP confirms the money (the return page asks the API, never trusts the redirect).
+ */
+export function TopupDialog({ open, onClose, wallet, defaultPhone }: { open: boolean; onClose: () => void; wallet: WalletData; defaultPhone: string }) {
+  const t = useT();
+  const locale = useLocale();
+  const { min, max, presets } = wallet.topup;
+  const [amount, setAmount] = useState(String(presets[1] ?? presets[0] ?? 10_000));
+  const [method, setMethod] = useState<'mobile_money' | 'card'>('mobile_money');
+  const [phone, setPhone] = useState(defaultPhone);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  const n = Number(amount);
+  const valid = Number.isInteger(n) && n >= min && n <= max;
+
+  async function pay() {
+    setBusy(true);
+    setError(null);
+    try {
+      const tx = await api<{ id: string; checkoutUrl: string | null }>('/wallet/topup', { method: 'POST', body: { amountFCFA: n, method, phone: method === 'mobile_money' ? phone : undefined } });
+      if (tx.checkoutUrl) { window.location.href = tx.checkoutUrl; return; }
+      setPending(true);
+      poll(tx.id);
+    } catch (err) {
+      setError(errorMessage(err, t));
+      setBusy(false);
+    }
+  }
+  // Push-to-phone payments: the payer approves on their handset; we poll the verified status.
+  function poll(id: string, tries = 0) {
+    setTimeout(async () => {
+      try {
+        const s = await api<{ status: string }>(`/payments/${id}`);
+        if (s.status === 'success') { window.location.href = `/billing/return?ref=${id}`; return; }
+        if (s.status === 'failed' || s.status === 'expired' || tries > 60) { setPending(false); setBusy(false); setError(t('bill.payFailed')); return; }
+      } catch { /* keep polling */ }
+      poll(id, tries + 1);
+    }, 3000);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && !pending && onClose()}>
+      <DialogContent closeLabel={t('common.close')}>
+        <DialogHeader>
+          <DialogTitle>{t('w.dialogTitle')}</DialogTitle>
+          <DialogDescription>{t('w.dialogSub')}</DialogDescription>
+        </DialogHeader>
+        {pending ? (
+          <div role="status" className="flex flex-col items-center gap-3 py-6 text-center">
+            <Smartphone className="h-10 w-10 text-leaf" aria-hidden />
+            <p className="font-display text-xl font-bold">{t('bill.approve')}</p>
+            <p className="text-sm text-muted-foreground">{t('bill.approveHelp', { phone })}</p>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2" role="group" aria-label={t('w.amount')}>
+              {presets.map((p) => (
+                <button key={p} type="button" aria-pressed={n === p} onClick={() => setAmount(String(p))} className={cn('min-h-[40px] rounded-full border px-4 text-sm font-semibold tabular-nums', n === p ? 'border-leaf bg-mint text-ink' : 'border-line-2 text-body hover:bg-canvas')}>
+                  {fcfa(p, locale)}
+                </button>
+              ))}
+            </div>
+            <Field label={t('w.amount')} htmlFor="topup-amount" hint={t('w.amountHint', { min: fcfa(min, locale), max: fcfa(max, locale) })} error={amount && !valid ? t('w.amountHint', { min: fcfa(min, locale), max: fcfa(max, locale) }) : undefined}>
+              <Input id="topup-amount" type="number" inputMode="numeric" min={min} max={max} step={500} value={amount} onChange={(e) => setAmount(e.target.value)} aria-invalid={!!amount && !valid} />
+            </Field>
+            <RadioGroup value={method} onValueChange={(v) => setMethod(v as typeof method)} aria-label={t('bill.method')}>
+              <label className={cn('flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3.5 font-medium', method === 'mobile_money' ? 'border-leaf bg-mint/40' : 'border-line')}><RadioGroupItem value="mobile_money" /><Smartphone className="h-5 w-5 text-leaf" aria-hidden />{t('bill.momo')}</label>
+              <label className={cn('flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3.5 font-medium', method === 'card' ? 'border-leaf bg-mint/40' : 'border-line')}><RadioGroupItem value="card" /><CreditCard className="h-5 w-5 text-leaf" aria-hidden />{t('bill.card')}</label>
+            </RadioGroup>
+            {method === 'mobile_money' && <Field label={t('bill.momoPhone')} htmlFor="topup-phone" hint={t('bill.momoHint')}><Input id="topup-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" /></Field>}
+            {error && <p role="alert" className="text-sm font-medium text-destructive">{error}</p>}
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+              <Button size="lg" variant="brand" loading={busy} disabled={!valid} onClick={pay}>{t('w.pay', { amount: valid ? fcfa(n, locale) : '…' })}</Button>
+            </DialogFooter>
+            <p className="text-xs text-muted-foreground">{t('w.refundNote')}</p>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}

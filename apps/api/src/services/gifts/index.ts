@@ -1,7 +1,10 @@
-import type { Survey, Contact, User } from '@prisma/client';
-import { buildThankYouMessage, getPlan, sys, toWaId, type SurveyLang } from '@surveyflow/shared';
+import type { Prisma, Survey, Contact, User } from '@prisma/client';
+import { PAID_GIFT_TYPES, buildThankYouMessage, getPlan, giftFeeFCFA, sys, toWaId, type SurveyLang } from '@surveyflow/shared';
+import { env } from '../../config/env';
+import { conflict } from '../../lib/errors';
 import { generateDiscountCode } from '../../lib/crypto';
 import { prisma, type Tx } from '../../lib/prisma';
+import { creditWallet, debitWallet, heldByGift } from '../wallet';
 import { credsFor } from '../whatsapp/accounts';
 import { getGateway } from '../whatsapp/gateway';
 import { enqueueGiftNotice } from '../whatsapp/sender';
@@ -14,6 +17,10 @@ import { GiftError, getGiftProvider } from './providers';
  * discount code, a prize-draw entry and the custom message. Here each gift type is handled
  * in exactly one branch, and delivery is idempotent: GiftDelivery has a unique
  * (surveyId, contactId) key, so a retried webhook can never create a second payout.
+ *
+ * WHO PAYS: the survey owner, from a prepaid wallet (services/wallet.ts). Airtime / Mobile Money gifts are debited in the
+ * SAME transaction that marks the participant completed. If the wallet cannot cover the gift the participant gets a plain
+ * thank-you (we never promise a gift that is not paid for) and the row is kept as `unfunded` for the owner to release later.
  */
 
 export interface GiftPlan {
@@ -52,12 +59,19 @@ export async function planGift(tx: Tx, survey: SurveyWithOwner, contact: Pick<Co
     case 'airtime':
     case 'momo': {
       if (!survey.giftAmountFCFA) return { type: 'none' };
-      await tx.giftDelivery.create({
+      const feeFCFA = giftFeeFCFA(survey.giftAmountFCFA, env.GIFT_FEE_PERCENT);
+      const gift = await tx.giftDelivery.create({
         data: {
-          surveyId: survey.id, contactId: contact.id, giftType: type, giftValue: survey.giftValue, amountFCFA: survey.giftAmountFCFA,
+          surveyId: survey.id, contactId: contact.id, giftType: type, giftValue: survey.giftValue, amountFCFA: survey.giftAmountFCFA, feeFCFA,
           status: 'pending', scheduledFor: survey.giftDeliveryMode === 'batch' ? nextTopOfHour() : new Date(),
         },
       });
+      const paid = await debitWallet(tx, survey.userId, survey.giftAmountFCFA + feeFCFA, gift.id, `Gift — ${survey.title}`);
+      if (paid === null) {
+        // Not enough prepaid balance: the participant must NOT be promised a gift. Keep the row so the owner can release it.
+        await tx.giftDelivery.update({ where: { id: gift.id }, data: { status: 'unfunded' } });
+        return { type: 'none' };
+      }
       return { type, value: survey.giftValue };
     }
     case 'discount': {
@@ -132,7 +146,8 @@ async function processGift(id: string) {
     if (e.ambiguous) {
       await prisma.giftDelivery.update({ where: { id }, data: { status: 'failed', errorMessage: `ambiguous: ${e.message} — check provider for ref ${ref} before retrying` } });
     } else if (gift.attempts + 1 >= MAX_ATTEMPTS) {
-      await prisma.giftDelivery.update({ where: { id }, data: { status: 'failed', errorMessage: e.message.slice(0, 300) } });
+      // The provider definitely did not pay (every attempt was a clean rejection): give the owner's money back.
+      await failAndRefund(id, e.message.slice(0, 300));
     } else {
       await prisma.giftDelivery.update({
         where: { id },
@@ -142,11 +157,11 @@ async function processGift(id: string) {
   }
 }
 
-async function notifyGiftSent(gift: { surveyId: string; contactId: string; giftValue: string | null; survey: { language: string; userId: string; giftDeliveryMode: string; account: { phoneNumberId: string; wabaId: string; accessToken: string } | null }; contact: { phone: string } }) {
+async function notifyGiftSent(gift: { surveyId: string; contactId: string; giftValue: string | null; notifyViaTemplate: boolean; survey: { language: string; userId: string; giftDeliveryMode: string; account: { phoneNumberId: string; wabaId: string; accessToken: string } | null }; contact: { phone: string } }) {
   try {
     const lang = (gift.survey.language === 'en' ? 'en' : 'fr') as SurveyLang;
     const value = gift.giftValue ?? '';
-    if (gift.survey.giftDeliveryMode === 'immediate' && gift.survey.account) {
+    if (gift.survey.giftDeliveryMode === 'immediate' && gift.survey.account && !gift.notifyViaTemplate) {
       // Inside the 24h window the participant just opened by answering: plain text is free.
       await getGateway().sendMessage(credsFor(gift.survey.account), toWaId(gift.contact.phone), { kind: 'text', body: sys(lang).giftSent(value) });
     } else {
@@ -158,11 +173,81 @@ async function notifyGiftSent(gift: { surveyId: string; contactId: string; giftV
   }
 }
 
-/** Owner action: re-queue gifts that definitively failed (not the ambiguous ones). */
-export async function retryFailedGifts(surveyId: string): Promise<number> {
-  const r = await prisma.giftDelivery.updateMany({
-    where: { surveyId, status: 'failed', giftType: { in: ['airtime', 'momo'] }, NOT: { errorMessage: { startsWith: 'ambiguous' } }, AND: [{ NOT: { errorMessage: { startsWith: 'interrupted' } } }] },
-    data: { status: 'pending', attempts: 0, errorMessage: null, scheduledFor: new Date() },
+/** pending → failed (definite) and return exactly what the ledger says this gift holds. Idempotent via the status compare-and-set. */
+async function failAndRefund(id: string, message: string) {
+  await prisma.$transaction(async (tx) => {
+    const g = await tx.giftDelivery.findUnique({ where: { id }, select: { survey: { select: { userId: true } } } });
+    const claimed = await tx.giftDelivery.updateMany({ where: { id, status: 'pending' }, data: { status: 'failed', errorMessage: message } });
+    if (!claimed.count || !g) return;
+    const held = await heldByGift(tx, id);
+    if (held > 0) {
+      await creditWallet(tx, g.survey.userId, held, 'gift_refund', id, 'Gift could not be delivered — refunded');
+      await tx.giftDelivery.update({ where: { id }, data: { refundedAt: new Date() } });
+    }
   });
-  return r.count;
+}
+
+/** Re-activates one gift (failed→pending or unfunded→pending) and debits the wallet for it, atomically. false = wallet too low. */
+async function reactivate(from: 'failed' | 'unfunded', id: string): Promise<boolean> {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const g = await tx.giftDelivery.findUnique({ where: { id }, select: { amountFCFA: true, feeFCFA: true, survey: { select: { userId: true, title: true } } } });
+      if (!g?.amountFCFA) return false;
+      // The compare-and-set is what makes a double click / two tabs charge once.
+      const claimed = await tx.giftDelivery.updateMany({
+        where: { id, status: from, ...(from === 'failed' ? { refundedAt: { not: null } } : {}) },
+        // The participant's 24h window is long closed by now: notify through the approved template instead of free text.
+        data: { status: 'pending', attempts: 0, errorMessage: null, refundedAt: null, scheduledFor: new Date(), notifyViaTemplate: true },
+      });
+      if (!claimed.count) return false;
+      const ok = await debitWallet(tx, g.survey.userId, g.amountFCFA + g.feeFCFA, id, `${from === 'failed' ? 'Retry' : 'Released'} — ${g.survey.title}`);
+      if (ok === null) throw new InsufficientFunds();
+      return true;
+    });
+  } catch (err) {
+    if (err instanceof InsufficientFunds) return false;
+    throw err;
+  }
+}
+class InsufficientFunds extends Error {}
+
+/**
+ * Owner action: re-queue gifts the provider DEFINITELY rejected (their money was already refunded, so this debits again).
+ * Gifts whose outcome is unknown (ambiguous / interrupted) are never retried — a retry could pay a participant twice.
+ */
+export async function retryFailedGifts(surveyId: string): Promise<{ requeued: number; insufficient: number }> {
+  const rows = await prisma.giftDelivery.findMany({
+    where: { surveyId, status: 'failed', giftType: { in: [...PAID_GIFT_TYPES] }, refundedAt: { not: null } },
+    orderBy: { createdAt: 'asc' }, select: { id: true },
+  });
+  let requeued = 0;
+  for (const { id } of rows) if (await reactivate('failed', id)) requeued++;
+  return { requeued, insufficient: rows.length - requeued };
+}
+
+/**
+ * Owner action after a top-up: pay the gifts of participants who finished while the wallet was empty.
+ * Deliberately NOT automatic — a top-up meant for survey B must not be silently spent on survey A's backlog.
+ * Oldest first; stops at the first gift the balance cannot cover.
+ */
+export async function releaseUnfundedGifts(surveyId: string): Promise<{ released: number; remaining: number }> {
+  const rows = await prisma.giftDelivery.findMany({
+    where: { surveyId, status: 'unfunded', giftType: { in: [...PAID_GIFT_TYPES] } },
+    orderBy: { createdAt: 'asc' }, select: { id: true },
+  });
+  let released = 0;
+  for (const { id } of rows) {
+    if (!(await reactivate('unfunded', id))) break;
+    released++;
+  }
+  return { released, remaining: rows.length - released };
+}
+
+/**
+ * Deleting a survey or contact cascades to its GiftDelivery rows. A gift that is debited but not yet delivered would take the
+ * owner's money with it, so deletion waits until the pipeline has settled (minutes; batch gifts at most until the next hour).
+ */
+export async function assertNoGiftsInFlight(where: Prisma.GiftDeliveryWhereInput) {
+  const n = await prisma.giftDelivery.count({ where: { ...where, giftType: { in: [...PAID_GIFT_TYPES] }, status: 'pending' } });
+  if (n) throw conflict('gifts_in_flight', `${n} gift${n === 1 ? ' is' : 's are'} still being delivered. Try again in a few minutes.`);
 }

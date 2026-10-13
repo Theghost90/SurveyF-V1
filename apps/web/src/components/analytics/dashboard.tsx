@@ -11,8 +11,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { SurveyStatusBadge } from '@/components/status-badge';
+import { useWallet } from '@/components/wallet/use-wallet';
 import { ApiError, api, errorMessage } from '@/lib/api';
-import { dateTime } from '@/lib/format';
+import { dateTime, fcfa } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 
@@ -24,8 +25,11 @@ interface Analytics {
   perQuestion: Array<{ id: string; number: number; text: string; type: string; answered: number; skipped: number; abandonedHere: number; distribution: Dist[]; average: number | null; texts: Array<{ answer: string; name: string; phone: string; answeredAt: string }> }>;
   dropOff: { questionNumber: number; questionText: string; count: number; suggestion: string } | null;
   nonStarters: Array<{ recipientId: string; name: string; phone: string; status: string; sentAt: string | null }>;
-  gifts: { pending: number; sent: number; failed: number };
+  gifts: { pending: number; sent: number; failed: number; unfunded: number };
   generatedAt: string;
+}
+interface GiftMoney {
+  money: { sent: { count: number; fcfa: number }; inFlight: { count: number; fcfa: number }; unfunded: { count: number; fcfa: number }; failedRefunded: number; needsCheck: { count: number; fcfa: number } };
 }
 interface ResponsesPage { total: number; page: number; pageSize: number; questions: Array<{ id: string; number: number; text: string }>; items: Array<{ contactId: string; name: string; phone: string; status: string; completedAt: string | null; abandonedAtQuestion: number | null; answers: Record<string, string> }> }
 
@@ -47,6 +51,9 @@ export function AnalyticsDashboard({ id }: { id: string }) {
   const [page, setPage] = useState(1);
   const { data: rows } = useSWR<ResponsesPage>(`/surveys/${id}/responses?page=${page}&pageSize=10`, { keepPreviousData: true, refreshInterval: 10_000 });
   const [busy, setBusy] = useState<string | null>(null);
+  const paidGift = data?.survey.giftType === 'airtime' || data?.survey.giftType === 'momo';
+  const { data: giftData, mutate: mutateGifts } = useSWR<GiftMoney>(paidGift ? `/surveys/${id}/gifts` : null, { refreshInterval: 10_000 });
+  const { wallet, mutate: mutateWallet } = useWallet();
 
   if (error) return <Card className="p-8 text-center"><p className="mb-3">{errorMessage(error, t)}</p><Button onClick={() => mutate()}>{t('common.retry')}</Button></Card>;
   if (!data) return <div className="grid gap-4"><Skeleton className="h-14 w-96" /><div className="grid gap-4 sm:grid-cols-5"><Skeleton className="h-28" /><Skeleton className="h-28" /><Skeleton className="h-28" /><Skeleton className="h-28" /><Skeleton className="h-28" /></div><Skeleton className="h-64" /></div>;
@@ -80,9 +87,24 @@ export function AnalyticsDashboard({ id }: { id: string }) {
   async function retryGifts() {
     setBusy('gifts');
     try {
-      const r = await api<{ requeued: number }>(`/surveys/${id}/gifts/retry`, { method: 'POST' });
-      toast.success(t('a.giftsRequeued', { n: r.requeued }));
-      await mutate();
+      const r = await api<{ requeued: number; insufficient: number }>(`/surveys/${id}/gifts/retry`, { method: 'POST' });
+      if (r.insufficient > 0) toast.warning(t('w.a.retriedPartial', { n: r.requeued, m: r.insufficient }));
+      else toast.success(t('w.a.retried', { n: r.requeued }));
+      await Promise.all([mutate(), mutateGifts(), mutateWallet()]);
+    } catch (err) {
+      toast.error(errorMessage(err, t));
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function releaseGifts() {
+    setBusy('release');
+    try {
+      const r = await api<{ released: number; remaining: number }>(`/surveys/${id}/gifts/release`, { method: 'POST' });
+      if (r.released === 0) toast.error(t('w.a.releaseNone'));
+      else if (r.remaining > 0) toast.warning(t('w.a.releasePartial', { n: r.released, m: r.remaining }));
+      else toast.success(t('w.a.released', { n: r.released }));
+      await Promise.all([mutate(), mutateGifts(), mutateWallet()]);
     } catch (err) {
       toast.error(errorMessage(err, t));
     } finally {
@@ -90,6 +112,9 @@ export function AnalyticsDashboard({ id }: { id: string }) {
     }
   }
   const abandonedEligible = data.totals.abandoned;
+  // The wallet must cover at least the first waiting gift for "pay these gifts" to do anything.
+  const unfundedUnit = giftData && giftData.money.unfunded.count > 0 ? Math.ceil(giftData.money.unfunded.fcfa / giftData.money.unfunded.count) : 0;
+  const canRelease = !!wallet && unfundedUnit > 0 && wallet.balanceFCFA >= unfundedUnit;
 
   return (
     <>
@@ -167,11 +192,28 @@ export function AnalyticsDashboard({ id }: { id: string }) {
               <CardContent className="flex flex-wrap items-center gap-3">
                 <Badge variant="brand">{t('a.giftsSent', { n: data.gifts.sent })}</Badge>
                 <Badge variant="warn">{t('a.giftsPending', { n: data.gifts.pending })}</Badge>
+                {data.gifts.unfunded > 0 && <Badge variant="warn">{t('w.a.unfundedBadge', { n: data.gifts.unfunded })}</Badge>}
                 <Badge variant={data.gifts.failed ? 'danger' : 'neutral'}>{t('a.giftsFailed', { n: data.gifts.failed })}</Badge>
+                {giftData && giftData.money.failedRefunded > 0 && <Badge variant="neutral">{t('w.a.refunded', { n: giftData.money.failedRefunded })}</Badge>}
+                {giftData && giftData.money.needsCheck.count > 0 && <Badge variant="danger">{t('w.a.needsCheck', { n: giftData.money.needsCheck.count })}</Badge>}
                 <div className="ml-auto flex gap-2">
-                  {data.gifts.failed > 0 && <Button size="sm" variant="outline" loading={busy === 'gifts'} onClick={retryGifts}>{t('a.retryGifts')}</Button>}
+                  {giftData && giftData.money.failedRefunded > 0 && <Button size="sm" variant="outline" loading={busy === 'gifts'} onClick={retryGifts}>{t('w.a.retry')}</Button>}
                   {data.survey.giftType === 'prize_draw' && <Button size="sm" loading={busy === 'draw'} onClick={draw}><Trophy className="h-4 w-4" aria-hidden />{t('a.draw')}</Button>}
                 </div>
+                {giftData && (
+                  <p className="basis-full text-sm text-muted-foreground" data-testid="gift-spent">
+                    {t('w.a.spent', { amount: fcfa(giftData.money.sent.fcfa + giftData.money.inFlight.fcfa + giftData.money.needsCheck.fcfa, locale) })}
+                  </p>
+                )}
+                {giftData && giftData.money.unfunded.count > 0 && (
+                  <div role="alert" className="flex basis-full flex-wrap items-center gap-3 rounded-xl bg-amber-soft px-4 py-3 text-sm text-amber-ink" data-testid="gift-unfunded">
+                    <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+                    <span className="flex-1">{t('w.a.unfunded', { n: giftData.money.unfunded.count })}</span>
+                    {canRelease
+                      ? <Button size="sm" variant="brand" loading={busy === 'release'} onClick={releaseGifts}>{t('w.a.release', { amount: fcfa(giftData.money.unfunded.fcfa, locale) })}</Button>
+                      : <Link href="/billing#wallet" className={buttonVariants({ size: 'sm', variant: 'brand' })}>{t('w.a.topupFirst')}</Link>}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

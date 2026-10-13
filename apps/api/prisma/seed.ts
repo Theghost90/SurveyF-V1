@@ -6,7 +6,7 @@
  * pattern and are never contacted: the WhatsApp gateway in demo mode only writes to a local outbox.
  */
 import bcrypt from 'bcryptjs';
-import { TEMPLATE_DEFS } from '@surveyflow/shared';
+import { TEMPLATE_DEFS, giftFeeFCFA } from '@surveyflow/shared';
 import { env } from '../src/config/env';
 import { encryptSecret } from '../src/lib/crypto';
 import { prisma } from '../src/lib/prisma';
@@ -85,6 +85,8 @@ async function main() {
   const plan: Outcome[] = [...Array(35).fill('completed'), ...Array(5).fill('abandoned2'), ...Array(3).fill('abandoned3'), ...Array(5).fill('declined'), ...Array(4).fill('started'), ...Array(8).fill('delivered')];
   plan.sort(() => rnd() - 0.5);
   let giftN = 0;
+  const FEE = giftFeeFCFA(500, env.GIFT_FEE_PERCENT);
+  const giftEvents: Array<{ id: string; at: Date; refund: boolean }> = [];
 
   for (let i = 0; i < contacts.length; i++) {
     const c = contacts[i]!;
@@ -119,11 +121,32 @@ async function main() {
     }
     if (outcome === 'completed') {
       giftN++;
-      await prisma.giftDelivery.create({
-        data: { surveyId: survey.id, contactId: c.id, giftType: 'airtime', giftValue: '500 FCFA airtime', amountFCFA: 500, status: giftN === 7 ? 'failed' : giftN > 32 ? 'pending' : 'sent', sentAt: giftN > 32 || giftN === 7 ? null : completedAt, errorMessage: giftN === 7 ? 'provider declined: number not eligible' : null, attempts: giftN === 7 ? 3 : 0, scheduledFor: giftN > 32 ? new Date(Date.now() + 3_600_000) : completedAt, createdAt: completedAt, providerRef: giftN <= 32 && giftN !== 7 ? `mock-airtime-${giftN}` : null },
+      const g = await prisma.giftDelivery.create({
+        data: { surveyId: survey.id, contactId: c.id, giftType: 'airtime', giftValue: '500 FCFA airtime', amountFCFA: 500, feeFCFA: FEE, refundedAt: giftN === 7 ? new Date(completedAt.getTime() + 75 * 60_000) : null, status: giftN === 7 ? 'failed' : giftN > 32 ? 'pending' : 'sent', sentAt: giftN > 32 || giftN === 7 ? null : completedAt, errorMessage: giftN === 7 ? 'provider declined: number not eligible' : null, attempts: giftN === 7 ? 3 : 0, scheduledFor: giftN > 32 ? new Date(Date.now() + 3_600_000) : completedAt, createdAt: completedAt, providerRef: giftN <= 32 && giftN !== 7 ? `mock-airtime-${giftN}` : null },
       });
+      giftEvents.push({ id: g.id, at: completedAt, refund: giftN === 7 });
     }
   }
+
+  // ---- gift wallet: top-up, one debit per completed participant, refund for the definitively failed gift ----------------
+  // Built from the same ledger rules the API uses, so balance == sum(ledger) holds in the demo too.
+  const topupAt = hoursAgo(24 * 6.5);
+  const topupRef = 'sfdemotopup00000000001';
+  const subRow = await prisma.subscription.findUniqueOrThrow({ where: { userId: user.id } });
+  await prisma.paymentTransaction.create({ data: { subscriptionId: subRow.id, userId: user.id, pspProvider: 'mock', amount: 50_000, currency: 'XAF', status: 'success', reference: topupRef, purpose: 'gift_topup', plan: null, interval: 'monthly', method: 'mobile_money', paidAt: topupAt, createdAt: topupAt } });
+  type Ev = { at: Date; delta: number; kind: string; refId: string; note: string };
+  const events: Ev[] = [{ at: topupAt, delta: 50_000, kind: 'topup', refId: topupRef, note: 'Top-up (mock Mobile Money)' }];
+  for (const e of giftEvents) {
+    events.push({ at: e.at, delta: -(500 + FEE), kind: 'gift_debit', refId: e.id, note: 'Gift — Customer Satisfaction — October 2026' });
+    if (e.refund) events.push({ at: new Date(e.at.getTime() + 75 * 60_000), delta: 500 + FEE, kind: 'gift_refund', refId: e.id, note: 'Gift could not be delivered — refunded' });
+  }
+  events.sort((a, b) => a.at.getTime() - b.at.getTime());
+  let balance = 0;
+  for (const e of events) {
+    balance += e.delta;
+    await prisma.walletEntry.create({ data: { userId: user.id, deltaFCFA: e.delta, balanceAfter: balance, kind: e.kind, refId: e.refId, note: e.note, createdAt: e.at } });
+  }
+  await prisma.user.update({ where: { id: user.id }, data: { giftBalanceFCFA: balance } });
 
   // ---- survey 2: draft ----------------------------------------------------------------------------------
   await prisma.survey.create({
