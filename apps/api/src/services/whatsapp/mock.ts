@@ -18,13 +18,15 @@ export interface MockOutboxItem {
   text?: string;
 }
 
-export const outboxKey = (waId: string) => `sf:mock:chat:${waId}`;
+/** Keyed by the business number AND the participant: one phone may be surveyed by several businesses. */
+export const outboxKey = (phoneNumberId: string, waId: string) => `sf:mock:chat:${phoneNumberId}:${waId}`;
 
 export async function pushChat(waId: string, item: Omit<MockOutboxItem, 'id' | 'at'> & { id?: string }) {
   const full: MockOutboxItem = { id: item.id ?? `wamid.MOCK${nanoid(14)}`, at: new Date().toISOString(), ...item } as MockOutboxItem;
-  await redis.rpush(outboxKey(waId), JSON.stringify(full));
-  await redis.ltrim(outboxKey(waId), -300, -1);
-  await redis.expire(outboxKey(waId), 7 * 86_400);
+  const key = outboxKey(full.phoneNumberId, waId);
+  await redis.rpush(key, JSON.stringify(full));
+  await redis.ltrim(key, -300, -1);
+  await redis.expire(key, 7 * 86_400);
   return full;
 }
 

@@ -1,0 +1,48 @@
+@import '@fontsource-variable/bricolage-grotesque/opsz.css';
+@import '@fontsource-variable/figtree/index.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* HSL triplets of the design palette */
+    --background: 75 20% 95%; /* #F4F6F1 canvas */
+    --foreground: 160 61% 11%; /* #0B2B22 ink */
+    --card: 0 0% 100%;
+    --card-foreground: 160 61% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 160 61% 11%;
+    --primary: 160 61% 11%; /* ink buttons, as in the design */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 75 20% 95%;
+    --secondary-foreground: 160 61% 11%;
+    --accent: 140 35% 90%; /* mint */
+    --accent-foreground: 160 61% 11%;
+    --destructive: 0 72% 40%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 140 12% 87%; /* #DCE4DE */
+    --input: 140 12% 79%; /* #C9D3CC */
+    --ring: 150 80% 38%;
+    --radius: 0.75rem;
+  }
+  * { @apply border-border; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+    font-feature-settings: 'ss01';
+  }
+  h1, h2, h3, .font-display { font-family: 'Bricolage Grotesque Variable', system-ui, sans-serif; }
+  :focus-visible { @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background; }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .scrollbar-thin { scrollbar-width: thin; }
+}
+
+/* slider accent, as in Pricing A */
+input[type='range'] { accent-color: #0f7a40; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

@@ -1,13 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import bcrypt from 'bcryptjs';
-import { rl } from '../lib/ratelimit';
+import { rlCredentials } from '../lib/ratelimit';
 import { z } from 'zod';
 import { TRIAL_DAYS, normalizePhone, currencyForCountry, COUNTRY_CONFIG, DEFAULT_COUNTRY } from '@surveyflow/shared';
 import { env } from '../config/env';
-import { badRequest, conflict, forbidden, unauthorized } from '../lib/errors';
+import { AppError, badRequest, conflict, forbidden, unauthorized } from '../lib/errors';
 import { signAccessToken } from '../lib/jwt';
 import { safeEqual } from '../lib/crypto';
 import { prisma } from '../lib/prisma';
+import { redis } from '../lib/redis';
 import { accountSummary, userDto } from '../services/account';
 
 const registerSchema = z.object({
@@ -42,7 +43,7 @@ export async function createUserWithTrial(input: {
 }
 
 export default async function authRoutes(app: FastifyInstance) {
-  const authLimit = rl(10);
+  const authLimit = rlCredentials(10);
 
   app.post('/api/auth/register', authLimit, async (req, reply) => {
     const body = registerSchema.parse(req.body);
@@ -61,9 +62,17 @@ export default async function authRoutes(app: FastifyInstance) {
 
   app.post('/api/auth/login', authLimit, async (req) => {
     const body = loginSchema.parse(req.body);
+    // Per-ACCOUNT failure budget, independent of IP: rotating IPs must not allow unlimited guessing of one account.
+    const failKey = `sf:loginfail:${body.email}`;
+    if (Number((await redis.get(failKey)) ?? 0) >= 30) throw new AppError(429, 'rate_limited', 'Too many failed attempts for this account. Try again in 15 minutes.');
     const user = await prisma.user.findUnique({ where: { email: body.email } });
     const ok = await bcrypt.compare(body.password, user?.passwordHash ?? DUMMY_HASH);
-    if (!user || !user.passwordHash || !ok) throw unauthorized('Invalid email or password');
+    if (!user || !user.passwordHash || !ok) {
+      const n = await redis.incr(failKey);
+      if (n === 1) await redis.expire(failKey, 15 * 60);
+      throw unauthorized('Invalid email or password');
+    }
+    await redis.del(failKey);
     return { token: await signAccessToken(user.id), user: userDto(user) };
   });
 

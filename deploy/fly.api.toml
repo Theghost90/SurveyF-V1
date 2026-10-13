@@ -1,0 +1,23 @@
+# TEMPLATE (untested): fly launch --config deploy/fly.api.toml --dockerfile apps/api/Dockerfile
+app = "surveyflow-api"
+primary_region = "cdg"
+
+[build]
+  dockerfile = "../apps/api/Dockerfile"
+
+[deploy]
+  release_command = "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma"
+
+[http_service]
+  internal_port = 4223
+  force_https = true
+  auto_stop_machines = false   # the send queue and abandonment sweeper run in-process
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    path = "/healthz"
+    interval = "15s"
+    timeout = "3s"
+
+[[vm]]
+  memory = "1gb"               # Chromium needs headroom for PDF export

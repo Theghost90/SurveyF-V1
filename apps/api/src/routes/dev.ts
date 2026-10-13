@@ -32,7 +32,7 @@ export default async function devRoutes(app: FastifyInstance) {
 
   async function snapshot(userId: string, contactId: string) {
     const { contact, account, waId } = await target(userId, contactId);
-    const raw = await redis.lrange(outboxKey(waId), 0, -1);
+    const raw = await redis.lrange(outboxKey(account.phoneNumberId, waId), 0, -1);
     const session = await getSession(account.phoneNumberId, waId);
     const recipients = await prisma.surveyRecipient.findMany({ where: { contactId: contact.id }, include: { survey: { select: { title: true, id: true } } }, orderBy: { createdAt: 'desc' }, take: 5 });
     return {

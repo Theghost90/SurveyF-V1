@@ -133,7 +133,9 @@ export async function say(app: FastifyInstance, w: World, contactIdx: number, me
 }
 
 export async function chatOf(contactIdx: number) {
-  const raw = await redis.lrange(`sf:mock:chat:${waIdOf(contactIdx)}`, 0, -1);
+  // chats are keyed by business number + participant; tests flush Redis, so exactly one key matches
+  const keys = await redis.keys(`sf:mock:chat:*:${waIdOf(contactIdx)}`);
+  const raw = keys.length ? await redis.lrange(keys[0]!, 0, -1) : [];
   return raw.map((r) => JSON.parse(r));
 }
 

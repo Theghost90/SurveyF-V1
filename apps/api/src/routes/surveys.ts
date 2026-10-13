@@ -12,6 +12,24 @@ import { randomInt } from 'node:crypto';
 
 const GIFT_AUTOMATION = new Set(['airtime', 'momo', 'discount', 'prize_draw']);
 
+
+type SendSelection = { all?: boolean; contactIds?: string[]; tags?: string[] };
+
+/** Who a send would actually reach: opted-in, not STOPped, and not already invited to this survey. */
+async function eligibleContacts(userId: string, surveyId: string, sel: SendSelection) {
+  return prisma.contact.findMany({
+    where: {
+      userId,
+      optedOutAt: null,
+      consentAt: { not: null }, // WhatsApp policy: only contacts who opted in
+      ...(sel.all ? {} : { OR: [...(sel.contactIds?.length ? [{ id: { in: sel.contactIds } }] : []), ...(sel.tags ?? []).map((t) => ({ tags: { array_contains: t } }))] }),
+      // Never invite the same person twice.
+      NOT: { recipients: { some: { surveyId, status: { notIn: ['queued', 'failed'] } } } },
+    },
+    select: { id: true },
+  });
+}
+
 async function owned(userId: string, id: string) {
   const s = await prisma.survey.findFirst({ where: { id, userId }, include: { questions: { orderBy: { order: 'asc' } } } });
   if (!s) throw notFound('Survey');
@@ -190,17 +208,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
     }
     if (!body.all && !body.contactIds?.length && !body.tags?.length) throw badRequest('no_recipients', 'Choose who to send the survey to');
 
-    const contacts = await prisma.contact.findMany({
-      where: {
-        userId: req.userId,
-        optedOutAt: null,
-        consentAt: { not: null }, // WhatsApp policy: only contacts who opted in
-        ...(body.all ? {} : { OR: [...(body.contactIds?.length ? [{ id: { in: body.contactIds } }] : []), ...(body.tags ?? []).map((t) => ({ tags: { array_contains: t } }))] }),
-        // Never invite the same person twice.
-        NOT: { recipients: { some: { surveyId: s.id, status: { notIn: ['queued', 'failed'] } } } },
-      },
-      select: { id: true },
-    });
+    const contacts = await eligibleContacts(req.userId, s.id, body);
     if (!contacts.length) throw badRequest('no_eligible_contacts', 'No eligible contacts: they may be opted out, lack consent, or were already invited');
 
     const ctx = await loadAccount(req.userId);
@@ -208,6 +216,17 @@ export default async function surveyRoutes(app: FastifyInstance) {
     const when = body.scheduledAt && body.scheduledAt > new Date() ? body.scheduledAt : new Date();
     const queued = await enqueueInvitations(s, contacts.map((c) => c.id), when);
     return { queued, scheduledFor: when, messagesRemaining: messagesRemaining(ctx) - queued };
+  });
+
+  /** Exact audience for the send panel: how many invitations this selection would queue, and what it costs in quota. */
+  app.post('/api/surveys/:id/audience', auth, async (req) => {
+    const s = await owned(req.userId, (req.params as { id: string }).id);
+    const body = sendSchema.parse(req.body ?? {});
+    const eligible = await eligibleContacts(req.userId, s.id, body);
+    const ctx = await loadAccount(req.userId);
+    const total = await prisma.contact.count({ where: { userId: req.userId } });
+    const optedOut = await prisma.contact.count({ where: { userId: req.userId, optedOutAt: { not: null } } });
+    return { eligible: eligible.length, totalContacts: total, optedOut, messagesRemaining: messagesRemaining(ctx) };
   });
 
   app.post('/api/surveys/:id/remind', auth, async (req) => {

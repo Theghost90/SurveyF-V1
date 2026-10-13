@@ -33,6 +33,16 @@ describe('auth', () => {
     expect(JSON.parse(good.body).token).toBeTruthy();
   });
 
+  it('locks one ACCOUNT after 30 failed logins even when every attempt comes from a different IP', async () => {
+    await registerOwner(app, { email: 'victim@example.com' });
+    const attempt = (ip: string, password: string) => app.inject({ method: 'POST', url: '/api/auth/login', remoteAddress: ip, headers: { 'content-type': 'application/json' }, payload: JSON.stringify({ email: 'victim@example.com', password }) });
+    for (let i = 0; i < 30; i++) expect((await attempt(`10.0.0.${i}`, 'wrong-password-x')).statusCode).toBe(401);
+    expect((await attempt('10.9.9.9', 'wrong-password-x')).statusCode).toBe(429);
+    expect((await attempt('10.9.9.9', 'correct-horse-battery')).statusCode).toBe(429); // even the right password waits out the lock
+    await redis.del('sf:loginfail:victim@example.com');
+    expect((await attempt('10.9.9.9', 'correct-horse-battery')).statusCode).toBe(200);
+  });
+
   it('protects API routes and scopes data per owner', async () => {
     expect((await app.inject({ method: 'GET', url: '/api/surveys' })).statusCode).toBe(401);
     const a = await registerOwner(app);
@@ -217,11 +227,28 @@ describe('end-to-end participant flow through the signed webhook', () => {
 
     // a stranger (not an imported contact) cannot start anything
     await postWebhook(app, metaPayload(w.phoneNumberId, [templateBtn('237699999999', `START:${w.surveyId}`)]));
-    expect(await redis.exists('sf:mock:chat:237699999999')).toBe(0);
+    expect((await redis.keys('sf:mock:chat:*:237699999999')).length).toBe(0);
     // unrelated chat from a known contact with no session (owner chatting through Coexistence) is left alone
     const before = (await chatOf(2)).length;
     await say(app, w, 2, (f) => textMsg(f, 'Hello, do you have bread today?'));
     expect((await chatOf(2)).length).toBe(before);
+  });
+
+  it('isolates two businesses that survey the SAME phone number (chat + session never cross over)', async () => {
+    const a = await buildWorld(app, { contacts: 1 });
+    const b = await buildWorld(app, { contacts: 1 }); // identical participant phone, different business + survey
+    expect(a.phoneNumberId).not.toBe(b.phoneNumberId);
+    await say(app, a, 0, (f) => templateBtn(f, `START:${a.surveyId}`));
+    await postWebhook(app, metaPayload(b.phoneNumberId, [templateBtn(waIdOf(0), `START:${b.surveyId}`)]));
+    const rA = await prisma.surveyRecipient.findFirst({ where: { surveyId: a.surveyId } });
+    const rB = await prisma.surveyRecipient.findFirst({ where: { surveyId: b.surveyId } });
+    expect([rA!.status, rB!.status]).toEqual(['started', 'started']);
+    // a tap on A's survey arriving at B's number must be ignored (not B's participant)
+    const before = await prisma.response.count();
+    await postWebhook(app, metaPayload(b.phoneNumberId, [replyMsg(waIdOf(0), answerIdFor(a.questions[0]!, 0), 'button_reply')]));
+    expect(await prisma.response.count()).toBe(before);
+    expect((await getSession(a.phoneNumberId, waIdOf(0)))!.surveyId).toBe(a.surveyId);
+    expect((await getSession(b.phoneNumberId, waIdOf(0)))!.surveyId).toBe(b.surveyId);
   });
 
   it('abandons after 24h at the right question, then resumes via the reminder button', async () => {
@@ -265,6 +292,31 @@ describe('end-to-end participant flow through the signed webhook', () => {
     expect((await chatOf(0)).at(-1).message.body).toMatch(/unsubscribed/i);
     const again = await w.owner.post(`/api/surveys/${w.surveyId}/send`, { contactIds: [w.contactIds[0]] });
     expect(again.status).toBe(400); // no eligible contacts
+  });
+
+  it('audience endpoint counts exactly who a send would reach (not "all contacts")', async () => {
+    const w = await buildWorld(app, { contacts: 4, send: false });
+    expect((await w.owner.post(`/api/surveys/${w.surveyId}/audience`, { all: true })).eligible).toBe(4);
+    await say(app, w, 3, (f) => textMsg(f, 'STOP')); // contact 4 opts out
+    expect((await w.owner.post(`/api/surveys/${w.surveyId}/audience`, { all: true })).eligible).toBe(3);
+    await w.owner.post(`/api/surveys/${w.surveyId}/send`, { contactIds: [w.contactIds[0]] });
+    await runSendWorkerOnce();
+    const a = await w.owner.post(`/api/surveys/${w.surveyId}/audience`, { all: true });
+    expect(a.eligible).toBe(2); // one already invited, one opted out
+    expect(a.optedOut).toBe(1);
+    expect((await w.owner.post(`/api/surveys/${w.surveyId}/audience`, { contactIds: [w.contactIds[0]] })).eligible).toBe(0);
+  });
+
+  it('lists responses most-recent-first with abandoned participants after finished ones (NULL completedAt sorts last)', async () => {
+    const w = await buildWorld(app, { contacts: 3 });
+    const [q1, q2] = w.questions;
+    await say(app, w, 0, (f) => templateBtn(f, `START:${w.surveyId}`)); // contact 0 starts, never finishes
+    await say(app, w, 1, (f) => templateBtn(f, `START:${w.surveyId}`));
+    await say(app, w, 1, (f) => replyMsg(f, answerIdFor(q1!, 0), 'button_reply'));
+    await say(app, w, 1, (f) => replyMsg(f, answerIdFor(q2!, 0), 'list_reply'));
+    await say(app, w, 1, (f) => textMsg(f, 'done')); // contact 1 completes
+    const r = await w.owner.get(`/api/surveys/${w.surveyId}/responses`);
+    expect(r.items.map((x: any) => x.status)).toEqual(['completed', 'started']);
   });
 
   it('computes analytics from funnel state without the spec formula bug', async () => {

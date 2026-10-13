@@ -173,7 +173,7 @@ export async function getParticipantRows(surveyId: string, userId: string, opts:
   if (!survey) throw notFound('Survey');
   const where = { surveyId, ...(opts.onlyEngaged === false ? {} : { status: { in: ['started', 'completed', 'abandoned'] as never[] } }) };
   const [recipients, total] = await Promise.all([
-    prisma.surveyRecipient.findMany({ where, include: { contact: true }, orderBy: [{ completedAt: 'desc' }, { startedAt: 'desc' }], skip: opts.skip, take: opts.take }),
+    prisma.surveyRecipient.findMany({ where, include: { contact: true }, orderBy: [{ completedAt: { sort: 'desc', nulls: 'last' } }, { startedAt: { sort: 'desc', nulls: 'last' } }], skip: opts.skip, take: opts.take }),
     prisma.surveyRecipient.count({ where }),
   ]);
   const responses = await prisma.response.findMany({ where: { surveyId, contactId: { in: recipients.map((r) => r.contactId) } }, select: { contactId: true, questionId: true, answer: true } });
