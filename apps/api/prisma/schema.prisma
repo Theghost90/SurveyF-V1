@@ -104,6 +104,8 @@ model User {
   // ADDED: prepaid gift wallet. The SURVEY OWNER funds gifts (airtime / Mobile Money), never SurveyFlow.
   // Only ever changed with a guarded UPDATE (see services/wallet.ts), so it cannot go negative.
   giftBalanceFCFA Int @default(0)
+  // ADDED: who the owner is (business | institution | academic), chosen in onboarding. Hook for segment-specific features.
+  segment String?
 
   whatsappAccounts WhatsAppAccount[]
   surveys          Survey[]
@@ -169,6 +171,13 @@ model Survey {
   customThankYou   String? // referenced by the spec's gift code but missing from its schema
   giftAmountFCFA   Int? // numeric value for airtime / momo gifts
   giftMaxCount     Int? // hard cap on gifts, protects the owner's budget
+
+  // ADDED (automatic reminders). `kind` = general | event; `deadlineAt` is required for events. The two switches are
+  // independent and OFF by default: SurveyFlow, not the owner, decides when a reminder is polite (shared/reminders.ts).
+  kind                    String    @default("general")
+  deadlineAt              DateTime?
+  autoRemindNonResponders Boolean   @default(false)
+  autoRemindAbandoners    Boolean   @default(false)
   scheduledAt      DateTime?
   closedAt         DateTime?
   whatsappAccountId String?
@@ -240,6 +249,13 @@ model SurveyRecipient {
   remindedAt  DateTime?
   createdAt   DateTime @default(now())
 
+  // ADDED (automatic reminders): when the participant was flagged abandoned; which rule produced the reminder
+  // (standard | event); whether it was automatic (only automatic reminders get a closing note); when the note went out.
+  abandonedAt  DateTime?
+  reminderRule String?
+  reminderAuto Boolean   @default(false)
+  followupAt   DateTime?
+
   survey  Survey  @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
@@ -255,7 +271,7 @@ model SendJob {
   id           String    @id @default(cuid())
   userId       String
   recipientId  String?
-  kind         String // invitation | reminder | gift_notice
+  kind         String // invitation | reminder | gift_notice | nudge | deadline_note | progress_saved | progress_saved_deadline
   status       String    @default("queued") // queued | processing | done | failed
   scheduledFor DateTime  @default(now())
   attempts     Int       @default(0)

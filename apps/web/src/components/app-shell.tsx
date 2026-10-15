@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { AlertTriangle, ChevronDown, CreditCard, LogOut, Settings, Sparkles, Wallet } from 'lucide-react';
 import { Logo } from '@/components/logo';
@@ -14,13 +14,20 @@ import { useAccount } from '@/lib/account';
 import { dateShort, fcfa } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
+import { useEffect } from 'react';
 
 export function AppShell({ children, showSimulator }: { children: React.ReactNode; showSimulator: boolean }) {
   const t = useT();
   const locale = useLocale();
   const pathname = usePathname();
+  const router = useRouter();
   const { account } = useAccount();
   const { wallet } = useWallet();
+
+  // The customer segment is the one required answer of setup. Anyone without it (new sign-up that skipped the wizard, or an
+  // account created before this question existed) is taken to the onboarding step that asks it, and nowhere else until answered.
+  const needsSegment = !!account && !account.user.segment && pathname !== '/onboarding';
+  useEffect(() => { if (needsSegment) router.replace('/onboarding'); }, [needsSegment, router]);
 
   const nav = [
     { href: '/dashboard', label: t('app.nav.dashboard') },
@@ -90,7 +97,7 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
         </div>
       )}
 
-      <main id="main" className="mx-auto max-w-[1344px] px-5 pb-20 pt-8 sm:px-8">{children}</main>
+      <main id="main" className="mx-auto max-w-[1344px] px-5 pb-20 pt-8 sm:px-8">{needsSegment ? <Skeleton className="h-64" /> : children}</main>
     </div>
   );
 }

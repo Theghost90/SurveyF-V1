@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '@prisma/client';
 import { parse } from 'csv-parse/sync';
 import { z } from 'zod';
-import { normalizePhone, COUNTRY_CONFIG, DEFAULT_COUNTRY } from '@surveyflow/shared';
+import { normalizePhone, COUNTRY_CONFIG, DEFAULT_COUNTRY, phoneExampleFor } from '@surveyflow/shared';
 import { badRequest, notFound } from '../lib/errors';
 import { assertNoGiftsInFlight } from '../services/gifts';
 import { prisma } from '../lib/prisma';
@@ -63,7 +63,7 @@ export default async function contactRoutes(app: FastifyInstance) {
     const body = createSchema.parse(req.body);
     const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId }, select: { country: true } });
     const phone = normalizePhone(body.phone, COUNTRY_CONFIG[user.country] ? user.country : DEFAULT_COUNTRY);
-    if (!phone) throw badRequest('invalid_phone', 'Enter a valid phone number, e.g. +237 677 12 34 56');
+    if (!phone) throw badRequest('invalid_phone', `Enter a valid phone number, e.g. ${phoneExampleFor(COUNTRY_CONFIG[user.country] ? user.country : DEFAULT_COUNTRY)}`);
     const c = await prisma.contact.upsert({
       where: { userId_phone: { userId: req.userId, phone } },
       create: { userId: req.userId, phone, name: body.name, tags: body.tags, consentAt: new Date(), consentSource: 'owner_manual' },

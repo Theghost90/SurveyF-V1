@@ -174,7 +174,7 @@ async function turn(phoneNumberId: string, msg: WaInboundMessage, log: Logger) {
   if (session && session.surveyId !== survey.id) {
     await prisma.surveyRecipient.updateMany({
       where: { id: session.recipientId, status: 'started' },
-      data: { status: 'abandoned', abandonedAtQuestion: session.currentIndex + 1 },
+      data: { status: 'abandoned', abandonedAtQuestion: session.currentIndex + 1, abandonedAt: now },
     });
     await deleteSession(phoneNumberId, msg.from);
     session = null;

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import { Check, CreditCard, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
-import { PAID_PLAN_KEYS, PLANS, type PaidPlanKey } from '@surveyflow/shared';
+import { PAID_PLAN_KEYS, PLANS, formatPhone, phoneExampleFor, type PaidPlanKey } from '@surveyflow/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -128,7 +128,8 @@ function CheckoutDialog({ plan, interval, data, onClose }: { plan: PaidPlanKey |
   const t = useT();
   const locale = useLocale();
   const [method, setMethod] = useState<'mobile_money' | 'card'>('mobile_money');
-  const [phone, setPhone] = useState(data.user.phone);
+  const [phone, setPhone] = useState(formatPhone(data.user.phone));
+  const example = phoneExampleFor(data.user.country);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<{ id: string } | null>(null);
@@ -181,7 +182,7 @@ function CheckoutDialog({ plan, interval, data, onClose }: { plan: PaidPlanKey |
               <label className={cn('flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3.5 font-medium', method === 'mobile_money' ? 'border-leaf bg-mint/40' : 'border-line')}><RadioGroupItem value="mobile_money" /><Smartphone className="h-5 w-5 text-leaf" aria-hidden />{t('bill.momo')}</label>
               <label className={cn('flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3.5 font-medium', method === 'card' ? 'border-leaf bg-mint/40' : 'border-line')}><RadioGroupItem value="card" /><CreditCard className="h-5 w-5 text-leaf" aria-hidden />{t('bill.card')}</label>
             </RadioGroup>
-            {method === 'mobile_money' && <Field label={t('bill.momoPhone')} htmlFor="pay-phone" hint={t('bill.momoHint')}><Input id="pay-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" /></Field>}
+            {method === 'mobile_money' && <Field label={t('bill.momoPhone')} htmlFor="pay-phone" hint={t('bill.momoHint')}><Input id="pay-phone" type="tel" placeholder={example} value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" /></Field>}
             {error && <p role="alert" className="text-sm font-medium text-destructive">{error}</p>}
             <DialogFooter><Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button><Button size="lg" variant="brand" loading={busy} onClick={pay}>{t('bill.pay', { amount: money(amount, price.currency, locale) })}</Button></DialogFooter>
             <p className="text-xs text-muted-foreground">{t('bill.secure')}</p>

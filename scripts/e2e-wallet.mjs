@@ -50,6 +50,8 @@ await step('register, upgrade to Growth (mock checkout), connect a simulated num
   await page.fill('#password', 'a-long-test-password');
   await page.click('button[type=submit]');
   await page.waitForURL('**/onboarding**', { timeout: 30000 });
+  await page.getByRole('radio', { name: /Businesses/ }).click(); // the one required onboarding answer; the app redirects here until it is given
+  await page.getByText(/Saved\. You can change it later/).waitFor({ timeout: 10000 });
   const up = await call('PUT', '/subscription/upgrade', { plan: 'growth', interval: 'monthly', method: 'mobile_money', phone: '+237677112233' });
   expect(up.status === 200, `upgrade: ${JSON.stringify(up)}`);
   const paid = await call('POST', `/payments/mock/${up.json.reference}`, { outcome: 'success' });
@@ -123,6 +125,8 @@ await step('analytics tells the owner exactly what happened and offers the next 
   await box.waitFor({ timeout: 15000 });
   expect(/finished while your wallet was empty/.test(await box.innerText()), 'unfunded explanation expected');
   await box.getByRole('link', { name: 'Top up first' }).waitFor();
+  expect(await page.getByText('Download receipt').count() === 0, 'no receipt link before any gift was delivered');
+  expect(await page.getByTestId('gift-receipts').count() === 0, 'no delivered-gifts list before any gift was delivered');
   await shot('04-analytics-unfunded');
 });
 
@@ -160,6 +164,24 @@ await step('release the backlog: debits exactly one gift (525), and the gift is 
   const snap = (await call('GET', `/dev/simulator/${state.contacts[0].id}`)).json;
   expect(JSON.stringify(snap.chat).includes('survey_gift_notice'), 'late gift must be announced with the approved template, not free text');
   await shot('07-analytics-paid');
+
+  // proof of gift: the link exists only now that the gift was delivered, and it opens a real PDF with no login
+  const link = page.getByTestId('gift-receipts').getByRole('link', { name: 'Download receipt' });
+  await link.waitFor({ timeout: 15000 });
+  const href = await link.getAttribute('href');
+  const pdf = await page.request.get(href); // no cookies of the owner session needed: the participant has no account
+  expect(pdf.status() === 200 && (pdf.headers()['content-type'] ?? '').includes('application/pdf'), `receipt should be a PDF, got ${pdf.status()} ${pdf.headers()['content-type']}`);
+  expect((await pdf.body()).subarray(0, 4).toString() === '%PDF', 'receipt body should start with %PDF');
+  const tampered = await page.request.get(href.slice(0, -2) + 'xx');
+  expect(tampered.status() === 404, `a tampered receipt link must 404, got ${tampered.status()}`);
+  // and the participant's WhatsApp notice carries the same link as a "Download receipt" button
+  await page.goto(`${base}/simulator`);
+  await page.locator('#sim-contact').click();
+  await page.getByRole('option').nth(0).click();
+  const btn = page.locator('[aria-label="Simulated chat"]').getByRole('link', { name: 'Download receipt' });
+  await btn.waitFor({ timeout: 15000 });
+  expect((await btn.getAttribute('href')).startsWith('/proxy/receipts/'), 'simulator button should point at the receipt');
+  await shot('07b-simulator-receipt-button');
 });
 
 await step('double release is a no-op (nothing left, nothing charged twice)', async () => {

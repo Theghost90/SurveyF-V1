@@ -4,6 +4,7 @@ import { env } from '../../config/env';
 import { conflict } from '../../lib/errors';
 import { generateDiscountCode } from '../../lib/crypto';
 import { prisma, type Tx } from '../../lib/prisma';
+import { receiptToken, receiptUrl } from '../receipts';
 import { creditWallet, debitWallet, heldByGift } from '../wallet';
 import { credsFor } from '../whatsapp/accounts';
 import { getGateway } from '../whatsapp/gateway';
@@ -157,16 +158,16 @@ async function processGift(id: string) {
   }
 }
 
-async function notifyGiftSent(gift: { surveyId: string; contactId: string; giftValue: string | null; notifyViaTemplate: boolean; survey: { language: string; userId: string; giftDeliveryMode: string; account: { phoneNumberId: string; wabaId: string; accessToken: string } | null }; contact: { phone: string } }) {
+async function notifyGiftSent(gift: { id: string; surveyId: string; contactId: string; giftValue: string | null; notifyViaTemplate: boolean; survey: { language: string; userId: string; giftDeliveryMode: string; account: { phoneNumberId: string; wabaId: string; accessToken: string } | null }; contact: { phone: string } }) {
   try {
     const lang = (gift.survey.language === 'en' ? 'en' : 'fr') as SurveyLang;
     const value = gift.giftValue ?? '';
     if (gift.survey.giftDeliveryMode === 'immediate' && gift.survey.account && !gift.notifyViaTemplate) {
       // Inside the 24h window the participant just opened by answering: plain text is free.
-      await getGateway().sendMessage(credsFor(gift.survey.account), toWaId(gift.contact.phone), { kind: 'text', body: sys(lang).giftSent(value) });
+      await getGateway().sendMessage(credsFor(gift.survey.account), toWaId(gift.contact.phone), { kind: 'text', body: sys(lang).giftSent(value, receiptUrl(gift.id)) });
     } else {
       const recipient = await prisma.surveyRecipient.findUnique({ where: { surveyId_contactId: { surveyId: gift.surveyId, contactId: gift.contactId } }, select: { id: true } });
-      if (recipient) await enqueueGiftNotice(gift.survey.userId, recipient.id, value);
+      if (recipient) await enqueueGiftNotice(gift.survey.userId, recipient.id, value, receiptToken(gift.id));
     }
   } catch {
     /* the money moved; a failed courtesy message must not flip the gift to failed */

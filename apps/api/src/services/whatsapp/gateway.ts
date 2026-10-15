@@ -16,6 +16,8 @@ export interface TemplateSend {
   bodyParams: string[];
   /** Payload of each quick-reply button, in order (e.g. "START:<surveyId>"). */
   buttonPayloads: string[];
+  /** Suffix for each URL button, in order (they follow the quick-reply buttons), e.g. the receipt token. */
+  urlParams?: string[];
 }
 
 export interface RemoteTemplate {

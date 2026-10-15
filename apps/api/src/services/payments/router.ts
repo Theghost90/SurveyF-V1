@@ -1,4 +1,5 @@
-import { COUNTRY_CONFIG, PSP_CAPABILITIES, type PaymentMethod, type PspName } from '@surveyflow/shared';
+import { COUNTRY_CONFIG, PSP_CAPABILITIES, rankByFee, type PaymentMethod, type PspFees, type PspName } from '@surveyflow/shared';
+import { env } from '../../config/env';
 import { CampayAdapter } from './adapters/campay';
 import { CinetPayAdapter } from './adapters/cinetpay';
 import { FlutterwaveAdapter } from './adapters/flutterwave';
@@ -27,7 +28,11 @@ export class PSPRouter {
     return this.adapters.get(name as PspName);
   }
 
-  chain(p: { country: string; currency: string; method: PaymentMethod; preferred?: string | null }): PSPAdapter[] {
+  /**
+   * Silent provider choice: the owner never picks a PSP. Among providers that are configured and support this country /
+   * currency / method, the cheapest by configured fee comes first and the rest remain as failover.
+   */
+  chain(p: { country: string; currency: string; method: PaymentMethod }, fees: PspFees = env.pspFees): PSPAdapter[] {
     const mock = this.adapters.get('mock');
     // Demo mode: everything goes through the mock checkout.
     if (mock?.isConfigured()) return [mock];
@@ -44,8 +49,7 @@ export class PSPRouter {
       const cap = PSP_CAPABILITIES[name];
       return a && a.isConfigured() && (cap.countries === '*' || cap.countries.includes(p.country)) && cap.methods.includes(p.method) && (cap.currencies as string[]).includes(p.currency);
     });
-    if (p.preferred && usable.includes(p.preferred as PspName)) usable.sort((a, b) => (a === p.preferred ? -1 : b === p.preferred ? 1 : 0));
-    return usable.map((n) => this.adapters.get(n)!);
+    return rankByFee(usable, p.method, fees).map((n) => this.adapters.get(n)!);
   }
 }
 

@@ -29,6 +29,7 @@ interface Analytics {
   generatedAt: string;
 }
 interface GiftMoney {
+  items: Array<{ id: string; value: string | null; status: string; sentAt: string | null; contact: string; receiptUrl: string | null }>;
   money: { sent: { count: number; fcfa: number }; inFlight: { count: number; fcfa: number }; unfunded: { count: number; fcfa: number }; failedRefunded: number; needsCheck: { count: number; fcfa: number } };
 }
 interface ResponsesPage { total: number; page: number; pageSize: number; questions: Array<{ id: string; number: number; text: string }>; items: Array<{ contactId: string; name: string; phone: string; status: string; completedAt: string | null; abandonedAtQuestion: number | null; answers: Record<string, string> }> }
@@ -204,6 +205,21 @@ export function AnalyticsDashboard({ id }: { id: string }) {
                   <p className="basis-full text-sm text-muted-foreground" data-testid="gift-spent">
                     {t('w.a.spent', { amount: fcfa(giftData.money.sent.fcfa + giftData.money.inFlight.fcfa + giftData.money.needsCheck.fcfa, locale) })}
                   </p>
+                )}
+                {giftData && giftData.items.some((g) => g.receiptUrl) && (
+                  <div className="basis-full" data-testid="gift-receipts">
+                    <h3 className="mb-2 text-sm font-bold">{t('a.giftReceipts')}</h3>
+                    <ul className="flex max-h-48 flex-col gap-1.5 overflow-y-auto scrollbar-thin">
+                      {giftData.items.filter((g) => g.receiptUrl).slice(0, 25).map((g) => (
+                        <li key={g.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-canvas px-3.5 py-2.5 text-sm">
+                          <span className="font-semibold">{g.contact}</span>
+                          <span className="text-muted-foreground">{g.value}{g.sentAt ? ` · ${dateTime(g.sentAt, locale)}` : ''}</span>
+                          {/* Present only for a gift that was really delivered: the API sends null otherwise. */}
+                          <a href={g.receiptUrl!} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1.5 font-semibold text-leaf hover:underline"><Download className="h-4 w-4" aria-hidden />{t('a.receipt')}</a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
                 {giftData && giftData.money.unfunded.count > 0 && (
                   <div role="alert" className="flex basis-full flex-wrap items-center gap-3 rounded-xl bg-amber-soft px-4 py-3 text-sm text-amber-ink" data-testid="gift-unfunded">

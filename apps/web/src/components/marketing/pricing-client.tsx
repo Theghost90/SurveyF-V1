@@ -2,7 +2,8 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { Check } from 'lucide-react';
-import { ANNUAL_MONTHS_CHARGED, PAID_PLAN_KEYS, PLANS, costPerAnswer, recommendPlan, formatFCFA, type PaidPlanKey } from '@surveyflow/shared';
+import { PAID_PLAN_KEYS, PLANS, costPerAnswer, currencyLabel, formatFCFA, overagePerBlock, planPrice, recommendPlan, type PaidPlanKey } from '@surveyflow/shared';
+import { useGeo } from '@/lib/geo-context';
 import { useLocale, useT } from '@/lib/i18n/client';
 import type { TFn } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -50,11 +51,14 @@ export function planFeatures(plan: PaidPlanKey, t: TFn, locale: 'en' | 'fr') {
 export function PricingClient({ initial = 1200 }: { initial?: number }) {
   const t = useT();
   const locale = useLocale();
+  const { currency } = useGeo();
+  const label = currencyLabel(currency);
   const [pos, setPos] = useState(Math.round(responsesToPos(initial)));
   const [annual, setAnnual] = useState(false);
   const responses = useMemo(() => posToResponses(pos), [pos]);
   const fit = recommendPlan(responses);
-  const per = costPerAnswer(fit, responses);
+  const per = costPerAnswer(fit, responses, currency);
+  const perText = new Intl.NumberFormat(locale === 'fr' ? 'fr-FR' : 'en-US', { maximumFractionDigits: per >= 10 ? 0 : per >= 1 ? 1 : 2, minimumFractionDigits: per >= 10 ? 0 : per >= 1 ? 1 : 2 }).format(per);
 
   return (
     <>
@@ -82,7 +86,7 @@ export function PricingClient({ initial = 1200 }: { initial?: number }) {
           </div>
           <div className="flex flex-wrap items-center gap-x-7 gap-y-3 border-t border-line-3 pt-[18px]">
             <span className="text-base">{t('pricing.bestFit')} <b className="text-leaf">{t(`plan.${fit}`)}</b></span>
-            <span className="text-base">{t('pricing.perAnswer', { n: per >= 10 ? Math.round(per) : per.toFixed(1) })}</span>
+            <span className="text-base">{t('pricing.perAnswer', { n: `${perText} ${label}` })}</span>
             <fieldset className="ml-auto flex rounded-full border border-line-2 p-[3px] text-[13px] font-semibold">
               <legend className="sr-only">{t('pricing.billing')}</legend>
               {[false, true].map((v) => (
@@ -100,7 +104,7 @@ export function PricingClient({ initial = 1200 }: { initial?: number }) {
           {PAID_PLAN_KEYS.map((key) => {
             const plan = PLANS[key];
             const active = key === fit;
-            const price = annual ? plan.priceFCFA * ANNUAL_MONTHS_CHARGED : plan.priceFCFA;
+            const price = planPrice(key, currency, annual ? 'annual' : 'monthly');
             return (
               <div
                 key={key}
@@ -113,7 +117,7 @@ export function PricingClient({ initial = 1200 }: { initial?: number }) {
                 <p className={cn('text-[15px] leading-[1.45]', active ? 'text-[#B5C9BD]' : 'text-muted-foreground')}>{t(`plan.${key}Who`)}</p>
                 <div className="flex items-baseline gap-1.5">
                   <span className="font-display text-[44px] font-extrabold tracking-[-0.03em]">{formatFCFA(price, locale)}</span>
-                  <span className={cn('text-[15px]', active ? 'text-[#B5C9BD]' : 'text-muted-foreground')}>{annual ? t('pricing.perYear') : t('pricing.perMonth')}</span>
+                  <span className={cn('text-[15px]', active ? 'text-[#B5C9BD]' : 'text-muted-foreground')}>{annual ? t('pricing.perYear', { currency: label }) : t('pricing.perMonth', { currency: label })}</span>
                 </div>
                 <Link
                   href={`/register?plan=${key}${annual ? '&interval=annual' : ''}`}
@@ -133,7 +137,7 @@ export function PricingClient({ initial = 1200 }: { initial?: number }) {
             );
           })}
         </div>
-        <p className="mt-4 text-center text-[13px] text-muted-foreground">{t('pricing.overage')}</p>
+        <p className="mt-4 text-center text-[13px] text-muted-foreground">{t('pricing.overage', { amount: `${formatFCFA(overagePerBlock(currency), locale)} ${label}` })}</p>
       </section>
     </>
   );

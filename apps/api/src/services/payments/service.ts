@@ -57,7 +57,7 @@ export async function initiatePayment(userId: string, input: InitiateInput, rout
 
   const currency = (user.preferredCurrency || currencyForCountry(user.country)) as Currency;
   const { amount, currency: payCurrency } = priceFor(input.plan, currency, input.interval);
-  const chain = router.chain({ country: user.country, currency: payCurrency, method: input.method, preferred: user.preferredPSP });
+  const chain = router.chain({ country: user.country, currency: payCurrency, method: input.method });
   if (!chain.length) throw new AppError(503, 'no_psp_available', 'No payment provider is available for this country / payment method right now');
 
   const phone = (input.phone ?? user.phone ?? '').trim();
@@ -126,7 +126,7 @@ export async function initiateGiftTopup(userId: string, input: TopupInput, route
   if (dup) return dup;
 
   const currency: Currency = user.preferredCurrency === 'XOF' ? 'XOF' : 'XAF';
-  const chain = router.chain({ country: user.country, currency, method: input.method, preferred: user.preferredPSP });
+  const chain = router.chain({ country: user.country, currency, method: input.method });
   if (!chain.length) throw new AppError(503, 'no_psp_available', 'No payment provider is available for this country / payment method right now');
 
   const phone = (input.phone ?? user.phone ?? '').trim();

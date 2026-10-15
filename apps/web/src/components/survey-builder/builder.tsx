@@ -13,12 +13,15 @@ import { Textarea } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SurveyStatusBadge } from '@/components/status-badge';
+import { COUNTRY_CONFIG, localDateString } from '@surveyflow/shared';
 import { useAccount } from '@/lib/account';
+import { useOwnerCountry } from '@/lib/geo-context';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 import { GiftSettings } from './gift-settings';
 import { QuestionCard } from './question-card';
+import { ReminderSettings } from './reminder-settings';
 import { SendPanel } from './send-panel';
 import { fromApi, newQuestion, toPayload, validateDraft, type SurveyDraft } from './types';
 import { WhatsAppPreview } from './whatsapp-preview';
@@ -28,6 +31,11 @@ export function SurveyBuilder({ id }: { id: string }) {
   const t = useT();
   const router = useRouter();
   const { account, mutate: refreshAccount } = useAccount();
+  const { country } = useOwnerCountry();
+  // The owner's calendar: deadlines are "end of this local day", so every date <-> instant conversion uses their UTC offset.
+  const offsetMin = COUNTRY_CONFIG[country]!.utcOffsetMinutes;
+  const zone = `UTC${offsetMin >= 0 ? '+' : '−'}${Math.abs(offsetMin) / 60}`;
+  const today = localDateString(new Date(), offsetMin);
   const { data: survey, mutate } = useSWR<any>(`/surveys/${id}`, { revalidateOnFocus: false });
   const [draft, setDraft] = useState<SurveyDraft | null>(null);
   const [saved, setSaved] = useState('');
@@ -38,17 +46,18 @@ export function SurveyBuilder({ id }: { id: string }) {
   const loaded = useRef(false);
 
   useEffect(() => {
-    if (survey && !loaded.current) {
-      const d = fromApi(survey);
+    // Wait for the account: the deadline date is read in the owner's time zone, which is only known once it has loaded.
+    if (survey && account && !loaded.current) {
+      const d = fromApi(survey, offsetMin);
       setDraft(d);
-      setSaved(JSON.stringify(toPayload(d)));
+      setSaved(JSON.stringify(toPayload(d, offsetMin)));
       loaded.current = true;
     }
-  }, [survey]);
+  }, [survey, account]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
-  const errors = useMemo(() => (draft ? validateDraft(draft, t) : null), [draft, t]);
-  const dirty = !!draft && JSON.stringify(toPayload(draft)) !== saved;
+  const errors = useMemo(() => (draft ? validateDraft(draft, t, today) : null), [draft, t, today]);
+  const dirty = !!draft && JSON.stringify(toPayload(draft, offsetMin)) !== saved;
   const locked = !!survey && survey.status !== 'draft';
 
   useEffect(() => {
@@ -65,8 +74,8 @@ export function SurveyBuilder({ id }: { id: string }) {
     if (errors.count > 0) { setShowErrors(true); toast.error(t('b.err.fix', { n: errors.count })); return false; }
     setBusy('save');
     try {
-      const res = await api(`/surveys/${id}`, { method: 'PUT', body: toPayload(draft) });
-      setSaved(JSON.stringify(toPayload(fromApi(res))));
+      const res = await api(`/surveys/${id}`, { method: 'PUT', body: toPayload(draft, offsetMin) });
+      setSaved(JSON.stringify(toPayload(fromApi(res, offsetMin), offsetMin)));
       await mutate(res, { revalidate: false });
       toast.success(t('common.saved'));
       return true;
@@ -76,7 +85,7 @@ export function SurveyBuilder({ id }: { id: string }) {
     } finally {
       setBusy(null);
     }
-  }, [draft, errors, id, mutate, t]);
+  }, [draft, errors, id, mutate, offsetMin, t]);
 
   async function publish() {
     if (!(await save())) return;
@@ -200,6 +209,8 @@ export function SurveyBuilder({ id }: { id: string }) {
               <p className="mt-2 text-xs text-muted-foreground">{t('b.languageHint')}</p>
             </CardContent>
           </Card>
+
+          <ReminderSettings draft={draft} onChange={setDraft} errors={showErrors ? errors : { ...errors, deadline: undefined }} zone={zone} today={today} />
 
           <GiftSettings draft={draft} onChange={setDraft} errors={giftErrors as never} canAutomate={!!account?.plan.features.giftAutomation} />
 

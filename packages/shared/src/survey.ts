@@ -89,20 +89,32 @@ export const giftConfigSchema = z
       need('giftValue', 'Describe the gift (shown to the participant)');
   });
 
+import { SURVEY_KINDS } from './reminders';
+
 export const surveyInputSchema = z.object({
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().max(500).nullish(),
   language: z.enum(SURVEY_LANGS).default('fr'),
   customThankYou: z.string().trim().max(500).nullish(),
   scheduledAt: z.coerce.date().nullish(),
+  /** 'event' = about something happening now / within days (urgent timing); 'general' = everything else. */
+  kind: z.enum(SURVEY_KINDS).default('general'),
+  /** Last day answers matter. Required for live-event surveys; optional otherwise. */
+  deadlineAt: z.coerce.date().nullish(),
+  /** Automatic, single, polite reminders (rules in reminders.ts). Off unless the owner switches them on. */
+  autoRemindNonResponders: z.boolean().default(false),
+  autoRemindAbandoners: z.boolean().default(false),
   gift: giftConfigSchema.default({}),
   questions: z.array(questionInputSchema).max(WA_LIMITS.maxQuestions).default([]),
+}).superRefine((s, ctx) => {
+  if (s.kind === 'event' && !s.deadlineAt) ctx.addIssue({ code: 'custom', message: 'Add the date of the event: it sets the deadline and the reminder timing', path: ['deadlineAt'] });
 });
 export type SurveyInput = z.infer<typeof surveyInputSchema>;
 
 /** Checks a survey is complete enough to publish; returns human-readable problems. */
-export function publishProblems(s: { questions: Array<{ text: string; type: string; options?: unknown }> }): string[] {
+export function publishProblems(s: { questions: Array<{ text: string; type: string; options?: unknown }>; deadlineAt?: Date | null }): string[] {
   const problems: string[] = [];
+  if (s.deadlineAt && s.deadlineAt.getTime() <= Date.now()) problems.push('The deadline is in the past: choose a later date');
   if (s.questions.length === 0) problems.push('Add at least one question');
   s.questions.forEach((q, i) => {
     const r = questionInputSchema.safeParse({ ...q, required: true });

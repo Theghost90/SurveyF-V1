@@ -109,7 +109,8 @@ Each of these is covered by an automated test (see `apps/api/tests`).
    families, status handling when Meta re-categorises, and a cost warning in the send panel. The Meta page quoted for this
    (`messenger-platform/.../utility-messages`) is for **Messenger**; WhatsApp has its own category rules — confirm against the
    WhatsApp Business Platform docs before building. Check per-message cost against the 14,500 FCFA Starter before launch.
-4. **Prices** — decided (§1: 14,500 / 39,000 / 95,000 FCFA); still open: non-FCFA prices and whether Starter should include PDF/Excel export (spec: yes; the design had `[TO CONFIRM]`).
+   **Automatic reminders and closing notes (§3.3) add more template messages to this question.**
+4. **Prices** — decided (§1: 14,500 / 39,000 / 95,000 FCFA); still open: the non-FCFA prices (placeholders, §3.3) and whether Starter should include PDF/Excel export (spec: yes; the design had `[TO CONFIRM]`).
 5. **Overage invoicing** (500 FCFA / 100 responses; messages pass-through) is displayed but **not billed automatically**.
 6. **Legal pages** (`/privacy`, `/terms`) are *drafts describing what the software does* and are labelled as such. Counsel must
    replace them. The data-protection reference (Cameroon Law No. 2024/017) should be confirmed by counsel.
@@ -165,34 +166,77 @@ SurveyFlow pays participants first and chases the owner for the money, which is 
 
 ### 3.2 Blueprint features found missing or different (reviewed 2026-10-15)
 
-- **Reminder to abandoners "sent after 24h of inactivity" (blueprint §3, message table) — only half built.** At 24 h the
-  participant is marked *abandoned* automatically, but the reminder is **not** sent automatically: the owner must press
-  "Remind abandoners" in analytics (once per participant). The automatic version needs a scheduled job that, when a participant
-  turns abandoned, queues the `survey_reminder` template (the 24 h window has just closed, so a template is the only option),
-  with a per-survey on/off switch and the same once-only rule. Not built yet.
-- **Currency by geolocation — not built.** There is no IP/geolocation lookup. The owner's currency comes from the `country` set at
-  sign-up (default Cameroon → XAF), and the registration form has no country field, so in practice every owner is billed in XAF.
-  The public pricing page shows FCFA only. Per-country currency would need a country selector (or Accept-Language / geo-IP as a
-  *suggestion*), real prices per currency, and PSPs that settle in it.
-- **"Download receipt" — not built, and I mis-described it earlier.** In the blueprint it is a button at the end of the
-  **participant's** thank-you message (proof of the gift), not an owner billing feature. WhatsApp interactive messages cannot
-  trigger a file download; it needs a URL button to a hosted receipt page, which conflicts with the blueprint's own "no external
-  links" principle and needs a public domain. It was dropped for scope, not because it is infeasible. Owner invoices (billing page) exist
-  as a list without PDF download.
+All three items found in that review (automatic abandoner reminder, currency by geolocation, "Download receipt") are now built — see §3.3 for what
+was built, the choices behind it and what is still open.
+
+### 3.3 Reminders, geolocation, receipts, PSP routing, customer segment (built 2026-10-15)
+
+**Automatic reminders** (`packages/shared/src/reminders.ts` = the rules as pure functions; `apps/api/src/services/reminders.ts` = the engine, run every 5 min).
+The owner does not choose *when*: the rules exist so that nobody gets chased the day after an invitation.
+
+| | Non-responders (invited, never tapped Start) | Abandoners (started, silent ≥ 24 h) |
+|---|---|---|
+| Standard | ONE reminder, 3–5 business days after the invitation | ONE reminder, ≥ 2 business days after the survey reached them (never before they were flagged abandoned), window +1 business day |
+| Event (kind = `event`, deadline within 7 days of the invitation) | ONE reminder 24 h after the invitation | ONE reminder as soon as they are flagged |
+| Closing note | Event only: 24 h after the reminder if still no answer — short note, "you still have until {deadline}" | Always: 24 h after the reminder if not finished — thanks, "your progress is saved" (event version mentions the deadline) |
+
+Each switch (per survey, per profile) is **off by default**; switching one on shows the owner the exact promise ("a single automatic reminder in 3 to 5 business days… and
+a single 24-hour reminder if the survey is about an event that will happen soon" / "2 to 3 business days…"). Survey **type** (general / event) and **deadline** (a calendar date
+= end of that day in the owner's time zone; required for events; the survey closes by itself at the deadline) are captured in the builder's "Timing & reminders" card.
+Choices that are mine, not the brief's — change them if wrong:
+- **The closing note is a second message to the same person.** The brief says "a single reminder" *and* asks for a note 24 h later; I built both and disclose it in the
+  switch's explanation. Hard cap: 1 reminder + 1 closing note per person (compare-and-set on `remindedAt` / `followupAt`, so two workers or a restart cannot double-send).
+- Non-responders under the standard rule get **no** closing note (the brief asked for one only in the event rule).
+- Sending is limited to 08:00–19:00 in the owner's country (fixed UTC offsets; none of the supported countries has DST); the standard rule only on weekdays. **Public holidays are not modelled.**
+- A reminder whose window has passed (worker down, quota empty) is **dropped, never sent late**. Each reminder uses one unit of the plan's WhatsApp message quota.
+- The event rule applies only if the invitation went out within 7 days of the deadline; an earlier invitation follows the standard timing (said in the UI).
+- Never sent to opted-out contacts or contacts without consent, to paused/closed surveys, or when the switch was turned off in the meantime (this also stops pending closing notes).
+- **The manual "Remind non-responders / abandoners" buttons in analytics are unchanged and still let an owner remind at any time (once per person)** — that is the aggressive behaviour the brief wants to
+  discourage. Left alone because it was not asked; recommended follow-up: only allow a manual reminder once the person's standard window has opened.
+- Reminder / closing-note WhatsApp templates are new (`survey_nudge`, `survey_deadline_note`, `survey_progress_saved`, `survey_progress_saved_deadline`; en + fr) and must be approved by Meta like the others.
+  They are declared `UTILITY` like the rest — **item 3 above (Meta may bill/re-categorise them as marketing) applies to them too and is still open.**
+
+**Geolocation → currency, price, phone format.** No IP database is bundled (the free ones carry licence terms). The site reads the country header that the platform in front of it already
+sets (`x-vercel-ip-country`, `cf-ipcountry`, `cloudfront-viewer-country`); behind none of them (localhost, a bare VPS) the country is *unknown* and everything falls back to **Cameroon / FCFA**.
+Local testing: `DEV_GEO_COUNTRY=NG` (ignored in production builds). Unsupported countries (anything outside the 18 in `COUNTRY_CONFIG`) are also treated as Cameroon / FCFA.
+- The web server forwards the country to the API as `x-sf-country` only when known. The API **trusts that header**, exactly as it trusts `x-forwarded-for`: keep the API reachable only through the
+  site's proxy (or put a shared-secret check in front) — a client talking to the API directly could pick its own country/currency before its first payment.
+- The owner's country/currency **follow their location until the first successful payment, then lock** (a paying customer's price must not move because they travelled or used a VPN).
+- Profile → "Currency" is read-only and shows the country with its official currency ("Cameroon (XAF)"). There is no country, currency or payment-provider field anywhere in the owner UI.
+- Prices outside FCFA (`PLAN_PRICES` in `packages/shared/src/plans.ts`: NGN, KES, GHS, USD, EUR) are **my placeholders derived from the FCFA prices, not decided prices** — set real ones. PSP support for settling in those currencies is unverified (§4).
+- **Wallet and gifts stay in FCFA** for everyone (ledger, cost panel, gift amounts, top-up presets); only subscription prices follow the visitor's currency. A Nigerian owner therefore pays a plan in NGN but tops up gifts in FCFA. Making the wallet multi-currency is a separate piece of work. Likewise the "overage" line is scaled per currency but overage is still not billed (§3 item 5).
+- Phone examples/prefixes (register form, settings, billing and top-up dialogs, contact forms and CSV sample, error messages) follow the owner's country; the example numbers were validated with libphonenumber.
+
+**PSP routing is automatic.** Owners never see or choose a provider. Per payment: card → card-capable PSPs for the owner's country; mobile money → the PSPs that support the country, then **cheapest first among those available**
+using fees from the `PSP_FEES` env var (JSON, percent per method, e.g. `{"<psp>":{"mobile_money":<percent>,"card":<percent>}}` — the numbers must come from your real contracts). **No fees are assumed:** with `PSP_FEES` unset the order is the configured country order, and a PSP without a configured fee ranks after those with one. Failover on provider errors is unchanged.
+
+**Download receipt (proof of gift).** Airtime / MoMo gifts only (prize draws, discount codes and custom gifts have no delivery to prove). The link exists only after the gift status is `sent`: in the participant's WhatsApp confirmation
+(text link in immediate mode; a "Download receipt" URL button on the `survey_gift_notice` template in batch/out-of-window mode) and in the owner's analytics ("Delivered gifts"). The link is a capability URL
+`/api/receipts/<giftId>.<HMAC>` (no login: participants have no account); a bad/forged/undelivered token returns the same generic 404. The PDF shows survey, gift, amount, masked phone, date and a reference — **not** the owner's fee or wallet.
+It is a delivery receipt, **not a tax invoice**. It needs `PUBLIC_API_URL` to be a public address, and the blueprint's "no external links" principle is relaxed for this one link.
+
+**Customer segment (Businesses / Institutions / Academics).** Asked as the first, required step of onboarding (setup cannot be marked done without it — enforced by the API; any account without a segment, including pre-existing ones, is sent to that
+step before anything else) and editable in Settings. **It currently changes nothing else**: the blueprint does not say which "additional features" each segment gets, and I will not invent them. Candidates if you want to pick:
+Businesses — satisfaction/NPS/delivery templates, gifts, customer tags; Institutions — consent & anonymity wording, beneficiary/member tags, multilingual surveys, quotas by area; Academics — consent text, anonymous mode,
+quotas, SPSS/CSV export with a codebook, question-type extras. Tell me which, and where they should appear (builder, templates, send panel).
 
 ## 4. What is verified and what is not
 
 **Verified in this environment** (real Postgres + Redis + headless Chromium):
-105 automated tests (20 shared + 85 API: state machine, signed + duplicate + concurrent webhooks, abandonment/resume, STOP, analytics, gifts, the gift wallet (guarded debit under parallel completions, refunds, release/retry double-clicks, deletion guards),
-plan limits, payments incl. forged/under-paid/duplicate webhooks, failover, lifecycle, Excel/PDF/Sheets with Google stubbed),
-a 23-step real-browser end-to-end run (register → onboarding → builder → publish → send → simulated participant →
-analytics → PDF/Excel download → mock checkout → FR/EN → mobile widths), a 12-step wallet run (`scripts/e2e-wallet.mjs`: empty wallet →
-warnings → participant finishes unpaid → top-up → release → delivered with a template notice → FR → mobile), both DB migrations applied
+163 automated tests (43 shared + 120 API: state machine, signed + duplicate + concurrent webhooks, abandonment/resume, STOP, analytics, gifts, the gift wallet (guarded debit under parallel completions, refunds, release/retry double-clicks, deletion guards),
+plan limits, payments incl. forged/under-paid/duplicate webhooks, failover and fee ranking, lifecycle, Excel/PDF/Sheets with Google stubbed, **automatic reminders** (every rule to the minute on a simulated clock, once-only under two parallel workers,
+switches, quota, opt-out, deadlines), **geolocation** (country → currency/prices/phone format, lock after first payment, unknown/unsupported → FCFA), **receipts** (only for delivered gifts, forged/tampered tokens, masked phone, no fee, escaped text) and the segment gate),
+a 29-step real-browser end-to-end run (register → required segment step → onboarding → builder incl. the Timing & reminders card → publish → send → simulated participant → analytics → PDF/Excel download → mock checkout → settings
+(Currency read-only, no provider/country picker) → an unreadable API response no longer white-screens the app → geolocated visitors: unknown/US see FCFA, Nigerian sees NGN prices and a +234 form and signs up as "Nigeria (NGN)" → FR/EN → mobile widths), a 12-step wallet run
+(`scripts/e2e-wallet.mjs`: empty wallet → warnings → participant finishes unpaid → top-up → release → delivered with a template notice **and a receipt that opens a real PDF, while a tampered link 404s** → FR → mobile), all three DB migrations applied
 from scratch (no drift; the `CHECK (balance >= 0)` rejects an overdraw), and the production bundles. Several tests were
 mutation-checked (disabling the dedupe, lock, signature check, amount check, the wallet's balance guard, the release/retry
-compare-and-set or the ledger-based refund makes the matching test fail — one wallet test was first found vacuous this way and fixed).
-The browser runs print benign `Failed to fetch RSC payload` / `CLIENT_FETCH_ERROR` console lines from prefetches aborted by rapid
-navigation in the mobile steps (no 5xx anywhere); not verified against the pre-wallet build.
+compare-and-set, the ledger-based refund, the reminder once-only claim, the switch check, the "delivered gifts only" receipt rule, the receipt signature check, the segment gate or the send worker's oldest-first ordering makes the matching test fail — one wallet test and one reminder test were first found vacuous this way and fixed).
+One real bug was found by the full-suite run and fixed: `UPDATE … RETURNING` does not keep the claim query's `ORDER BY`, so a worker that claimed a reminder and its closing note in one batch could send the note first; the worker now processes claimed jobs oldest-first (test forces the adversarial row order).
+A second real bug came out of the browser run and was fixed: a *successful* API response whose body was cut off was parsed as `{}`, cached as the account, and crashed the whole app ("Application error") on `account.user.…`; `api()` now treats an unreadable success as a network failure (regression step in the e2e).
+The browser console check ignores one known artefact: Next's `Failed to fetch RSC payload … Falling back to browser navigation` (and next-auth's matching `CLIENT_FETCH_ERROR`) printed when the test's hard `page.goto()` aborts an in-flight link prefetch
+(reproduced in isolation as `net::ERR_ABORTED`); any other console error or 5xx still fails the run.
+**Geolocation was exercised by sending the CDN header from the test browser**, not behind a real CDN.
 
 **Written from documentation but NOT exercised against the real service** — the build environment has no credentials and
 its network policy blocks these hosts. Treat each as "needs a sandbox pass":
@@ -205,12 +249,14 @@ its network policy blocks these hosts. Treat each as "needs a sandbox pass":
 | **Campay, PayUnit** | **Lowest confidence**: paths/fields written from memory (PayUnit's endpoint paths and Campay's airtime endpoint especially). Do not enable without sandbox verification. |
 | Campay airtime/MoMo gifts | The spec says Campay can send airtime; the endpoint used is unverified. **Higher stakes now: owners' prepaid money is what pays through it.** |
 | Gift fee, wallet legality, treasury float | Not code questions — see §3.1 items 1–3. |
+| Reminder / closing-note templates and the receipt URL button | New templates (`survey_nudge`, `survey_deadline_note`, `survey_progress_saved[_deadline]`, `survey_gift_notice` with a URL button) have never been submitted to Meta; the URL-button payload follows Meta's documented component shape. Meta may re-categorise the reminders as marketing (§3 item 3). |
+| NGN / KES / GHS / USD / EUR settlement | Prices exist for these currencies (placeholders) but nobody checked that each PSP can charge in them. |
 | Google OAuth + Sheets | Implemented on plain REST; exercised only with Google stubbed. |
 | Puppeteer on Docker/Fly/Railway | Works here with the bundled Chromium; the Dockerfile installs `chromium` but has not been built (no Docker daemon). |
 
 ## 5. Not built in V1 (❌)
 
 Team members (1/3/10), API access, white-label (sold on the plan table, shown as **"soon"**) · Builder Bot / Analytics Bot ·
-daily summary e-mail and "50% completed" WhatsApp alert (shown disabled) · WhatsApp Flows · "Download receipt" button ·
+daily summary e-mail and "50% completed" WhatsApp alert (shown disabled) · WhatsApp Flows · per-segment features (§3.3) · multi-currency wallet ·
 automated overage billing · proration on plan changes (an upgrade starts a new period; downgrade = cancel and re-subscribe) ·
 the funnel uses accessible CSS bars rather than a Recharts `FunnelChart` (per-question charts use Recharts).

@@ -21,7 +21,7 @@ export async function sweepAbandoned(now = Date.now()): Promise<number> {
       if (new Date(s.lastInteractionAt).getTime() + timeoutMs() > now) return;
       const r = await prisma.surveyRecipient.updateMany({
         where: { id: s.recipientId, status: 'started' },
-        data: { status: 'abandoned', abandonedAtQuestion: s.currentIndex + 1 },
+        data: { status: 'abandoned', abandonedAtQuestion: s.currentIndex + 1, abandonedAt: new Date(now) },
       });
       abandoned += r.count;
       await dropSessionByKey(key);
@@ -39,7 +39,7 @@ export async function sweepAbandoned(now = Date.now()): Promise<number> {
     const latest = await prisma.response.findFirst({ where: { surveyId: r.surveyId, contactId: r.contactId }, orderBy: { answeredAt: 'desc' }, select: { answeredAt: true } });
     if (latest && latest.answeredAt > cutoff) continue;
     const answered = await prisma.response.count({ where: { surveyId: r.surveyId, contactId: r.contactId } });
-    const upd = await prisma.surveyRecipient.updateMany({ where: { id: r.id, status: 'started' }, data: { status: 'abandoned', abandonedAtQuestion: answered + 1 } });
+    const upd = await prisma.surveyRecipient.updateMany({ where: { id: r.id, status: 'started' }, data: { status: 'abandoned', abandonedAtQuestion: answered + 1, abandonedAt: new Date(now) } });
     abandoned += upd.count;
   }
   return abandoned;

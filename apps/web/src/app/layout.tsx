@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Providers } from '@/components/providers';
+import { getGeo } from '@/lib/geo';
 import { getLocale } from '@/lib/i18n/server';
 
 export const metadata: Metadata = {
@@ -12,10 +13,11 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1, them
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = getLocale();
+  const geo = getGeo();
   return (
     <html lang={locale}>
       <body>
-        <Providers locale={locale}>{children}</Providers>
+        <Providers locale={locale} geo={geo}>{children}</Providers>
       </body>
     </html>
   );

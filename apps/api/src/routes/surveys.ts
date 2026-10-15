@@ -9,6 +9,7 @@ import { enqueueInvitations, enqueueReminders } from '../services/whatsapp/sende
 import { isTemplateApproved } from '../services/whatsapp/accounts';
 import { assertNoGiftsInFlight, releaseUnfundedGifts, retryFailedGifts } from '../services/gifts';
 import { giftReadiness } from '../services/wallet';
+import { receiptUrl } from '../services/receipts';
 import { randomInt } from 'node:crypto';
 
 const GIFT_AUTOMATION = new Set(['airtime', 'momo', 'discount', 'prize_draw']);
@@ -49,7 +50,16 @@ function surveyData(input: SurveyInput) {
     giftAmountFCFA: input.gift.giftType === 'airtime' || input.gift.giftType === 'momo' ? (input.gift.giftAmountFCFA ?? null) : null,
     giftDeliveryMode: input.gift.giftDeliveryMode,
     giftMaxCount: input.gift.giftMaxCount ?? null,
+    kind: input.kind,
+    deadlineAt: input.deadlineAt ?? null,
+    autoRemindNonResponders: input.autoRemindNonResponders,
+    autoRemindAbandoners: input.autoRemindAbandoners,
   };
+}
+
+/** A deadline that is already behind us would close the survey on the next tick: refuse it unless it is the one already stored. */
+function assertDeadlineOk(next: Date | null | undefined, previous?: Date | null) {
+  if (next && next.getTime() <= Date.now() && next.getTime() !== previous?.getTime()) throw badRequest('deadline_past', 'The deadline must be in the future');
 }
 
 function questionRows(surveyId: string, input: SurveyInput) {
@@ -64,6 +74,7 @@ function dto(s: Awaited<ReturnType<typeof owned>>) {
     id: s.id, title: s.title, description: s.description, status: s.status, language: s.language,
     giftType: s.giftType, giftValue: s.giftValue, giftAmountFCFA: s.giftAmountFCFA, giftDeliveryMode: s.giftDeliveryMode, giftMaxCount: s.giftMaxCount,
     customThankYou: s.customThankYou, scheduledAt: s.scheduledAt, whatsappAccountId: s.whatsappAccountId,
+    kind: s.kind, deadlineAt: s.deadlineAt, autoRemindNonResponders: s.autoRemindNonResponders, autoRemindAbandoners: s.autoRemindAbandoners,
     createdAt: s.createdAt, publishedAt: s.publishedAt, closedAt: s.closedAt,
     questions: s.questions.map((q) => ({ id: q.id, order: q.order, text: q.text, type: q.type, options: q.options, required: q.required })),
   };
@@ -85,7 +96,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
     }
     return {
       items: surveys.map((s) => ({
-        id: s.id, title: s.title, status: s.status, language: s.language, giftType: s.giftType,
+        id: s.id, title: s.title, status: s.status, language: s.language, giftType: s.giftType, kind: s.kind, deadlineAt: s.deadlineAt,
         createdAt: s.createdAt, publishedAt: s.publishedAt, questionCount: s._count.questions,
         ...(stats.get(s.id) ?? { sent: 0, started: 0, completed: 0 }),
       })),
@@ -94,6 +105,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
 
   app.post('/api/surveys', auth, async (req, reply) => {
     const input = surveyInputSchema.parse(req.body);
+    assertDeadlineOk(input.deadlineAt);
     await assertGiftAllowed(req.userId, input.gift.giftType);
     const account = await prisma.whatsAppAccount.findFirst({ where: { userId: req.userId, status: 'active' }, orderBy: { createdAt: 'asc' } });
     const survey = await prisma.$transaction(async (tx) => {
@@ -111,6 +123,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const existing = await owned(req.userId, id);
     const input = surveyInputSchema.parse(req.body);
+    assertDeadlineOk(input.deadlineAt, existing.deadlineAt);
     await assertGiftAllowed(req.userId, input.gift.giftType);
 
     // Once a survey has been published, its questions are frozen. Editing them would silently
@@ -151,7 +164,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
         data: {
           userId: req.userId, title: `${s.title} (copy)`, description: s.description, language: s.language, customThankYou: s.customThankYou,
           giftType: s.giftType, giftValue: s.giftValue, giftAmountFCFA: s.giftAmountFCFA, giftDeliveryMode: s.giftDeliveryMode, giftMaxCount: s.giftMaxCount,
-          whatsappAccountId: s.whatsappAccountId,
+          whatsappAccountId: s.whatsappAccountId, kind: s.kind, autoRemindNonResponders: s.autoRemindNonResponders, autoRemindAbandoners: s.autoRemindAbandoners,
         },
       });
       await tx.question.createMany({ data: s.questions.map((q) => ({ surveyId: c.id, order: q.order, text: q.text, type: q.type, options: (q.options ?? undefined) as Prisma.InputJsonValue | undefined, required: q.required })) });
@@ -274,6 +287,8 @@ export default async function surveyRoutes(app: FastifyInstance) {
       items: items.map((g) => ({
         id: g.id, type: g.giftType, value: g.giftValue, status: g.status, sentAt: g.sentAt, error: g.errorMessage, contact: g.contact.name, code: g.code,
         costFCFA: g.amountFCFA ? g.amountFCFA + g.feeFCFA : null, refunded: !!g.refundedAt,
+        // Only for a gift that was really delivered (the endpoint enforces the same rule).
+        receiptUrl: g.status === 'sent' && g.amountFCFA && (PAID_GIFT_TYPES as readonly string[]).includes(g.giftType) ? receiptUrl(g.id) : null,
       })),
     };
   });

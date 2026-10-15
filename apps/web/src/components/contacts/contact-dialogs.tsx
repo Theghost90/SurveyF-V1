@@ -6,10 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Field, Input } from '@/components/ui/input';
+import { phoneExampleFor } from '@surveyflow/shared';
 import { ApiError, api, errorMessage } from '@/lib/api';
+import { useOwnerCountry } from '@/lib/geo-context';
 import { useT } from '@/lib/i18n/client';
 
-const SAMPLE_CSV = 'name,phone,tags\nMarie N.,+237 677 12 34 56,vip\nPaul K.,677 65 43 21,\n';
+/** Two example rows in the owner's own country: one international, one local (the server reads local numbers with the owner's country). */
+const sampleCsv = (country: string) => {
+  const intl = phoneExampleFor(country);
+  const local = intl.replace(/^\+\d+\s*/, '');
+  return `name,phone,tags\nMarie N.,${intl},vip\nPaul K.,${local},\n`;
+};
 
 function ConsentBox({ checked, onChange, id }: { checked: boolean; onChange: (v: boolean) => void; id: string }) {
   const t = useT();
@@ -23,7 +30,8 @@ function ConsentBox({ checked, onChange, id }: { checked: boolean; onChange: (v:
 
 export function AddContactDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; onDone: () => void }) {
   const t = useT();
-  const [form, setForm] = useState({ name: '', phone: '+237 ', tags: '' });
+  const { example } = useOwnerCountry();
+  const [form, setForm] = useState({ name: '', phone: '', tags: '' });
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,7 +43,7 @@ export function AddContactDialog({ open, onOpenChange, onDone }: { open: boolean
     try {
       await api('/contacts', { body: { name: form.name, phone: form.phone, tags: form.tags.split(',').map((x) => x.trim()).filter(Boolean), consent } });
       toast.success(t('c.added'));
-      setForm({ name: '', phone: '+237 ', tags: '' });
+      setForm({ name: '', phone: '', tags: '' });
       setConsent(false);
       onOpenChange(false);
       onDone();
@@ -51,7 +59,7 @@ export function AddContactDialog({ open, onOpenChange, onDone }: { open: boolean
         <DialogHeader><DialogTitle>{t('c.add')}</DialogTitle></DialogHeader>
         <form onSubmit={submit} className="grid gap-4" noValidate>
           <Field label={t('common.name')} htmlFor="c-name"><Input id="c-name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoComplete="off" /></Field>
-          <Field label={t('common.phone')} htmlFor="c-phone" hint={t('register.phoneHint')}><Input id="c-phone" type="tel" required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} autoComplete="off" /></Field>
+          <Field label={t('common.phone')} htmlFor="c-phone" hint={t('c.phoneHint', { example })}><Input id="c-phone" type="tel" required placeholder={example} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} autoComplete="off" /></Field>
           <Field label={t('c.tags')} htmlFor="c-tags" hint={t('c.tagsHint')}><Input id="c-tags" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} autoComplete="off" /></Field>
           <ConsentBox id="c-consent" checked={consent} onChange={setConsent} />
           {error && <p role="alert" className="text-sm font-medium text-destructive">{error}</p>}
@@ -64,6 +72,7 @@ export function AddContactDialog({ open, onOpenChange, onDone }: { open: boolean
 
 export function ImportDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; onDone: () => void }) {
   const t = useT();
+  const { country } = useOwnerCountry();
   const [file, setFile] = useState<File | null>(null);
   const [tags, setTags] = useState('');
   const [consent, setConsent] = useState(false);
@@ -109,7 +118,7 @@ export function ImportDialog({ open, onOpenChange, onDone }: { open: boolean; on
             <Field label="CSV" htmlFor="c-file" hint={t('c.csvHint')}>
               <Input id="c-file" type="file" accept=".csv,text/csv" required onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="h-auto py-2.5" />
             </Field>
-            <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(SAMPLE_CSV)}`} download="surveyflow-contacts-sample.csv" className="flex items-center gap-1.5 text-sm font-semibold text-leaf hover:underline"><Download className="h-4 w-4" aria-hidden />{t('c.sample')}</a>
+            <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(sampleCsv(country))}`} download="surveyflow-contacts-sample.csv" className="flex items-center gap-1.5 text-sm font-semibold text-leaf hover:underline"><Download className="h-4 w-4" aria-hidden />{t('c.sample')}</a>
             <Field label={t('c.defaultTags')} htmlFor="c-dtags" hint={t('c.tagsHint')}><Input id="c-dtags" value={tags} onChange={(e) => setTags(e.target.value)} /></Field>
             <ConsentBox id="c-import-consent" checked={consent} onChange={setConsent} />
             {error && <p role="alert" className="text-sm font-medium text-destructive">{error}</p>}

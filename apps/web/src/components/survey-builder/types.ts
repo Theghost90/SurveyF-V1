@@ -1,4 +1,4 @@
-import { WA_LIMITS, type GiftType, type QuestionType, type SurveyLang } from '@surveyflow/shared';
+import { WA_LIMITS, endOfLocalDay, localDateString, type GiftType, type QuestionType, type SurveyKind, type SurveyLang } from '@surveyflow/shared';
 import type { TFn } from '@/lib/i18n';
 
 export interface OptionDraft { id: string; label: string }
@@ -9,6 +9,12 @@ export interface SurveyDraft {
   description: string;
   language: SurveyLang;
   customThankYou: string;
+  /** 'event' = a live event now or within days: faster reminder rule, and it needs a deadline. */
+  kind: SurveyKind;
+  /** Last day to answer, as a local calendar date (YYYY-MM-DD) in the owner's time zone; '' = none. Stored as the END of that day. */
+  deadline: string;
+  autoRemindNonResponders: boolean;
+  autoRemindAbandoners: boolean;
   gift: GiftDraft;
   questions: QuestionDraft[];
 }
@@ -24,12 +30,16 @@ export const newQuestion = (type: QuestionType = 'button'): QuestionDraft => ({
 export const optionLimit = (type: QuestionType) => (type === 'button' ? WA_LIMITS.maxButtons : type === 'list' || type === 'multi' ? WA_LIMITS.maxListRows : 0);
 export const labelLimit = (type: QuestionType) => (type === 'button' ? WA_LIMITS.buttonTitle : type === 'list' ? WA_LIMITS.rowTitle : WA_LIMITS.multiLabel);
 
-export function fromApi(s: any): SurveyDraft {
+export function fromApi(s: any, offsetMin: number): SurveyDraft {
   return {
     title: s.title ?? '',
     description: s.description ?? '',
     language: s.language === 'en' ? 'en' : 'fr',
     customThankYou: s.customThankYou ?? '',
+    kind: s.kind === 'event' ? 'event' : 'general',
+    deadline: s.deadlineAt ? localDateString(new Date(s.deadlineAt), offsetMin) : '',
+    autoRemindNonResponders: !!s.autoRemindNonResponders,
+    autoRemindAbandoners: !!s.autoRemindAbandoners,
     gift: {
       giftType: s.giftType ?? 'none', giftValue: s.giftValue ?? '', giftAmountFCFA: s.giftAmountFCFA ? String(s.giftAmountFCFA) : '',
       giftDeliveryMode: s.giftDeliveryMode ?? 'immediate', giftMaxCount: s.giftMaxCount ? String(s.giftMaxCount) : '',
@@ -41,13 +51,17 @@ export function fromApi(s: any): SurveyDraft {
   };
 }
 
-export function toPayload(d: SurveyDraft) {
+export function toPayload(d: SurveyDraft, offsetMin: number) {
   const g = d.gift;
   return {
     title: d.title.trim(),
     description: d.description.trim() || null,
     language: d.language,
     customThankYou: d.customThankYou.trim() || null,
+    kind: d.kind,
+    deadlineAt: d.deadline ? (endOfLocalDay(d.deadline, offsetMin)?.toISOString() ?? null) : null,
+    autoRemindNonResponders: d.autoRemindNonResponders,
+    autoRemindAbandoners: d.autoRemindAbandoners,
     gift: {
       giftType: g.giftType,
       giftValue: g.giftValue.trim() || null,
@@ -63,12 +77,14 @@ export function toPayload(d: SurveyDraft) {
 }
 
 export interface QuestionErrors { text?: string; options?: string; labels: Record<number, string> }
-export interface DraftErrors { title?: string; gift: Partial<Record<'giftValue' | 'giftAmountFCFA' | 'giftMaxCount', string>>; questions: Record<string, QuestionErrors>; count: number }
+export interface DraftErrors { title?: string; deadline?: string; gift: Partial<Record<'giftValue' | 'giftAmountFCFA' | 'giftMaxCount', string>>; questions: Record<string, QuestionErrors>; count: number }
 
 /** Client-side validation with localized messages; numbers come from the same WA_LIMITS the server enforces. */
-export function validateDraft(d: SurveyDraft, t: TFn): DraftErrors {
+export function validateDraft(d: SurveyDraft, t: TFn, today: string): DraftErrors {
   const errors: DraftErrors = { gift: {}, questions: {}, count: 0 };
   if (!d.title.trim()) { errors.title = t('b.err.title'); errors.count++; }
+  if (d.kind === 'event' && !d.deadline) { errors.deadline = t('b.err.deadline'); errors.count++; }
+  else if (d.deadline && d.deadline < today) { errors.deadline = t('b.err.deadlinePast'); errors.count++; }
   for (const q of d.questions) {
     const e: QuestionErrors = { labels: {} };
     if (!q.text.trim()) e.text = t('b.err.text');

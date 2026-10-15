@@ -59,7 +59,7 @@ const en = {
     giftMomo: (v: string) => `🎁 Your gift: ${v}. It will be sent to your Mobile Money wallet.`,
     giftDiscount: (code: string, v: string) => `🎁 Your code: *${code}*${v ? ` — ${v}` : ''}`,
     giftDraw: (v: string) => `🎟️ You're entered in the prize draw${v ? ` (${v})` : ''}. Good luck!`,
-    giftSent: (v: string) => `✅ Your gift (${v}) has been sent. Thank you for taking part!`,
+    giftSent: (v: string, receiptUrl?: string) => `✅ Your gift (${v}) has been sent. Thank you for taking part!${receiptUrl ? `\n\nDownload your receipt: ${receiptUrl}` : ''}`,
 } ;
 
 const fr: typeof en = {
@@ -82,7 +82,9 @@ const fr: typeof en = {
     giftMomo: (v: string) => `🎁 Votre cadeau : ${v}. Il sera envoyé sur votre compte Mobile Money.`,
     giftDiscount: (code: string, v: string) => `🎁 Votre code : *${code}*${v ? ` — ${v}` : ''}`,
     giftDraw: (v: string) => `🎟️ Vous participez au tirage au sort${v ? ` (${v})` : ''}. Bonne chance !`,
-    giftSent: (v: string) => `✅ Votre cadeau (${v}) a été envoyé. Merci de votre participation !`,
+    giftSent: (v: string, receiptUrl?: string) => `✅ Votre cadeau (${v}) a été envoyé. Merci de votre participation !${receiptUrl ? `
+
+Téléchargez votre reçu : ${receiptUrl}` : ''}`,
 };
 
 const STR: Record<SurveyLang, typeof en> = { en, fr };
@@ -175,13 +177,21 @@ export interface TemplateDef {
   body: string;
   /** Example values Meta requires for each {{n}} variable at submission time. */
   examples: string[];
+  /** Quick-reply buttons (their payloads are supplied at send time). */
   buttons: string[];
+  /** URL buttons whose link ends with a per-message suffix (e.g. the receipt token). The base URL is deployment config. */
+  urlButtons?: string[];
 }
 
 export const TEMPLATE_NAMES = {
   invitation: 'survey_invitation',
   reminder: 'survey_reminder',
   giftNotice: 'survey_gift_notice',
+  // automatic reminders (see reminders.ts)
+  nudge: 'survey_nudge',
+  deadlineNote: 'survey_deadline_note',
+  progressSaved: 'survey_progress_saved',
+  progressSavedDeadline: 'survey_progress_saved_deadline',
 } as const;
 
 export const TEMPLATE_DEFS: TemplateDef[] = [
@@ -197,23 +207,64 @@ export const TEMPLATE_DEFS: TemplateDef[] = [
   },
   {
     name: TEMPLATE_NAMES.reminder, language: 'en', category: 'UTILITY',
-    body: 'Hi {{1}}, you started a survey from {{2}} but did not finish. Would you like to continue?',
+    body: 'Hi {{1}}, thank you for starting {{2}}\'s survey! Whenever you\'re ready, you can pick up right where you left off.',
     examples: ['Aïcha', 'Boulangerie Akwa'], buttons: ['Continue survey'],
   },
   {
     name: TEMPLATE_NAMES.reminder, language: 'fr', category: 'UTILITY',
-    body: 'Bonjour {{1}}, vous avez commencé un sondage de {{2}} sans le terminer. Voulez-vous continuer ?',
+    body: 'Bonjour {{1}}, merci d\'avoir commencé le sondage de {{2}} ! Quand vous le souhaitez, vous pouvez reprendre là où vous vous étiez arrêté(e).',
     examples: ['Aïcha', 'Boulangerie Akwa'], buttons: ['Continuer'],
   },
   {
     name: TEMPLATE_NAMES.giftNotice, language: 'en', category: 'UTILITY',
     body: 'Thank you {{1}}! Your gift for completing the survey ({{2}}) has been sent to this number.',
-    examples: ['Aïcha', '500 FCFA airtime'], buttons: [],
+    examples: ['Aïcha', '500 FCFA airtime'], buttons: [], urlButtons: ['Download receipt'],
   },
   {
     name: TEMPLATE_NAMES.giftNotice, language: 'fr', category: 'UTILITY',
     body: 'Merci {{1}} ! Votre cadeau pour avoir répondu au sondage ({{2}}) a été envoyé sur ce numéro.',
-    examples: ['Aïcha', '500 FCFA de crédit'], buttons: [],
+    examples: ['Aïcha', '500 FCFA de crédit'], buttons: [], urlButtons: ['Télécharger le reçu'],
+  },
+  // ---- automatic reminders: warm, short, one ask ------------------------------------------------------
+  {
+    name: TEMPLATE_NAMES.nudge, language: 'en', category: 'UTILITY',
+    body: 'Hi {{1}}, a friendly reminder: {{2}} would really value your opinion in a short survey. It takes about {{3}} minutes, whenever it suits you. Thank you!',
+    examples: ['Aïcha', 'Boulangerie Akwa', '2'], buttons: ['Start survey', 'Not now'],
+  },
+  {
+    name: TEMPLATE_NAMES.nudge, language: 'fr', category: 'UTILITY',
+    body: 'Bonjour {{1}}, un petit rappel amical : {{2}} aimerait vraiment avoir votre avis dans un court sondage. Cela prend environ {{3}} minutes, quand cela vous convient. Merci !',
+    examples: ['Aïcha', 'Boulangerie Akwa', '2'], buttons: ['Commencer', 'Pas maintenant'],
+  },
+  {
+    name: TEMPLATE_NAMES.deadlineNote, language: 'en', category: 'UTILITY',
+    body: 'Hi {{1}}, you still have until {{3}} to share your thoughts with {{2}}, and your input is truly valued. We would love for you to start and complete the survey.',
+    examples: ['Aïcha', 'Boulangerie Akwa', 'Friday 24 October'], buttons: ['Start survey'],
+  },
+  {
+    name: TEMPLATE_NAMES.deadlineNote, language: 'fr', category: 'UTILITY',
+    body: 'Bonjour {{1}}, vous avez encore jusqu’au {{3}} pour partager votre avis avec {{2}}, et votre contribution est vraiment précieuse. Nous serions ravis que vous commenciez et terminiez le sondage.',
+    examples: ['Aïcha', 'Boulangerie Akwa', 'vendredi 24 octobre'], buttons: ['Commencer'],
+  },
+  {
+    name: TEMPLATE_NAMES.progressSaved, language: 'en', category: 'UTILITY',
+    body: 'Thank you for starting the survey, {{1}}! Your answers so far are saved, so you can continue whenever you like.',
+    examples: ['Aïcha'], buttons: ['Continue survey'],
+  },
+  {
+    name: TEMPLATE_NAMES.progressSaved, language: 'fr', category: 'UTILITY',
+    body: 'Merci d’avoir commencé le sondage, {{1}} ! Vos réponses sont enregistrées : vous pouvez continuer quand vous le souhaitez.',
+    examples: ['Aïcha'], buttons: ['Continuer'],
+  },
+  {
+    name: TEMPLATE_NAMES.progressSavedDeadline, language: 'en', category: 'UTILITY',
+    body: 'Thank you for starting the survey, {{1}}! Your answers so far are saved, and you can finish until {{2}} whenever it suits you.',
+    examples: ['Aïcha', 'Friday 24 October'], buttons: ['Continue survey'],
+  },
+  {
+    name: TEMPLATE_NAMES.progressSavedDeadline, language: 'fr', category: 'UTILITY',
+    body: 'Merci d’avoir commencé le sondage, {{1}} ! Vos réponses sont enregistrées et vous pouvez terminer jusqu’au {{2}}, quand cela vous convient.',
+    examples: ['Aïcha', 'vendredi 24 octobre'], buttons: ['Continuer'],
   },
 ];
 

@@ -14,15 +14,17 @@ import { WhatsAppConnect } from '@/components/settings/whatsapp-connect';
 import { useAccount } from '@/lib/account';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { useT } from '@/lib/i18n/client';
-import { COUNTRY_CONFIG } from '@surveyflow/shared';
+import { CUSTOMER_SEGMENTS, countryWithCurrency, formatPhone, phoneExampleFor, supportedCountry } from '@surveyflow/shared';
+import { useLocale } from '@/lib/i18n/client';
 
 function Profile() {
   const t = useT();
+  const locale = useLocale();
   const { account, mutate } = useAccount();
-  const [form, setForm] = useState({ name: '', businessName: '', phone: '', country: 'CM', preferredPSP: 'auto' });
+  const [form, setForm] = useState({ name: '', businessName: '', phone: '', segment: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  useEffect(() => { if (account) setForm({ name: account.user.name, businessName: account.user.businessName, phone: account.user.phone, country: account.user.country, preferredPSP: (account.user as any).preferredPSP ?? 'auto' }); }, [account?.user.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (account) setForm({ name: account.user.name, businessName: account.user.businessName, phone: formatPhone(account.user.phone), segment: account.user.segment ?? '' }); }, [account?.user.id]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!account) return <Skeleton className="h-64" />;
 
   async function save(e: React.FormEvent) {
@@ -30,7 +32,7 @@ function Profile() {
     setBusy(true);
     setErrors({});
     try {
-      await api('/auth/me', { method: 'PATCH', body: { ...form, preferredPSP: form.preferredPSP === 'auto' ? null : form.preferredPSP } });
+      await api('/auth/me', { method: 'PATCH', body: { name: form.name, businessName: form.businessName, phone: form.phone, ...(form.segment ? { segment: form.segment } : {}) } });
       await mutate();
       toast.success(t('common.saved'));
     } catch (err) {
@@ -45,17 +47,17 @@ function Profile() {
         <form onSubmit={save} className="grid max-w-2xl gap-4 sm:grid-cols-2">
           <Field label={t('register.business')} htmlFor="p-biz"><Input id="p-biz" value={form.businessName} onChange={(e) => setForm({ ...form, businessName: e.target.value })} required /></Field>
           <Field label={t('register.name')} htmlFor="p-name"><Input id="p-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></Field>
-          <Field label={t('register.phone')} htmlFor="p-phone" error={errors.phone}><Input id="p-phone" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required aria-invalid={!!errors.phone} /></Field>
-          <Field label={t('s.country')} htmlFor="p-country">
-            <Select value={form.country} onValueChange={(v) => setForm({ ...form, country: v })}>
-              <SelectTrigger id="p-country"><SelectValue /></SelectTrigger>
-              <SelectContent>{Object.entries(COUNTRY_CONFIG).map(([code, c]) => <SelectItem key={code} value={code}>{c.name} ({c.currency})</SelectItem>)}</SelectContent>
-            </Select>
+          <Field label={t('register.phone')} htmlFor="p-phone" hint={t('register.phoneHint', { example: phoneExampleFor(account.user.country) })} error={errors.phone}>
+            <Input id="p-phone" type="tel" value={form.phone} placeholder={phoneExampleFor(account.user.country)} onChange={(e) => setForm({ ...form, phone: e.target.value })} required aria-invalid={!!errors.phone} />
           </Field>
-          <Field label={t('s.psp')} htmlFor="p-psp" hint={t('s.pspHint')} className="sm:col-span-2">
-            <Select value={form.preferredPSP} onValueChange={(v) => setForm({ ...form, preferredPSP: v })}>
-              <SelectTrigger id="p-psp"><SelectValue /></SelectTrigger>
-              <SelectContent>{['auto', 'campay', 'notchpay', 'payunit', 'cinetpay', 'flutterwave'].map((p) => <SelectItem key={p} value={p}>{p === 'auto' ? t('s.pspAuto') : p}</SelectItem>)}</SelectContent>
+          {/* Read-only: the country follows where the owner is, and the currency is that country's official one. Nothing to choose. */}
+          <Field label={t('s.currency')} htmlFor="p-currency" hint={t('s.currencyHint')}>
+            <Input id="p-currency" value={countryWithCurrency(supportedCountry(account.user.country), locale)} readOnly aria-readonly="true" className="bg-canvas" />
+          </Field>
+          <Field label={t('s.segment')} htmlFor="p-segment" hint={t('s.segmentHint')} className="sm:col-span-2">
+            <Select value={form.segment} onValueChange={(v) => setForm({ ...form, segment: v })}>
+              <SelectTrigger id="p-segment"><SelectValue placeholder={t('s.segmentPick')} /></SelectTrigger>
+              <SelectContent>{CUSTOMER_SEGMENTS.map((k) => <SelectItem key={k} value={k}>{t(`seg.${k}`)}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
           <div className="sm:col-span-2"><Button type="submit" loading={busy}>{t('common.save')}</Button></div>

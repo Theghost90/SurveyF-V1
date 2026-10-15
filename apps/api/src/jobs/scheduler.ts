@@ -2,6 +2,7 @@ import { tryLeader } from '../lib/redis';
 import { processDueGifts } from '../services/gifts';
 import { sweepAbandoned } from '../services/survey/abandon';
 import { runBillingLifecycle } from '../services/subscription/lifecycle';
+import { runAutoReminders } from '../services/reminders';
 import { notifyEmptyWallets } from '../services/wallet';
 import { runSendWorkerOnce } from '../services/whatsapp/sender';
 
@@ -32,6 +33,7 @@ export function startJobs(log: Log): () => void {
   every('send-queue', 2_000, () => runSendWorkerOnce(40));
   every('gifts', 5_000, () => processDueGifts(20));
   every('abandon-sweeper', 60_000, async () => ({ abandoned: await sweepAbandoned() }));
+  every('auto-reminders', 5 * 60_000, () => runAutoReminders(), { leader: true, initialDelay: 20_000 });
   every('wallet-alerts', 10 * 60_000, () => notifyEmptyWallets(), { leader: true, initialDelay: 30_000 });
   every('billing-lifecycle', 15 * 60_000, () => runBillingLifecycle(), { leader: true, initialDelay: 10_000 });
   return () => timers.forEach((t) => { clearTimeout(t); clearInterval(t); });

@@ -41,7 +41,7 @@ async function main() {
   const user = await prisma.user.create({
     data: {
       email, passwordHash: await bcrypt.hash('demo-password-123', 12), name: 'Jean-Paul Nkou', businessName: 'Boulangerie Akwa',
-      phone: '+237677000000', plan: 'growth', country: 'CM', locale: 'en', preferredCurrency: 'XAF', onboardingDoneAt: now,
+      phone: '+237677000000', plan: 'growth', country: 'CM', locale: 'en', preferredCurrency: 'XAF', segment: 'business', onboardingDoneAt: now,
       subscription: { create: { plan: 'growth', status: 'active', currentPeriodStart: hoursAgo(24 * 10), currentPeriodEnd: new Date(now.getTime() + 20 * 86_400_000), amountFCFA: 39_000, paymentMethod: 'mobile_money', pspProvider: 'mock', interval: 'monthly' } },
     },
   });

@@ -28,7 +28,13 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
   }
   if (res.status === 204) return undefined as T;
   const ct = res.headers.get('content-type') ?? '';
-  const data = ct.includes('json') ? await res.json().catch(() => ({})) : null;
+  let data: any = null;
+  if (ct.includes('json')) {
+    try { data = await res.json(); }
+    // A SUCCESS whose body cannot be read (cut off mid-transfer, dropped connection) is a network failure, never `{}`:
+    // callers and SWR caches would otherwise treat an empty object as a real answer and crash on `account.user.x`.
+    catch { if (res.ok) throw new ApiError(0, 'network', 'network'); data = {}; }
+  }
   if (!res.ok) throw new ApiError(res.status, data?.error ?? 'error', data?.message ?? res.statusText, data?.details, data?.issues);
   return (data ?? undefined) as T;
 }

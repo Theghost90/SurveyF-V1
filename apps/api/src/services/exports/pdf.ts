@@ -140,6 +140,21 @@ window.__done=true;
 </script></body></html>`;
 }
 
+/** Small documents (receipts): same locked-down page as the report — every network request is aborted, no scripts needed. */
+export async function htmlToPdf(html: string): Promise<Buffer> {
+  return withSlot(async () => {
+    const page = await (await getBrowser()).newPage();
+    try {
+      await page.setRequestInterception(true);
+      page.on('request', (r) => (r.url().startsWith('data:') || r.url() === 'about:blank' ? r.continue() : r.abort()));
+      await page.setContent(html, { waitUntil: 'load', timeout: 30_000 });
+      return Buffer.from(await page.pdf({ format: 'A5', printBackground: true, margin: { top: '12mm', bottom: '12mm', left: '12mm', right: '12mm' } }));
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  });
+}
+
 export async function buildPdf(surveyId: string, userId: string): Promise<Buffer> {
   const a = await computeAnalytics(surveyId, userId);
   const { survey, rows } = await getParticipantRows(surveyId, userId, { take: 1000 });

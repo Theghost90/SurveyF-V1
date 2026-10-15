@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { API_URL } from '@/lib/auth';
+import { countryFromHeaders } from '@/lib/geo';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +32,9 @@ async function handler(req: NextRequest, { params }: { params: { path: string[] 
   headers.set('accept', req.headers.get('accept') ?? 'application/json');
   const xff = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip');
   if (xff) headers.set('x-forwarded-for', xff); // so per-IP rate limits see the visitor, not this server
+  // Only when the platform really told us; the API treats a missing header as "unknown" and never overwrites stored data with a guess.
+  const country = countryFromHeaders(req.headers);
+  if (country) headers.set('x-sf-country', country);
   if (token?.apiToken) headers.set('authorization', `Bearer ${token.apiToken}`);
 
   const hasBody = !['GET', 'HEAD'].includes(req.method);

@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field, Input } from '@/components/ui/input';
 import { ApiError, api, errorMessage } from '@/lib/api';
+import { dialPrefix, phoneExampleFor } from '@surveyflow/shared';
+import { useGeo } from '@/lib/geo-context';
 import { useLocale, useT } from '@/lib/i18n/client';
 
 function RegisterForm() {
@@ -14,7 +16,8 @@ function RegisterForm() {
   const locale = useLocale();
   const router = useRouter();
   const params = useSearchParams();
-  const [form, setForm] = useState({ businessName: '', name: '', email: '', phone: '+237 ', password: '' });
+  const { country } = useGeo(); // from the visitor's location; Cameroon when unknown. The account's country is set server-side from the same signal.
+  const [form, setForm] = useState({ businessName: '', name: '', email: '', phone: `${dialPrefix(country)} `, password: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -58,8 +61,8 @@ function RegisterForm() {
         <Field label={t('register.name')} htmlFor="name" error={errors.name}>
           <Input id="name" required autoComplete="name" value={form.name} onChange={set('name')} aria-invalid={!!errors.name} />
         </Field>
-        <Field label={t('register.phone')} htmlFor="phone" hint={t('register.phoneHint')} error={errors.phone}>
-          <Input id="phone" type="tel" required autoComplete="tel" inputMode="tel" value={form.phone} onChange={set('phone')} aria-invalid={!!errors.phone} />
+        <Field label={t('register.phone')} htmlFor="phone" hint={t('register.phoneHint', { example: phoneExampleFor(country) })} error={errors.phone}>
+          <Input id="phone" type="tel" placeholder={phoneExampleFor(country)} required autoComplete="tel" inputMode="tel" value={form.phone} onChange={set('phone')} aria-invalid={!!errors.phone} />
         </Field>
         <Field label={t('register.email')} htmlFor="email" error={errors.email} className="sm:col-span-2">
           <Input id="email" type="email" required autoComplete="email" value={form.email} onChange={set('email')} aria-invalid={!!errors.email} />

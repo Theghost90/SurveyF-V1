@@ -5,6 +5,17 @@ const bool = z
   .optional()
   .transform((v) => v === 'true' || v === '1');
 
+function parsePspFees(raw: string | undefined): import('@surveyflow/shared').PspFees {
+  if (!raw) return {};
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return v && typeof v === 'object' ? (v as import('@surveyflow/shared').PspFees) : {};
+  } catch {
+    console.error('PSP_FEES is not valid JSON; ignoring it');
+    return {};
+  }
+}
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(4223),
@@ -54,6 +65,9 @@ const schema = z.object({
 
   // --- gifts ---
   GIFT_PROVIDER: z.enum(['mock', 'campay']).optional(),
+  // JSON of provider fees in percent, e.g. {"campay":{"mobile_money":2.5},"flutterwave":{"card":3.8}}. The router uses it to pick
+  // the cheapest available provider silently. No numbers are assumed: unset = the configured country order.
+  PSP_FEES: z.string().optional(),
   // Pass-through fee on each gift (payout + collection costs), charged to the owner's wallet. PLACEHOLDER until the real
   // provider tariffs are known — see docs/DECISIONS.md. 0 would make SurveyFlow absorb fees on every gift.
   GIFT_FEE_PERCENT: z.coerce.number().min(0).max(30).default(5),
@@ -83,6 +97,7 @@ export type Env = z.infer<typeof schema> & {
   jwtSecret: string;
   waMode: 'mock' | 'live';
   giftProvider: 'mock' | 'campay';
+  pspFees: import('@surveyflow/shared').PspFees;
   webOrigins: string[];
 };
 
@@ -118,6 +133,7 @@ function load(): Env {
     jwtSecret,
     waMode,
     giftProvider,
+    pspFees: parsePspFees(e.PSP_FEES),
     webOrigins: e.WEB_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean),
   };
 }

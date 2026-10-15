@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { TEMPLATE_NAMES, estimateMinutes, toWaId, type OutboundMessage } from '@surveyflow/shared';
+import { COUNTRY_CONFIG, TEMPLATE_NAMES, estimateMinutes, formatDeadline, supportedCountry, toWaId, type OutboundMessage } from '@surveyflow/shared';
 import { templatePayload } from '@surveyflow/shared';
 import { redis } from '../../lib/redis';
 import { prisma } from '../../lib/prisma';
@@ -20,6 +20,10 @@ const BACKOFF_MS = [30_000, 120_000, 600_000, 3_600_000, 6 * 3_600_000];
 /** Messages per second per WhatsApp number (Cloud API default throughput is 80/s; stay well below). */
 const PER_SECOND_PER_NUMBER = 15;
 const LEASE_MS = 5 * 60_000;
+/** Messages that go to a participant about a survey and therefore only make sense while it is running. */
+const SURVEY_KINDS = new Set(['invitation', 'reminder', 'nudge', 'deadline_note', 'progress_saved', 'progress_saved_deadline']);
+/** Closing notes: sent once, after an automatic reminder. */
+const FOLLOWUP_KINDS = new Set(['deadline_note', 'progress_saved', 'progress_saved_deadline']);
 
 // ---- enqueue --------------------------------------------------------------------------
 
@@ -68,8 +72,8 @@ export async function enqueueSessionMessage(userId: string, phoneNumberId: strin
   await prisma.sendJob.create({ data: { userId, kind: 'session_message', payload: { phoneNumberId, to, messages } as unknown as Prisma.InputJsonValue } });
 }
 
-export async function enqueueGiftNotice(userId: string, recipientId: string, giftValue: string) {
-  await prisma.sendJob.create({ data: { userId, recipientId, kind: 'gift_notice', payload: { giftValue } } });
+export async function enqueueGiftNotice(userId: string, recipientId: string, giftValue: string, receiptToken?: string) {
+  await prisma.sendJob.create({ data: { userId, recipientId, kind: 'gift_notice', payload: { giftValue, ...(receiptToken ? { receiptToken } : {}) } } });
 }
 
 // ---- inline delivery for live conversations ----------------------------------------------
@@ -96,7 +100,7 @@ export async function sendInConversation(
 
 // ---- worker --------------------------------------------------------------------------------
 
-interface ClaimedJob { id: string }
+interface ClaimedJob { id: string; scheduledFor: Date }
 
 async function claimJobs(limit: number): Promise<ClaimedJob[]> {
   return prisma.$queryRaw<ClaimedJob[]>`
@@ -109,7 +113,7 @@ async function claimJobs(limit: number): Promise<ClaimedJob[]> {
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED
     )
-    RETURNING "id"`;
+    RETURNING "id", "scheduledFor"`;
 }
 
 async function underRateLimit(phoneNumberId: string): Promise<boolean> {
@@ -121,6 +125,9 @@ async function underRateLimit(phoneNumberId: string): Promise<boolean> {
 
 export async function runSendWorkerOnce(batch = 40): Promise<number> {
   const claimed = await claimJobs(batch);
+  // RETURNING does not keep the subquery's ORDER BY. Process oldest-first so an invitation / reminder always goes out
+  // before the closing note queued after it, even when a stalled worker claims both in one batch.
+  claimed.sort((a, b) => a.scheduledFor.getTime() - b.scheduledFor.getTime());
   for (const { id } of claimed) await processJob(id);
   return claimed.length;
 }
@@ -179,7 +186,7 @@ async function processJob(id: string) {
       await prisma.surveyRecipient.updateMany({ where: { id: r.id, status: 'queued' }, data: { status: 'failed', lastError: 'opted_out' } });
       return finish(id, { status: 'failed', lastError: 'opted_out' });
     }
-    if ((job.kind === 'invitation' || job.kind === 'reminder') && survey.status !== 'active') {
+    if (SURVEY_KINDS.has(job.kind) && survey.status !== 'active') {
       // Paused: try again later. Closed/draft: drop the invitation.
       if (survey.status === 'paused') return finish(id, { status: 'queued', scheduledFor: new Date(Date.now() + 10 * 60_000) });
       await prisma.surveyRecipient.updateMany({ where: { id: r.id, status: 'queued' }, data: { status: 'failed', lastError: 'survey_not_active' } });
@@ -201,25 +208,45 @@ async function processJob(id: string) {
       };
     } else if (job.kind === 'reminder') {
       template = { name: TEMPLATE_NAMES.reminder, language: lang, bodyParams: [firstName, survey.user.businessName], buttonPayloads: [templatePayload('CONTINUE', survey.id)] };
+    } else if (job.kind === 'nudge') {
+      template = {
+        name: TEMPLATE_NAMES.nudge, language: lang,
+        bodyParams: [firstName, survey.user.businessName, String(estimateMinutes(survey.questions.length))],
+        buttonPayloads: [templatePayload('START', survey.id), templatePayload('DECLINE', survey.id)],
+      };
+    } else if (FOLLOWUP_KINDS.has(job.kind)) {
+      const offset = COUNTRY_CONFIG[supportedCountry(survey.user.country)]!.utcOffsetMinutes;
+      const needsDate = job.kind !== 'progress_saved';
+      if (needsDate && !survey.deadlineAt) return finish(id, { status: 'failed', lastError: 'no_deadline' });
+      const date = survey.deadlineAt ? formatDeadline(survey.deadlineAt, offset, lang) : '';
+      template = job.kind === 'deadline_note'
+        ? { name: TEMPLATE_NAMES.deadlineNote, language: lang, bodyParams: [firstName, survey.user.businessName, date], buttonPayloads: [templatePayload('START', survey.id)] }
+        : job.kind === 'progress_saved_deadline'
+          ? { name: TEMPLATE_NAMES.progressSavedDeadline, language: lang, bodyParams: [firstName, date], buttonPayloads: [templatePayload('CONTINUE', survey.id)] }
+          : { name: TEMPLATE_NAMES.progressSaved, language: lang, bodyParams: [firstName], buttonPayloads: [templatePayload('CONTINUE', survey.id)] };
     } else if (job.kind === 'gift_notice') {
-      const gv = (job.payload as { giftValue?: string } | null)?.giftValue ?? survey.giftValue ?? '';
-      template = { name: TEMPLATE_NAMES.giftNotice, language: lang, bodyParams: [firstName, gv], buttonPayloads: [] };
+      const p = (job.payload as { giftValue?: string; receiptToken?: string } | null) ?? {};
+      const gv = p.giftValue ?? survey.giftValue ?? '';
+      // The receipt link exists only for a gift that was actually delivered (the token is minted at delivery).
+      template = { name: TEMPLATE_NAMES.giftNotice, language: lang, bodyParams: [firstName, gv], buttonPayloads: [], urlParams: p.receiptToken ? [p.receiptToken] : [] };
     } else {
       return finish(id, { status: 'failed', lastError: `unknown_kind:${job.kind}` });
     }
 
     const { messageId } = await gw.sendTemplate(credsFor(acct), toWaId(contact.phone), template);
-    const kind = job.kind === 'gift_notice' ? 'gift' : job.kind;
+    const kind = job.kind === 'gift_notice' ? 'gift' : job.kind === 'invitation' ? 'invitation' : 'reminder'; // quota: every non-invitation survey message counts as a reminder
     const firstInvitation = job.kind === 'invitation' && (r.status === 'queued' || r.status === 'failed');
     const reInvitation = job.kind === 'invitation' && !firstInvitation;
     await prisma.$transaction([
       prisma.messageLog.create({ data: { userId: survey.userId, kind, waMessageId: messageId } }),
       ...(firstInvitation
         ? [prisma.surveyRecipient.update({ where: { id: r.id }, data: { status: 'sent', sentAt: new Date(), waMessageId: messageId, lastError: null } })]
-        : reInvitation || job.kind === 'reminder'
-          ? // A second nudge: remember it (one per recipient) but never touch the funnel status.
-            [prisma.surveyRecipient.update({ where: { id: r.id }, data: { remindedAt: new Date(), waMessageId: messageId } })]
-          : []),
+        : FOLLOWUP_KINDS.has(job.kind) || job.kind === 'nudge'
+          ? [] // automatic messages were already recorded (remindedAt / followupAt) when they were claimed and queued
+          : reInvitation || job.kind === 'reminder'
+            ? // A second nudge: remember it (one per recipient) but never touch the funnel status. An automatic reminder keeps its claim time.
+              [prisma.surveyRecipient.update({ where: { id: r.id }, data: { remindedAt: r.remindedAt ?? new Date(), waMessageId: messageId } })]
+            : []),
     ]);
     await finish(id, { status: 'done', lastError: null });
 

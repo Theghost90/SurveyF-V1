@@ -83,12 +83,20 @@ export class CloudApiGateway implements WhatsAppGateway {
     t.buttonPayloads.forEach((payload, index) =>
       components.push({ type: 'button', sub_type: 'quick_reply', index: String(index), parameters: [{ type: 'payload', payload }] }),
     );
+    (t.urlParams ?? []).forEach((suffix, i) =>
+      components.push({ type: 'button', sub_type: 'url', index: String(t.buttonPayloads.length + i), parameters: [{ type: 'text', text: suffix }] }),
+    );
     return this.send(creds, { to, type: 'template', template: { name: t.name, language: { code: t.language }, components } });
   }
 
   async createTemplate(creds: WaCreds, def: TemplateDef) {
     const components: unknown[] = [{ type: 'BODY', text: def.body, example: { body_text: [def.examples] } }];
-    if (def.buttons.length) components.push({ type: 'BUTTONS', buttons: def.buttons.map((text) => ({ type: 'QUICK_REPLY', text })) });
+    const buttons: unknown[] = [
+      ...def.buttons.map((text) => ({ type: 'QUICK_REPLY', text })),
+      // The link base is deployment config; Meta appends the per-message suffix ({{1}}) when we send.
+      ...(def.urlButtons ?? []).map((text) => ({ type: 'URL', text, url: `${env.PUBLIC_API_URL}/api/receipts/{{1}}`, example: [`${env.PUBLIC_API_URL}/api/receipts/example-token`] })),
+    ];
+    if (buttons.length) components.push({ type: 'BUTTONS', buttons });
     const r = await this.call<{ id: string; status: string }>(`${creds.wabaId}/message_templates`, creds.accessToken, {
       body: { name: def.name, language: def.language, category: def.category, components },
     });

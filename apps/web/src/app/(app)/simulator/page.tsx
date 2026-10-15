@@ -16,7 +16,7 @@ import { ApiError, api, errorMessage } from '@/lib/api';
 import { useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 
-interface ChatItem { id: string; at: string; direction: 'in' | 'out'; message?: OutboundMessage; template?: { name: string; language: string; bodyParams: string[]; buttonPayloads: string[] }; text?: string }
+interface ChatItem { id: string; at: string; direction: 'in' | 'out'; message?: OutboundMessage; template?: { name: string; language: string; bodyParams: string[]; buttonPayloads: string[]; urlParams?: string[] }; text?: string }
 interface Snapshot { contact: { id: string; name: string; phone: string; optedOut: boolean }; chat: ChatItem[]; session: { surveyId: string; currentIndex: number } | null; recipients: Array<{ surveyId: string; title: string; status: string }> }
 
 /** Plays the participant's phone against the real webhook code path (mock gateway only). */
@@ -50,7 +50,9 @@ export default function SimulatorPage() {
   const template = (c: ChatItem) => {
     const def = TEMPLATE_DEFS.find((d) => d.name === c.template!.name && d.language === c.template!.language);
     const body = c.template!.bodyParams.reduce((s, v, i) => s.replace(`{{${i + 1}}}`, v), def?.body ?? c.template!.name);
-    return { body, buttons: (def?.buttons ?? []).map((title, i) => ({ title, payload: c.template!.buttonPayloads[i] })) };
+    // URL buttons open the real link (the receipt PDF); through the site's proxy so the simulator works from the browser.
+    const links = (def?.urlButtons ?? []).map((title, i) => ({ title, href: `/proxy/receipts/${c.template!.urlParams?.[i] ?? ''}` }));
+    return { body, buttons: (def?.buttons ?? []).map((title, i) => ({ title, payload: c.template!.buttonPayloads[i] })), links };
   };
   const btn = 'rounded-lg bg-white py-2 text-center text-[13px] font-semibold text-[#0a7cc4] shadow-sm hover:bg-canvas disabled:opacity-60';
 
@@ -72,6 +74,7 @@ export default function SimulatorPage() {
                 ) : c.template ? (
                   <div key={c.id} className="flex flex-col gap-1">
                     <div className="max-w-[88%] self-start rounded-[4px_12px_12px_12px] bg-white px-3 py-2 text-[13px] leading-[1.4] shadow-sm">{template(c).body}</div>
+                    <div className="flex max-w-[88%] flex-col gap-1">{template(c).links.map((l) => <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer" className={cn(btn, 'text-center no-underline')}>{l.title}</a>)}</div>
                     <div className="flex max-w-[88%] gap-1">{template(c).buttons.map((b) => <button key={b.payload} type="button" disabled={busy} onClick={() => send({ type: 'template', payload: b.payload, title: b.title })} className={cn(btn, 'flex-1')}>{b.title}</button>)}</div>
                   </div>
                 ) : c.message ? (

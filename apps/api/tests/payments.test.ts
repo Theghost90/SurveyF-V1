@@ -166,7 +166,28 @@ describe('PSP failover', () => {
     router.getAdapter('mock')!.isConfigured = () => false;
     expect(router.chain({ country: 'CM', currency: 'XAF', method: 'card' }).map((a) => a.name)).toEqual(['flutterwave']);
     expect(router.chain({ country: 'CM', currency: 'XAF', method: 'mobile_money' }).map((a) => a.name)).toEqual(['campay']);
-    expect(router.chain({ country: 'CM', currency: 'XAF', method: 'mobile_money', preferred: 'flutterwave' }).map((a) => a.name)[0]).toBe('campay'); // preferred but unsupported for MoMo → ignored
+  });
+
+  it('silently picks the cheapest provider by configured fee and keeps the others as failover; unknown fees keep the country order', async () => {
+    const router = new PSPRouter([fake('campay', 'ok'), fake('notchpay', 'ok'), fake('payunit', 'ok'), fake('mock', 'ok')]);
+    router.getAdapter('mock')!.isConfigured = () => false;
+    const names = (fees: object) => router.chain({ country: 'CM', currency: 'XAF', method: 'mobile_money' }, fees as never).map((a) => a.name);
+    expect(names({})).toEqual(['campay', 'notchpay', 'payunit']); // no fee data: configured order
+    expect(names({ notchpay: { mobile_money: 1.5 }, campay: { mobile_money: 2.5 } })).toEqual(['notchpay', 'campay', 'payunit']);
+    expect(names({ payunit: { mobile_money: 0.9 } })).toEqual(['payunit', 'campay', 'notchpay']);
+    expect(names({ payunit: { card: 0.1 } })).toEqual(['campay', 'notchpay', 'payunit']); // a card fee says nothing about MoMo
+  });
+
+  it('charges through the cheapest provider and fails over to the next one when it is down', async () => {
+    const router = new PSPRouter([fake('campay', 'ok'), fake('notchpay', 'fail'), fake('mock', 'ok')]);
+    router.getAdapter('mock')!.isConfigured = () => false;
+    const o = await registerOwner(app);
+    const input = { plan: 'starter', interval: 'monthly', method: 'mobile_money', phone: '+237677000001' } as const;
+    const fees = { notchpay: { mobile_money: 1 }, campay: { mobile_money: 2 } };
+    const orig = router.chain.bind(router);
+    router.chain = (p) => orig(p, fees as never); // notchpay is cheapest but down → campay
+    const tx = await initiatePayment(o.userId, input, router);
+    expect(tx.pspProvider).toBe('campay');
   });
 });
 

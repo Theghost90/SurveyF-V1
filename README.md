@@ -44,11 +44,14 @@ For a production-like preview: `npm run build && npm start` (the API reads the r
 
 ## Going live (checklist)
 
-1. Postgres + Redis; `npx prisma migrate deploy` (`apps/api/prisma/migrations`: `init` + `gift_wallet`, applied from scratch and diffed against the schema — no drift).
+1. Postgres + Redis; `npx prisma migrate deploy` (`apps/api/prisma/migrations`: `init` + `gift_wallet` + `reminders_geo_segment`, applied from scratch and diffed against the schema — no drift).
 2. Set **production** env: `NODE_ENV=production`, `JWT_SECRET`, `TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`), `NEXTAUTH_SECRET`,
    `WHATSAPP_MODE=live`, `META_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, PSP keys, `GIFT_PROVIDER=campay`. **The API refuses to start**
    in production with mock modes, a missing app secret, or weak secrets. Set `GIFT_FEE_PERCENT` from the real provider tariffs (default 5 is a
    placeholder) and settle the legal/treasury questions in `docs/DECISIONS.md` §3.1 **before accepting real wallet top-ups**.
+   Also: `PUBLIC_API_URL` must be the API's public address (receipt links are built from it); the site must sit behind a platform that sets a country
+   header (Vercel, Cloudflare, CloudFront) or visitors are treated as Cameroon / FCFA; keep the API reachable only through the site's proxy (it trusts the
+   country the proxy forwards); set `PSP_FEES` from your real PSP contracts (see `docs/DECISIONS.md` §3.3).
 3. Meta: point the app's webhook at `https://<api>/api/webhook/whatsapp`, subscribe to `messages`, configure Embedded Signup.
 4. Each PSP: sandbox pass first (see the table in `docs/DECISIONS.md` §4) — Campay and PayUnit especially.
 5. Replace the draft `/privacy` and `/terms` with counsel-approved text; set `NEXT_PUBLIC_SALES_WHATSAPP` for the agencies CTA.
@@ -73,7 +76,8 @@ docs/DECISIONS.md   spec/design deviations, open questions, verification status
 
 ```bash
 npm test                          # shared + API (needs the local Postgres/Redis; uses the `surveyflow_test` database)
-node scripts/e2e-ui.mjs /tmp/e2e # real-browser end-to-end run against the running app on :4222
+node scripts/e2e-ui.mjs /tmp/e2e # real-browser end-to-end run against the running app on :4222 (reseed first: `npm run db:seed`)
+node scripts/e2e-wallet.mjs /tmp/e2e-wallet # wallet + gift receipt run
 ```
 
 ## API (all under `/api`)
@@ -82,5 +86,5 @@ node scripts/e2e-ui.mjs /tmp/e2e # real-browser end-to-end run against the runni
 `POST surveys/:id/{publish,pause,resume,close,duplicate,send,audience,remind,draw}` · `GET surveys/:id/{analytics,responses,recipients,gifts,sync}` ·
 `POST surveys/:id/gifts/{retry,release}` · `GET wallet` · `POST wallet/topup` ·
 `GET surveys/:id/export/{pdf,excel}` · `POST|DELETE surveys/:id/sync/google-sheets` · `GET contacts` · `POST contacts[/import|/bulk-delete|/bulk-tag]` ·
-`GET|POST webhook/whatsapp` · `POST payments/initiate` · `GET payments[/:id]` · `GET|POST payments/webhook/:psp` ·
+`GET|POST webhook/whatsapp` · `GET receipts/:token` (public PDF, delivered gifts only) · `POST payments/initiate` · `GET payments[/:id]` · `GET|POST payments/webhook/:psp` ·
 `GET subscription` · `PUT subscription/upgrade` · `POST subscription/{cancel,reactivate}` · `GET|POST whatsapp/accounts…` · `GET integrations/google…`
