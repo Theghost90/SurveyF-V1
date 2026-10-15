@@ -165,6 +165,68 @@ describe('abandoners — standard rule (2 to 3 business days, one reminder, then
   });
 });
 
+describe('the manual "Remind" buttons follow the automatic window', () => {
+  const DAY_MS = 86_400_000;
+  const remind = (w: World, target: 'no_reply' | 'abandoned') => w.owner.raw('POST', `/api/surveys/${w.surveyId}/remind`, { target });
+  const analytics = async (w: World) => (await w.owner.get(`/api/surveys/${w.surveyId}/analytics`)).remind;
+
+  it('too early is refused, with the date it opens; once the window opens it works exactly once, with the reminder template', async () => {
+    const w = await world();
+    await setRec(w, 0, { status: 'delivered', sentAt: new Date() });
+    const early = await remind(w, 'no_reply');
+    expect(early.status).toBe(409);
+    expect(early.json.error).toBe('reminder_not_yet');
+    expect(early.json.details.waiting).toBe(1);
+    expect(new Date(early.json.details.availableAt).getTime()).toBeGreaterThan(Date.now() + 2 * DAY_MS); // 3 business days away
+    expect(await jobs()).toHaveLength(0);
+    expect((await analytics(w)).noReply).toMatchObject({ eligibleNow: 0, waiting: 1 });
+
+    await setRec(w, 0, { sentAt: new Date(Date.now() - 10 * DAY_MS) });
+    expect((await analytics(w)).noReply).toMatchObject({ eligibleNow: 1, waiting: 0 });
+    expect((await remind(w, 'no_reply')).json.queued).toBe(1);
+    await flush();
+    expect(await lastTemplate(0)).toMatchObject({ name: 'survey_nudge' }); // the same warm reminder as the automatic one
+    const r = await prisma.surveyRecipient.findUniqueOrThrow({ where: rec(w, 0) });
+    expect(r).toMatchObject({ reminderAuto: false, reminderRule: 'standard', status: 'delivered' });
+    const again = await remind(w, 'no_reply');
+    expect(again.status).toBe(400);
+    expect(again.json.error).toBe('nobody_to_remind'); // once per person, however many clicks
+  });
+
+  it('reaches only the people whose window is open, and says how many are still waiting', async () => {
+    const w = await world(2);
+    await setRec(w, 0, { status: 'delivered', sentAt: new Date(Date.now() - 10 * DAY_MS) });
+    await setRec(w, 1, { status: 'delivered', sentAt: new Date() });
+    const r = await remind(w, 'no_reply');
+    expect(r.json).toMatchObject({ queued: 1, waiting: 1 });
+    expect((await prisma.surveyRecipient.findUniqueOrThrow({ where: rec(w, 1) })).remindedAt).toBeNull();
+  });
+
+  it('a live-event survey opens after 24 h (not 3 business days)', async () => {
+    const w = await world();
+    await setSurvey(w, { kind: 'event', deadlineAt: new Date(Date.now() + 3 * DAY_MS) });
+    await setRec(w, 0, { status: 'delivered', sentAt: new Date(Date.now() - 2 * 3_600_000) });
+    expect((await remind(w, 'no_reply')).status).toBe(409);
+    await setRec(w, 0, { sentAt: new Date(Date.now() - 40 * 3_600_000) });
+    const ok = await remind(w, 'no_reply');
+    expect(ok.json.queued).toBe(1);
+    expect((await prisma.surveyRecipient.findUniqueOrThrow({ where: rec(w, 0) })).reminderRule).toBe('event');
+  });
+
+  it('abandoners: same gate; a manual reminder never triggers the automatic closing note', async () => {
+    const w = await world();
+    await setRec(w, 0, { status: 'abandoned', sentAt: new Date(), abandonedAt: new Date() });
+    expect((await remind(w, 'abandoned')).json.error).toBe('reminder_not_yet');
+    await setRec(w, 0, { sentAt: new Date(Date.now() - 10 * DAY_MS), abandonedAt: new Date(Date.now() - 9 * DAY_MS) });
+    expect((await remind(w, 'abandoned')).json.queued).toBe(1);
+    await flush();
+    expect(await lastTemplate(0)).toMatchObject({ name: 'survey_reminder' });
+    // even with the automatic switch on, a person reminded by hand gets no automatic "progress saved" note
+    await setSurvey(w, { autoRemindAbandoners: true });
+    expect(await runAutoReminders(new Date(Date.now() + 3 * DAY_MS))).toMatchObject({ reminders: 0, followups: 0 });
+  });
+});
+
 describe('guards', () => {
   it('a stalled worker that claims reminder AND closing note in one batch still sends the reminder first', async () => {
     const w = await world();

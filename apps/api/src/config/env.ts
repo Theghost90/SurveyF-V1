@@ -1,19 +1,31 @@
 import { z } from 'zod';
+import { documentedFees, type CamerpayPlan, type PspFee, type PspFees } from '@surveyflow/shared';
 
 const bool = z
   .enum(['true', 'false', '1', '0', ''])
   .optional()
   .transform((v) => v === 'true' || v === '1');
 
-function parsePspFees(raw: string | undefined): import('@surveyflow/shared').PspFees {
-  if (!raw) return {};
+/**
+ * Provider fees used to pick the cheapest PSP: the contract-fee document's numbers (shared/psp-fees.ts) overridden by PSP_FEES
+ * (JSON, per provider and method: a number = percent, or {percent, fixed, fixedCurrency}). Your negotiated rates win.
+ */
+function parsePspFees(raw: string | undefined, camerpayPlan: CamerpayPlan): PspFees {
+  const fees: PspFees = documentedFees(camerpayPlan);
+  if (!raw) return fees;
   try {
-    const v = JSON.parse(raw) as unknown;
-    return v && typeof v === 'object' ? (v as import('@surveyflow/shared').PspFees) : {};
+    const v = JSON.parse(raw) as Record<string, Record<string, number | PspFee>>;
+    for (const [psp, methods] of Object.entries(v ?? {})) {
+      for (const [method, f] of Object.entries(methods ?? {})) {
+        const fee: PspFee | null = typeof f === 'number' ? { percent: f } : f && typeof f.percent === 'number' ? f : null;
+        if (!fee || !(fee.percent >= 0)) { console.error(`PSP_FEES: ignoring ${psp}.${method} (not a percent)`); continue; }
+        (fees as Record<string, Record<string, PspFee>>)[psp] = { ...((fees as Record<string, Record<string, PspFee>>)[psp] ?? {}), [method]: fee };
+      }
+    }
   } catch {
-    console.error('PSP_FEES is not valid JSON; ignoring it');
-    return {};
+    console.error('PSP_FEES is not valid JSON; using the documented fees');
   }
+  return fees;
 }
 
 const schema = z.object({
@@ -31,7 +43,7 @@ const schema = z.object({
   // --- auth / secrets (additions to the spec's variable list) ---
   JWT_SECRET: z.string().optional(),
   TOKEN_ENCRYPTION_KEY: z.string().optional(), // 32 bytes, base64 or hex
-  INTERNAL_API_SECRET: z.string().optional(), // NextAuth → API (Google sign-in)
+  INTERNAL_API_SECRET: z.string().optional(), // shared secret of the website's server: the API refuses every non-public call without it (also Google sign-in)
 
   // --- WhatsApp ---
   WHATSAPP_MODE: z.enum(['mock', 'live']).optional(),
@@ -62,11 +74,21 @@ const schema = z.object({
   PAYUNIT_MODE: z.enum(['test', 'live']).default('test'),
   FLUTTERWAVE_SECRET_KEY: z.string().optional(),
   FLUTTERWAVE_WEBHOOK_HASH: z.string().optional(),
+  CAMERPAY_API_KEY: z.string().optional(), // Bearer token of the merchant account (camerpay.biz dashboard → API)
+  CAMERPAY_WEBHOOK_SECRET: z.string().optional(), // the dashboard's "callback secret": webhooks are HMAC-SHA256 signed with it
+  CAMERPAY_BASE_URL: z.string().default('https://camerpay.biz'),
+  CAMERPAY_PLAN: z.enum(['starter', 'business', 'pro', 'byok']).default('starter'), // which CamerPay plan you pay for: decides its fee in the ranking
+
+  // --- live exchange rates (FCFA → visitor currency) ---
+  // Base XAF, one call returns every currency. ExchangeRate-API's open endpoint: no key, refreshed once a day, attribution required.
+  FX_API_URL: z.string().default('https://open.er-api.com/v6/latest/XAF'),
+  FX_CACHE_MINUTES: z.coerce.number().min(1).max(1440).default(360), // how long a fetched table is reused before asking again
+  FX_MAX_STALE_HOURS: z.coerce.number().min(1).max(24 * 14).default(72), // older than this, a rate is NOT used: prices fall back to FCFA
 
   // --- gifts ---
   GIFT_PROVIDER: z.enum(['mock', 'campay']).optional(),
-  // JSON of provider fees in percent, e.g. {"campay":{"mobile_money":2.5},"flutterwave":{"card":3.8}}. The router uses it to pick
-  // the cheapest available provider silently. No numbers are assumed: unset = the configured country order.
+  // Overrides of the documented provider fees, e.g. {"campay":{"mobile_money":2.5},"notchpay":{"card":{"percent":3.9,"fixed":0.3,"fixedCurrency":"USD"}}}.
+  // The router picks the cheapest available provider silently from documented fees + these overrides.
   PSP_FEES: z.string().optional(),
   // Pass-through fee on each gift (payout + collection costs), charged to the owner's wallet. PLACEHOLDER until the real
   // provider tariffs are known — see docs/DECISIONS.md. 0 would make SurveyFlow absorb fees on every gift.
@@ -97,7 +119,7 @@ export type Env = z.infer<typeof schema> & {
   jwtSecret: string;
   waMode: 'mock' | 'live';
   giftProvider: 'mock' | 'campay';
-  pspFees: import('@surveyflow/shared').PspFees;
+  pspFees: PspFees;
   webOrigins: string[];
 };
 
@@ -122,6 +144,13 @@ function load(): Env {
     if (!e.META_APP_SECRET) problems.push('META_APP_SECRET is required to verify webhook signatures');
     if (e.PSP_MOCK) problems.push('PSP_MOCK must not be enabled in production');
     if (giftProvider === 'mock') problems.push('GIFT_PROVIDER=mock must not be used in production');
+    if ((e.INTERNAL_API_SECRET ?? '').length < 32) problems.push('INTERNAL_API_SECRET must be set (>= 32 chars): without it anybody who can reach the API can call it directly, bypassing the website');
+    // Receipt links and PSP/Meta callbacks are built from this address: it must be one the outside world can open.
+    try {
+      const u = new URL(e.PUBLIC_API_URL);
+      const local = /^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$)/i.test(u.hostname) || !u.hostname.includes('.');
+      if (u.protocol !== 'https:' || local) problems.push('PUBLIC_API_URL must be the API\'s public https address (receipt links and PSP/Meta callbacks are built from it), not localhost or a private address');
+    } catch { problems.push('PUBLIC_API_URL is not a valid URL'); }
     if (problems.length) {
       console.error('Refusing to start in production:\n' + problems.map((p) => '  - ' + p).join('\n'));
       process.exit(1);
@@ -133,7 +162,7 @@ function load(): Env {
     jwtSecret,
     waMode,
     giftProvider,
-    pspFees: parsePspFees(e.PSP_FEES),
+    pspFees: parsePspFees(e.PSP_FEES, e.CAMERPAY_PLAN),
     webOrigins: e.WEB_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean),
   };
 }

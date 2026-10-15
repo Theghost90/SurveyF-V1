@@ -14,6 +14,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SurveyStatusBadge } from '@/components/status-badge';
 import { COUNTRY_CONFIG, localDateString } from '@surveyflow/shared';
+import { useWallet } from '@/components/wallet/use-wallet';
 import { useAccount } from '@/lib/account';
 import { useOwnerCountry } from '@/lib/geo-context';
 import { ApiError, api, errorMessage } from '@/lib/api';
@@ -56,7 +57,8 @@ export function SurveyBuilder({ id }: { id: string }) {
   }, [survey, account]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
-  const errors = useMemo(() => (draft ? validateDraft(draft, t, today) : null), [draft, t, today]);
+  const { wallet } = useWallet();
+  const errors = useMemo(() => (draft ? validateDraft(draft, t, today, wallet?.limits ?? null, wallet?.currency) : null), [draft, t, today, wallet?.limits, wallet?.currency]);
   const dirty = !!draft && JSON.stringify(toPayload(draft, offsetMin)) !== saved;
   const locked = !!survey && survey.status !== 'draft';
 

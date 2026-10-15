@@ -234,6 +234,12 @@ await step('analytics: funnel, completion rate and the drop-off alert reflect wh
   expect(/3\s+Sent/.test(text), 'Sent should be 3');
   expect(/Drop-off alert: 1 participant\(s\) left at Q2/.test(text), 'drop-off alert at Q2 expected');
   expect(/50%\s+Completion rate|50\.0?%\s+Completion/.test(text.replace(/\n/g, ' ')) || /50%/.test(text), 'completion rate should be 1/2 = 50%');
+  // The manual reminder buttons follow the automatic window: nobody can be chased a few minutes after the invitation.
+  expect(await page.getByRole('button', { name: /remind non-responders/i }).isDisabled(), 'Remind non-responders must be disabled: the window has not opened');
+  expect(await page.getByRole('button', { name: /remind abandoners/i }).isDisabled(), 'Remind abandoners must be disabled: the window has not opened');
+  await page.getByTestId('remind-rule').waitFor();
+  expect(/cannot be reminded yet/.test(await page.getByTestId('remind-wait-noReply').innerText()), 'a note explains when the non-responders can be reminded');
+  await page.getByTestId('remind-wait-abandoned').waitFor();
   await shot('analytics');
 });
 
@@ -388,15 +394,17 @@ await step('geo: an unknown or unsupported visitor sees FCFA; Cameroon is the de
 await step('geo: a Nigerian visitor sees naira prices, the Nigerian number format, and signs up as Nigeria (NGN)', async () => {
   const { c, p } = await visitor('NG');
   await p.goto(`${base}/pricing`);
-  await p.getByText('35,000', { exact: true }).waitFor();
+  await p.getByText('34,800', { exact: true }).waitFor(); // 14,500 FCFA × 2.4 (the rate feed of this run)
   const text = await p.locator('body').innerText();
   expect(text.includes('NGN / month') && !text.includes('FCFA / month'), 'NGN / month expected, FCFA must be gone');
   expect(/per extra 100/.test(text) && /NGN/.test(text.split('per extra 100')[0].slice(-40)), 'overage line should be in NGN');
   await p.getByText('Annual', { exact: false }).first().click();
-  await p.getByText('350,000', { exact: true }).waitFor(); // 10 months charged
+  await p.getByText('348,000', { exact: true }).waitFor(); // 10 months charged, converted once
+  const note = await p.getByTestId('rate-note').innerText();
+  expect(/1 FCFA = 2\.4 NGN/.test(note) && /ExchangeRate-API/.test(note) && /international Visa or Mastercard/.test(note), `rate note should explain the conversion, got: ${note}`);
   await p.screenshot({ path: `${out}/pricing-ng.png`, fullPage: true }); // the visitor's tab, not the main one
   await p.goto(`${base}/`);
-  await p.getByText(/From NGN\s35,000\/month/).waitFor();
+  await p.getByText(/From 34,800 NGN\/month/).waitFor();
   await p.goto(`${base}/register`);
   expect(await p.locator('#phone').inputValue() === '+234 ', 'register phone should start with +234');
   expect(await p.locator('#phone').getAttribute('placeholder') === '+234 803 123 4567', 'Nigerian example placeholder');
@@ -411,7 +419,10 @@ await step('geo: a Nigerian visitor sees naira prices, the Nigerian number forma
   expect(await p.locator('#p-currency').inputValue() === 'Nigeria (NGN)', `got ${await p.locator('#p-currency').inputValue()}`);
   expect(await p.locator('#p-phone').inputValue() === '+234 803 123 4567', `phone shows in international format: ${await p.locator('#p-phone').inputValue()}`);
   await p.goto(`${base}/billing?plan=growth`);
-  await p.getByRole('button', { name: /^pay 94,000 NGN/i }).waitFor({ timeout: 15000 });
+  await p.getByRole('button', { name: /^pay 93,600 NGN/i }).waitFor({ timeout: 15000 });
+  const dialog = (await p.getByRole('dialog').innerText());
+  expect(!/Mobile Money|Orange Money/i.test(dialog), 'no Mobile Money option when paying in naira');
+  expect(/Visa/.test(dialog), 'card is offered');
   await c.close();
 });
 

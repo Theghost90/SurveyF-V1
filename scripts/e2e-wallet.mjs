@@ -81,7 +81,7 @@ await step('builder: an airtime gift shows its true cost to the owner and warns 
       { text: 'How was it?', type: 'button', required: true, options: [{ id: 'g', label: 'Good' }, { id: 'b', label: 'Bad' }] },
       { text: 'Anything to add?', type: 'text', required: false },
     ],
-    gift: { giftType: 'airtime', giftValue: '500 FCFA airtime', giftAmountFCFA: 500, giftDeliveryMode: 'immediate', giftMaxCount: 5 },
+    gift: { giftType: 'airtime', giftValue: '500 FCFA airtime', giftAmount: 500, giftDeliveryMode: 'immediate', giftMaxCount: 5 },
   });
   expect(s.status === 201, `survey: ${JSON.stringify(s)}`);
   state.survey = s.json;
@@ -138,7 +138,7 @@ await step('top up 10,000 FCFA through the payment layer: nothing is credited un
   await shot('05-topup-dialog');
   await dlg.getByRole('button', { name: /Add 10,000 FCFA/ }).click();
   await page.waitForURL(/mock-checkout/, { timeout: 30000 });
-  const mid = (await call('GET', '/wallet')).json.balanceFCFA;
+  const mid = (await call('GET', '/wallet')).json.balance;
   expect(mid === 0, `balance must still be 0 while the payment is pending, got ${mid}`);
   await page.getByRole('button', { name: 'Pay (success)' }).click();
   await page.getByRole('heading', { name: 'Wallet topped up' }).waitFor({ timeout: 20000 });
@@ -160,7 +160,7 @@ await step('release the backlog: debits exactly one gift (525), and the gift is 
   await page.reload();
   await page.getByTestId('gift-spent').filter({ hasText: '525 FCFA charged so far' }).waitFor({ timeout: 15000 });
   const w = (await call('GET', '/wallet')).json;
-  expect(w.balanceFCFA === 9475, `10,000 − 525 = 9,475, got ${w.balanceFCFA}`);
+  expect(w.balance === 9475, `10,000 − 525 = 9,475, got ${w.balance}`);
   const snap = (await call('GET', `/dev/simulator/${state.contacts[0].id}`)).json;
   expect(JSON.stringify(snap.chat).includes('survey_gift_notice'), 'late gift must be announced with the approved template, not free text');
   await shot('07-analytics-paid');
@@ -187,7 +187,7 @@ await step('release the backlog: debits exactly one gift (525), and the gift is 
 await step('double release is a no-op (nothing left, nothing charged twice)', async () => {
   const again = (await call('POST', `/surveys/${state.survey.id}/gifts/release`)).json;
   expect(again.released === 0 && again.remaining === 0, JSON.stringify(again));
-  expect((await call('GET', '/wallet')).json.balanceFCFA === 9475, 'balance must not move');
+  expect((await call('GET', '/wallet')).json.balance === 9475, 'balance must not move');
 });
 
 await step('wallet history explains every movement and the header chip shows the balance', async () => {

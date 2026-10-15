@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { rl } from '../lib/ratelimit';
-import { PAID_PLAN_KEYS, PLANS, PLAN_PRICES, currencyForCountry, type Currency, type PaidPlanKey } from '@surveyflow/shared';
+import { OVERAGE, PAID_PLAN_KEYS, PLANS, identityQuote, overagePerBlock, planPrices, type PaidPlanKey } from '@surveyflow/shared';
 import { conflict } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { accountSummary } from '../services/account';
+import { billingQuote, methodsFor } from '../services/billing-currency';
 import { initiatePayment, txDto } from '../services/payments/service';
 import { initiateSchema } from './payments';
 
@@ -15,12 +16,20 @@ export default async function subscriptionRoutes(app: FastifyInstance) {
   /** Subscription page data: current plan, usage vs limits, prices in the owner's currency, invoice history. */
   app.get('/api/subscription', auth, async (req) => {
     const summary = await accountSummary(req.userId);
-    const currency = (summary.user.preferredCurrency || currencyForCountry(summary.user.country)) as Currency;
+    const { quote, fallback, requested } = await billingQuote(summary.user);
+    const prices = planPrices(quote);
     const invoices = await prisma.paymentTransaction.findMany({ where: { userId: req.userId, status: 'success', purpose: 'subscription' }, orderBy: { paidAt: 'desc' }, take: 24 });
     return {
       ...summary,
-      currency,
-      prices: Object.fromEntries(PAID_PLAN_KEYS.map((p) => [p, { monthly: PLAN_PRICES[p][currency] ?? PLAN_PRICES[p].USD, annual: (PLAN_PRICES[p][currency] ?? PLAN_PRICES[p].USD!) * 10, currency: PLAN_PRICES[p][currency] ? currency : 'USD' }])),
+      /** What this owner is charged in: their currency at the live rate (CFA francs when no fresh rate exists: `fallback`). */
+      currency: quote.currency,
+      requestedCurrency: requested,
+      fallback,
+      quote: { rate: quote.rate, asOf: quote.asOf, source: quote.source },
+      methods: methodsFor(quote.currency),
+      overagePer100: overagePerBlock(quote),
+      overageBlock: OVERAGE.responsesBlockSize,
+      prices: Object.fromEntries(PAID_PLAN_KEYS.map((p) => [p, { ...prices[p], currency: quote.currency }])),
       invoices: invoices.map(txDto),
     };
   });
@@ -53,6 +62,6 @@ export default async function subscriptionRoutes(app: FastifyInstance) {
 
   app.get('/api/plans', async () => ({
     plans: Object.fromEntries((['trial', ...PAID_PLAN_KEYS] as const).map((k) => [k, { priceFCFA: PLANS[k].priceFCFA, limits: PLANS[k].limits, features: PLANS[k].features }])),
-    prices: PLAN_PRICES,
+    prices: planPrices(identityQuote()), // canonical FCFA prices; GET /api/pricing and GET /api/subscription give the visitor's / owner's currency
   }));
 }

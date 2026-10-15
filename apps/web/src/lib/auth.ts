@@ -3,6 +3,8 @@ import Credentials from 'next-auth/providers/credentials';
 import Google from 'next-auth/providers/google';
 
 export const API_URL = process.env.API_URL ?? 'http://localhost:4223';
+/** The website's server proves who it is to the API with a shared secret; the API refuses every non-public call without it. Server-side only. */
+export const internalHeaders = (): Record<string, string> => (process.env.INTERNAL_API_SECRET ? { 'x-internal-secret': process.env.INTERNAL_API_SECRET } : {});
 const googleEnabled = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.INTERNAL_API_SECRET);
 
 export const authOptions: NextAuthOptions = {
@@ -19,7 +21,7 @@ export const authOptions: NextAuthOptions = {
           const res = await fetch(`${API_URL}/api/auth/login`, {
             method: 'POST',
             // Forward the real client IP so the API's login rate limit is per person, not one shared bucket for everyone.
-            headers: { 'Content-Type': 'application/json', ...(req?.headers?.['x-forwarded-for'] ? { 'x-forwarded-for': String(req.headers['x-forwarded-for']) } : {}) },
+            headers: { 'Content-Type': 'application/json', ...internalHeaders(), ...(req?.headers?.['x-forwarded-for'] ? { 'x-forwarded-for': String(req.headers['x-forwarded-for']) } : {}) },
             body: JSON.stringify({ email: credentials.email, password: credentials.password }),
             cache: 'no-store',
           });
@@ -40,7 +42,7 @@ export const authOptions: NextAuthOptions = {
       try {
         const res = await fetch(`${API_URL}/api/auth/oauth`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_API_SECRET! },
+          headers: { 'Content-Type': 'application/json', ...internalHeaders() },
           body: JSON.stringify({ email: user.email, name: user.name ?? '' }),
           cache: 'no-store',
         });

@@ -1,7 +1,9 @@
-import { PAID_GIFT_TYPES, giftUnitCostFCFA } from '@surveyflow/shared';
+import { PAID_GIFT_TYPES, giftUnitCost, walletLimits, type Currency } from '@surveyflow/shared';
 import { env } from '../config/env';
 import { prisma, type Tx } from '../lib/prisma';
 import { redis } from '../lib/redis';
+import { walletCurrency } from './billing-currency';
+import { getQuote } from './fx';
 import { notifyOwner } from './notify';
 
 /**
@@ -27,16 +29,24 @@ export async function debitWallet(tx: Tx, userId: string, amount: number, refId:
     WHERE "id" = ${userId} AND "giftBalanceFCFA" >= ${amount}::int
     RETURNING "giftBalanceFCFA" AS balance`;
   if (!rows.length) return null;
-  await tx.walletEntry.create({ data: { userId, deltaFCFA: -amount, balanceAfter: rows[0]!.balance, kind: 'gift_debit', refId, note } });
+  await tx.walletEntry.create({ data: { userId, delta: -amount, balanceAfter: rows[0]!.balance, kind: 'gift_debit', refId, note } });
   return rows[0]!.balance;
 }
 
-export async function creditWallet(tx: Tx, userId: string, amount: number, kind: 'topup' | 'gift_refund', refId: string, note?: string): Promise<number> {
+/**
+ * `currency` is given for top-ups: the first one fixes the wallet's currency for good, and any later top-up must be in the same
+ * one (the guard is IN the UPDATE, so two simultaneous top-ups in different currencies cannot both land).
+ */
+export async function creditWallet(tx: Tx, userId: string, amount: number, kind: 'topup' | 'gift_refund', refId: string, note?: string, currency?: Currency): Promise<number> {
   positive(amount);
-  const rows = await tx.$queryRaw<Array<{ balance: number }>>`
-    UPDATE "User" SET "giftBalanceFCFA" = "giftBalanceFCFA" + ${amount}::int WHERE "id" = ${userId} RETURNING "giftBalanceFCFA" AS balance`;
-  if (!rows.length) throw new Error('wallet owner not found');
-  await tx.walletEntry.create({ data: { userId, deltaFCFA: amount, balanceAfter: rows[0]!.balance, kind, refId, note } });
+  const rows = kind === 'topup' && currency
+    ? await tx.$queryRaw<Array<{ balance: number }>>`
+        UPDATE "User" SET "giftBalanceFCFA" = "giftBalanceFCFA" + ${amount}::int, "giftCurrency" = ${currency}
+        WHERE "id" = ${userId} AND ("giftCurrency" IS NULL OR "giftCurrency" = ${currency}) RETURNING "giftBalanceFCFA" AS balance`
+    : await tx.$queryRaw<Array<{ balance: number }>>`
+        UPDATE "User" SET "giftBalanceFCFA" = "giftBalanceFCFA" + ${amount}::int WHERE "id" = ${userId} RETURNING "giftBalanceFCFA" AS balance`;
+  if (!rows.length) throw new Error(kind === 'topup' && currency ? `wallet currency mismatch: cannot top up in ${currency}` : 'wallet owner not found');
+  await tx.walletEntry.create({ data: { userId, delta: amount, balanceAfter: rows[0]!.balance, kind, refId, note } });
   return rows[0]!.balance;
 }
 
@@ -45,17 +55,17 @@ export async function creditWallet(tx: Tx, userId: string, amount: number, kind:
  * decides what a refund returns, so a legacy/seeded gift that was never debited can never "refund" money that never left.
  */
 export async function heldByGift(tx: Tx, giftId: string): Promise<number> {
-  const r = await tx.walletEntry.aggregate({ where: { refId: giftId, kind: { in: ['gift_debit', 'gift_refund'] } }, _sum: { deltaFCFA: true } });
-  return Math.max(0, -(r._sum.deltaFCFA ?? 0));
+  const r = await tx.walletEntry.aggregate({ where: { refId: giftId, kind: { in: ['gift_debit', 'gift_refund'] } }, _sum: { delta: true } });
+  return Math.max(0, -(r._sum.delta ?? 0));
 }
 
 const PAID = [...PAID_GIFT_TYPES];
-const sumCost = (a: { _sum: { amountFCFA: number | null; feeFCFA: number | null } }) => (a._sum.amountFCFA ?? 0) + (a._sum.feeFCFA ?? 0);
+const sumCost = (a: { _sum: { amount: number | null; fee: number | null } }) => (a._sum.amount ?? 0) + (a._sum.fee ?? 0);
 
 export async function getWalletSummary(userId: string) {
-  const sums = { amountFCFA: true, feeFCFA: true } as const;
+  const sums = { amount: true, fee: true } as const;
   const [user, entries, pending, unfunded, held] = await Promise.all([
-    prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { giftBalanceFCFA: true } }),
+    prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { giftBalance: true, giftCurrency: true, preferredCurrency: true, country: true } }),
     prisma.walletEntry.findMany({ where: { userId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 40 }),
     // in the provider pipeline: already debited, not yet delivered
     prisma.giftDelivery.aggregate({ where: { survey: { userId }, giftType: { in: PAID }, status: 'pending' }, _count: { _all: true }, _sum: sums }),
@@ -64,32 +74,39 @@ export async function getWalletSummary(userId: string) {
     // outcome unknown (timeout after sending): debited and deliberately NOT auto-refunded or retried
     prisma.giftDelivery.aggregate({ where: { survey: { userId }, giftType: { in: PAID }, status: 'failed', refundedAt: null }, _count: { _all: true }, _sum: sums }),
   ]);
+  const currency = walletCurrency(user);
+  const quote = await getQuote(currency);
   return {
-    balanceFCFA: user.giftBalanceFCFA,
+    /** The wallet is kept in the owner's currency (whole units). */
+    currency,
+    balance: user.giftBalance,
     feePercent: env.GIFT_FEE_PERCENT,
-    inFlight: { count: pending._count._all, fcfa: sumCost(pending) },
-    unfunded: { count: unfunded._count._all, fcfa: sumCost(unfunded) },
-    needsCheck: { count: held._count._all, fcfa: sumCost(held) },
-    entries: entries.map((e) => ({ id: e.id, at: e.createdAt, deltaFCFA: e.deltaFCFA, balanceAfter: e.balanceAfter, kind: e.kind, note: e.note })),
+    /** Top-up and gift limits in `currency`; null while a non-CFA currency has no fresh exchange rate (top-ups pause, nothing is guessed). */
+    limits: quote ? walletLimits(quote) : null,
+    fxUnavailable: !quote,
+    inFlight: { count: pending._count._all, amount: sumCost(pending) },
+    unfunded: { count: unfunded._count._all, amount: sumCost(unfunded) },
+    needsCheck: { count: held._count._all, amount: sumCost(held) },
+    entries: entries.map((e) => ({ id: e.id, at: e.createdAt, delta: e.delta, balanceAfter: e.balanceAfter, kind: e.kind, note: e.note })),
   };
 }
 
 /** Can the wallet cover this survey's gifts? Used for non-blocking warnings at publish / send time. */
-export async function giftReadiness(userId: string, survey: { giftType: string; giftAmountFCFA: number | null; giftMaxCount: number | null; id: string }, invited?: number) {
-  if (!(PAID as string[]).includes(survey.giftType) || !survey.giftAmountFCFA) return null;
+export async function giftReadiness(userId: string, survey: { giftType: string; giftAmount: number | null; giftMaxCount: number | null; id: string }, invited?: number) {
+  if (!(PAID as string[]).includes(survey.giftType) || !survey.giftAmount) return null;
   const [user, used] = await Promise.all([
-    prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { giftBalanceFCFA: true } }),
+    prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { giftBalance: true, giftCurrency: true, preferredCurrency: true, country: true } }),
     prisma.giftDelivery.count({ where: { surveyId: survey.id } }),
   ]);
-  const unitCostFCFA = giftUnitCostFCFA(survey.giftAmountFCFA, env.GIFT_FEE_PERCENT);
+  const unitCost = giftUnitCost(survey.giftAmount, env.GIFT_FEE_PERCENT);
   const room = survey.giftMaxCount ? Math.max(0, survey.giftMaxCount - used) : null;
   const exposure = Math.min(invited ?? Infinity, room ?? Infinity);
-  const worstCaseFCFA = Number.isFinite(exposure) ? exposure * unitCostFCFA : null;
-  const covers = Math.floor(user.giftBalanceFCFA / unitCostFCFA);
+  const worstCase = Number.isFinite(exposure) ? exposure * unitCost : null;
+  const covers = Math.floor(user.giftBalance / unitCost);
   return {
-    unitCostFCFA, balanceFCFA: user.giftBalanceFCFA, giftsCovered: covers, worstCaseFCFA,
+    currency: walletCurrency(user), unitCost, balance: user.giftBalance, giftsCovered: covers, worstCase,
     // "ok" = at least the first gift is covered, and (when we know the audience) every possible gift is.
-    sufficient: worstCaseFCFA === null ? covers > 0 : user.giftBalanceFCFA >= worstCaseFCFA,
+    sufficient: worstCase === null ? covers > 0 : user.giftBalance >= worstCase,
     empty: covers === 0,
   };
 }

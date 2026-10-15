@@ -8,6 +8,7 @@ import { Prisma } from '@prisma/client';
 import { env } from './config/env';
 import { AppError } from './lib/errors';
 import { prisma } from './lib/prisma';
+import { registerInternalGate } from './lib/internal-gate';
 import { redis } from './lib/redis';
 import authPlugin from './plugins/auth';
 import authRoutes from './routes/auth';
@@ -21,6 +22,7 @@ import paymentRoutes from './routes/payments';
 import subscriptionRoutes from './routes/subscription';
 import walletRoutes from './routes/wallet';
 import receiptRoutes from './routes/receipts';
+import pricingRoutes from './routes/pricing';
 import googleRoutes from './routes/google';
 import devRoutes from './routes/dev';
 
@@ -39,6 +41,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     trustProxy: true,
   });
 
+  registerInternalGate(app); // before anything else: a call that did not come through the website never reaches a handler
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, {
     origin: env.webOrigins,
@@ -111,6 +114,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(subscriptionRoutes);
   await app.register(walletRoutes);
   await app.register(receiptRoutes);
+  await app.register(pricingRoutes);
   await app.register(googleRoutes);
   if (!env.isProd) await app.register(devRoutes);
 

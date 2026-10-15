@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
-import { API_URL } from '@/lib/auth';
+import { API_URL, internalHeaders } from '@/lib/auth';
 import { countryFromHeaders } from '@/lib/geo';
 
 export const dynamic = 'force-dynamic';
@@ -26,7 +26,7 @@ async function handler(req: NextRequest, { params }: { params: { path: string[] 
   const token = await getToken({ req });
   if (!token?.apiToken && !PUBLIC.has(path)) return NextResponse.json({ error: 'unauthorized', message: 'Authentication required' }, { status: 401 });
 
-  const headers = new Headers();
+  const headers = new Headers(internalHeaders());
   const ct = req.headers.get('content-type');
   if (ct) headers.set('content-type', ct);
   headers.set('accept', req.headers.get('accept') ?? 'application/json');

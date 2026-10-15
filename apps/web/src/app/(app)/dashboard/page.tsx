@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/page-header';
 import { SurveyStatusBadge } from '@/components/status-badge';
 import { useAccount } from '@/lib/account';
-import { dateShort, fcfa } from '@/lib/format';
+import { dateShort, money, num } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/client';
 
 interface SurveyRow { id: string; title: string; status: string; sent: number; completed: number; questionCount: number; createdAt: string }
@@ -57,12 +57,12 @@ export default function DashboardPage() {
                 <div key={m.label} className="flex flex-col gap-2">
                   <span className="text-sm font-semibold text-body">{m.label}</span>
                   <span className="font-display text-3xl font-extrabold tracking-tight">
-                    {fcfa(m.used, locale)}<span className="text-lg font-bold text-muted-foreground"> / {m.max === null ? '∞' : fcfa(m.max, locale)}</span>
+                    {num(m.used, locale)}<span className="text-lg font-bold text-muted-foreground"> / {m.max === null ? '∞' : num(m.max, locale)}</span>
                   </span>
                   <Progress value={m.used} max={m.max} label={m.label} />
                 </div>
               ))}
-              {usage.responseOverageFCFA > 0 && <p className="rounded-xl bg-amber-soft p-3 text-sm text-amber-ink sm:col-span-3">{t('dash.overage', { n: fcfa(usage.responseOverageFCFA, locale) })}</p>}
+              {usage.responseOverageFCFA > 0 && <p className="rounded-xl bg-amber-soft p-3 text-sm text-amber-ink sm:col-span-3">{t('dash.overage', { n: money(usage.responseOverage, usage.overageCurrency, locale) })}</p>}
             </CardContent>
           </Card>
 

@@ -1,20 +1,19 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { WALLET_TOPUP_MAX_FCFA, WALLET_TOPUP_MIN_FCFA, WALLET_TOPUP_PRESETS } from '@surveyflow/shared';
 import { rl } from '../lib/ratelimit';
 import { assertFeature, assertNotSuspended, loadAccount } from '../services/subscription/limits';
 import { initiateGiftTopup, txDto } from '../services/payments/service';
+import { methodsFor } from '../services/billing-currency';
 import { getWalletSummary } from '../services/wallet';
 
 /** The owner's prepaid gift wallet. The survey owner — not SurveyFlow — pays for participant gifts. */
 export default async function walletRoutes(app: FastifyInstance) {
   const auth = { preHandler: app.authenticate };
 
-  app.get('/api/wallet', auth, async (req) => ({
-    ...(await getWalletSummary(req.userId)),
-    currency: 'FCFA',
-    topup: { min: WALLET_TOPUP_MIN_FCFA, max: WALLET_TOPUP_MAX_FCFA, presets: WALLET_TOPUP_PRESETS },
-  }));
+  app.get('/api/wallet', auth, async (req) => {
+    const summary = await getWalletSummary(req.userId);
+    return { ...summary, methods: methodsFor(summary.currency) };
+  });
 
   /**
    * Starts a top-up checkout through the same PSP layer as subscriptions (failover, verify-before-credit, idempotent
@@ -22,7 +21,8 @@ export default async function walletRoutes(app: FastifyInstance) {
    */
   app.post('/api/wallet/topup', { ...auth, ...rl(20) }, async (req, reply) => {
     const body = z.object({
-      amountFCFA: z.number().int().min(WALLET_TOPUP_MIN_FCFA).max(WALLET_TOPUP_MAX_FCFA),
+      /** Whole units of the wallet's currency; the allowed range depends on the currency and is checked against the live limits. */
+      amount: z.number().int().min(1),
       method: z.enum(['mobile_money', 'card', 'bank_transfer']),
       phone: z.string().trim().max(30).optional(),
     }).parse(req.body);

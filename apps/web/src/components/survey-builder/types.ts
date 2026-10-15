@@ -1,9 +1,10 @@
 import { WA_LIMITS, endOfLocalDay, localDateString, type GiftType, type QuestionType, type SurveyKind, type SurveyLang } from '@surveyflow/shared';
+import { money } from '@/lib/format';
 import type { TFn } from '@/lib/i18n';
 
 export interface OptionDraft { id: string; label: string }
 export interface QuestionDraft { key: string; text: string; type: QuestionType; options: OptionDraft[]; required: boolean }
-export interface GiftDraft { giftType: GiftType; giftValue: string; giftAmountFCFA: string; giftDeliveryMode: 'immediate' | 'batch'; giftMaxCount: string }
+export interface GiftDraft { giftType: GiftType; giftValue: string; giftAmount: string; giftDeliveryMode: 'immediate' | 'batch'; giftMaxCount: string }
 export interface SurveyDraft {
   title: string;
   description: string;
@@ -41,7 +42,7 @@ export function fromApi(s: any, offsetMin: number): SurveyDraft {
     autoRemindNonResponders: !!s.autoRemindNonResponders,
     autoRemindAbandoners: !!s.autoRemindAbandoners,
     gift: {
-      giftType: s.giftType ?? 'none', giftValue: s.giftValue ?? '', giftAmountFCFA: s.giftAmountFCFA ? String(s.giftAmountFCFA) : '',
+      giftType: s.giftType ?? 'none', giftValue: s.giftValue ?? '', giftAmount: s.giftAmount ? String(s.giftAmount) : '',
       giftDeliveryMode: s.giftDeliveryMode ?? 'immediate', giftMaxCount: s.giftMaxCount ? String(s.giftMaxCount) : '',
     },
     questions: (s.questions ?? []).map((q: any) => ({
@@ -65,7 +66,7 @@ export function toPayload(d: SurveyDraft, offsetMin: number) {
     gift: {
       giftType: g.giftType,
       giftValue: g.giftValue.trim() || null,
-      giftAmountFCFA: g.giftAmountFCFA ? Number(g.giftAmountFCFA) : null,
+      giftAmount: g.giftAmount ? Number(g.giftAmount) : null,
       giftDeliveryMode: g.giftDeliveryMode,
       giftMaxCount: g.giftMaxCount ? Number(g.giftMaxCount) : null,
     },
@@ -77,10 +78,14 @@ export function toPayload(d: SurveyDraft, offsetMin: number) {
 }
 
 export interface QuestionErrors { text?: string; options?: string; labels: Record<number, string> }
-export interface DraftErrors { title?: string; deadline?: string; gift: Partial<Record<'giftValue' | 'giftAmountFCFA' | 'giftMaxCount', string>>; questions: Record<string, QuestionErrors>; count: number }
+export interface DraftErrors { title?: string; deadline?: string; gift: Partial<Record<'giftValue' | 'giftAmount' | 'giftMaxCount', string>>; questions: Record<string, QuestionErrors>; count: number }
 
 /** Client-side validation with localized messages; numbers come from the same WA_LIMITS the server enforces. */
-export function validateDraft(d: SurveyDraft, t: TFn, today: string): DraftErrors {
+/**
+ * `giftLimits`/`currency` are the owner's wallet limits (100–20,000 FCFA converted to their currency); unknown while the exchange rate is
+ * unavailable, in which case only the server checks the range.
+ */
+export function validateDraft(d: SurveyDraft, t: TFn, today: string, giftLimits: { giftMin: number; giftMax: number } | null = null, currency = 'XAF'): DraftErrors {
   const errors: DraftErrors = { gift: {}, questions: {}, count: 0 };
   if (!d.title.trim()) { errors.title = t('b.err.title'); errors.count++; }
   if (d.kind === 'event' && !d.deadline) { errors.deadline = t('b.err.deadline'); errors.count++; }
@@ -107,8 +112,10 @@ export function validateDraft(d: SurveyDraft, t: TFn, today: string): DraftError
   }
   const g = d.gift;
   if (g.giftType === 'airtime' || g.giftType === 'momo') {
-    const n = Number(g.giftAmountFCFA);
-    if (!Number.isInteger(n) || n < 100 || n > 20_000) { errors.gift.giftAmountFCFA = t('b.err.amount'); errors.count++; }
+    const n = Number(g.giftAmount);
+    const lo = giftLimits?.giftMin ?? 1;
+    const hi = giftLimits?.giftMax ?? Number.MAX_SAFE_INTEGER;
+    if (!Number.isInteger(n) || n < lo || n > hi) { errors.gift.giftAmount = giftLimits ? t('b.err.amount', { min: money(giftLimits.giftMin, currency, 'en'), max: money(giftLimits.giftMax, currency, 'en') }) : t('b.err.amountPlain'); errors.count++; }
   }
   if (['airtime', 'momo', 'discount', 'prize_draw'].includes(g.giftType) && !g.giftValue.trim()) { errors.gift.giftValue = t('b.err.giftValue'); errors.count++; }
   if (g.giftMaxCount && (!Number.isInteger(Number(g.giftMaxCount)) || Number(g.giftMaxCount) < 1)) { errors.gift.giftMaxCount = t('b.err.giftMax'); errors.count++; }

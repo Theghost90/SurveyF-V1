@@ -5,9 +5,10 @@
  *
  * Prices are the owner's decision (14,500 / 39,000 / 95,000 FCFA), which supersede the
  * blueprint's 9,500 / 29,000 / 75,000. Change them HERE — nothing else needs to move.
- * Non-FCFA prices below are DERIVED from the blueprint's implied exchange rates and rounded;
- * they are placeholders until real prices are set for those currencies.
+ * Every other currency is converted from these FCFA prices at a LIVE rate (see fx.ts); nothing is typed in per currency.
  */
+import { convertFromXAF, convertFromXAFExact, identityQuote, isCfa, type Currency, type FxQuote } from './fx';
+export type { Currency } from './fx';
 
 export const PLAN_KEYS = ['trial', 'starter', 'growth', 'business'] as const;
 export type PlanKey = (typeof PLAN_KEYS)[number];
@@ -86,20 +87,19 @@ export const ANNUAL_MONTHS_CHARGED = 10;
 /** Overage: 500 FCFA per 100 extra responses. */
 export const OVERAGE = { responsesBlockSize: 100, responsesBlockFCFA: 500 } as const;
 
-export type Currency = 'XAF' | 'XOF' | 'USD' | 'EUR' | 'NGN' | 'KES' | 'GHS';
-
-/** Multi-currency price table (FCFA = owner's prices; other currencies derived, see header). */
-export const PLAN_PRICES: Record<PaidPlanKey, Partial<Record<Currency, number>>> = {
-  starter: { XAF: 14_500, XOF: 14_500, USD: 23, EUR: 22, NGN: 35_000, KES: 3_100, GHS: 280 },
-  growth: { XAF: 39_000, XOF: 39_000, USD: 62, EUR: 59, NGN: 94_000, KES: 8_200, GHS: 750 },
-  business: { XAF: 95_000, XOF: 95_000, USD: 152, EUR: 145, NGN: 228_000, KES: 20_000, GHS: 1_800 },
-};
-
-export function planPrice(plan: PaidPlanKey, currency: Currency, interval: 'monthly' | 'annual' = 'monthly'): number {
-  const monthly = PLAN_PRICES[plan][currency];
-  if (monthly === undefined) throw new Error(`No ${currency} price configured for plan ${plan}`);
-  return interval === 'annual' ? monthly * ANNUAL_MONTHS_CHARGED : monthly;
+/** Price of a plan in FCFA, the canonical currency. */
+export function planPriceXAF(plan: PaidPlanKey, interval: 'monthly' | 'annual' = 'monthly'): number {
+  return PLANS[plan].priceFCFA * (interval === 'annual' ? ANNUAL_MONTHS_CHARGED : 1);
 }
+
+/** Price of a plan in the quote's currency: the live conversion of the FCFA price, rounded once (annual = 10 × the exact monthly). */
+export function planPriceIn(plan: PaidPlanKey, interval: 'monthly' | 'annual', quote: FxQuote): number {
+  return convertFromXAF(planPriceXAF(plan, interval), quote);
+}
+
+export interface PlanPriceRow { monthly: number; annual: number }
+export const planPrices = (quote: FxQuote): Record<PaidPlanKey, PlanPriceRow> =>
+  Object.fromEntries(PAID_PLAN_KEYS.map((k) => [k, { monthly: planPriceIn(k, 'monthly', quote), annual: planPriceIn(k, 'annual', quote) }])) as Record<PaidPlanKey, PlanPriceRow>;
 
 export function getPlan(key: string): PlanDef {
   return PLANS[(PLAN_KEYS as readonly string[]).includes(key) ? (key as PlanKey) : 'trial'];
@@ -112,33 +112,27 @@ export function recommendPlan(responsesPerMonth: number): PaidPlanKey {
   return 'business';
 }
 
-/** Effective cost of one answer (in `currency`, default FCFA) if the plan's response allowance is fully used. */
-export function costPerAnswer(plan: PaidPlanKey, responses: number, currency: Currency = 'XAF'): number {
-  const price = PLAN_PRICES[plan][currency] ?? PLANS[plan].priceFCFA;
-  return price / Math.max(1, Math.min(responses, PLANS[plan].limits.responsesPerMonth));
+/** Effective cost of one answer (in the quote's currency, default FCFA) if the plan's response allowance is fully used. */
+export function costPerAnswer(plan: PaidPlanKey, responses: number, quote: FxQuote = identityQuote()): number {
+  return convertFromXAFExact(PLANS[plan].priceFCFA, quote) / Math.max(1, Math.min(responses, PLANS[plan].limits.responsesPerMonth));
 }
 
-/** Overage price per block of 100 extra responses, in `currency`: 500 FCFA scaled by the currency's price ratio, 2 significant digits. */
-export function overagePerBlock(currency: Currency): number {
-  if (currency === 'XAF' || currency === 'XOF') return OVERAGE.responsesBlockFCFA;
-  const ratio = (PLAN_PRICES.starter[currency] ?? PLAN_PRICES.starter.USD!) / PLAN_PRICES.starter.XAF!;
-  const raw = OVERAGE.responsesBlockFCFA * ratio;
-  const digits = Math.floor(Math.log10(raw)) - 1; // keep two significant digits
-  const unit = Math.pow(10, digits);
-  return Math.round(raw / unit) * unit;
+/** Overage price per block of 100 extra responses in the quote's currency (500 FCFA converted). */
+export function overagePerBlock(quote: FxQuote = identityQuote()): number {
+  return convertFromXAF(OVERAGE.responsesBlockFCFA, quote);
 }
 
 /** What people read next to an amount: both CFA francs are "FCFA", everything else its ISO code. */
-export const currencyLabel = (currency: string): string => (currency === 'XAF' || currency === 'XOF' ? 'FCFA' : currency);
+export const currencyLabel = (currency: string): string => (isCfa(currency) ? 'FCFA' : currency);
 
 /**
- * Money string for a price: FCFA keeps the product's "14,500 FCFA" style, other currencies use the platform's currency formatting
- * ("$23", "NGN 35,000"). Whole units only.
+ * Money string for a price, always "amount label": "14,500 FCFA", "34,800 NGN", "0.86 USD". One style for every currency, so a price
+ * reads the same on the pricing page, in the wallet and in the checkout. Whole units, except small values (< 10) which keep two decimals.
  */
 export function formatPrice(amount: number, currency: Currency, locale: 'en' | 'fr' = 'en'): string {
-  if (currency === 'XAF' || currency === 'XOF') return `${formatFCFA(amount, locale)} FCFA`;
-  const digits = amount < 10 && amount % 1 !== 0 ? 2 : 0;
-  return new Intl.NumberFormat(locale === 'fr' ? 'fr-FR' : 'en-US', { style: 'currency', currency, maximumFractionDigits: digits, minimumFractionDigits: digits }).format(amount);
+  if (isCfa(currency) || Number.isInteger(amount)) return `${formatFCFA(amount, locale)} ${currencyLabel(currency)}`;
+  const [i, d] = amount.toFixed(2).split('.');
+  return `${formatFCFA(Number(i), locale)}${locale === 'fr' ? ',' : '.'}${d} ${currencyLabel(currency)}`;
 }
 
 /** Overage in FCFA for `used` responses on `plan`. */

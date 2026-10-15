@@ -1,14 +1,20 @@
 'use client';
 import useSWR from 'swr';
 
+/** The wallet is kept in the owner's currency (whole units): `currency` says which, every amount below is in it. */
 export interface WalletData {
-  balanceFCFA: number;
+  currency: string;
+  balance: number;
   feePercent: number;
-  inFlight: { count: number; fcfa: number };
-  unfunded: { count: number; fcfa: number };
-  needsCheck: { count: number; fcfa: number };
-  entries: Array<{ id: string; at: string; deltaFCFA: number; balanceAfter: number; kind: 'topup' | 'gift_debit' | 'gift_refund'; note: string | null }>;
-  topup: { min: number; max: number; presets: number[] };
+  inFlight: { count: number; amount: number };
+  unfunded: { count: number; amount: number };
+  needsCheck: { count: number; amount: number };
+  entries: Array<{ id: string; at: string; delta: number; balanceAfter: number; kind: 'topup' | 'gift_debit' | 'gift_refund'; note: string | null }>;
+  /** Top-up and gift limits in `currency`; null while a non-CFA currency has no fresh exchange rate (top-ups pause). */
+  limits: { topupMin: number; topupMax: number; presets: number[]; giftMin: number; giftMax: number } | null;
+  fxUnavailable: boolean;
+  /** Payment methods available in this currency: Mobile Money only exists in CFA francs, everything else pays by card. */
+  methods: Array<'mobile_money' | 'card'>;
 }
 
 /** The owner's prepaid gift wallet. SWR dedupes it across the header chip, billing card and builder panels. */

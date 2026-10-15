@@ -264,7 +264,13 @@ describe('end-to-end participant flow through the signed webhook', () => {
     expect(r.abandonedAtQuestion).toBe(2); // abandoned while looking at Q2
     expect(await getSession(w.phoneNumberId, waIdOf(0))).toBeNull();
 
-    // owner sends the reminder; it is a TEMPLATE (we are outside the 24h window)
+    // too early: the manual button follows the automatic window (2 business days after the invitation)
+    const early = await w.owner.raw('POST', `/api/surveys/${w.surveyId}/remind`, { target: 'abandoned' });
+    expect(early.status).toBe(409);
+    expect(early.json.error).toBe('reminder_not_yet');
+    await prisma.surveyRecipient.update({ where: { id: r.id }, data: { sentAt: new Date(Date.now() - 10 * 86_400_000), abandonedAt: new Date(Date.now() - 9 * 86_400_000) } });
+
+    // window open: the owner sends the reminder; it is a TEMPLATE (we are outside the 24h window)
     const rem = await w.owner.post(`/api/surveys/${w.surveyId}/remind`, { target: 'abandoned' });
     expect(rem.queued).toBe(1);
     await runSendWorkerOnce();
@@ -349,7 +355,7 @@ describe('end-to-end participant flow through the signed webhook', () => {
 });
 
 describe('gifts', () => {
-  const airtime = { giftType: 'airtime', giftValue: '500 FCFA airtime', giftAmountFCFA: 500, giftDeliveryMode: 'immediate' };
+  const airtime = { giftType: 'airtime', giftValue: '500 FCFA airtime', giftAmount: 500, giftDeliveryMode: 'immediate' };
 
   async function complete(w: Awaited<ReturnType<typeof buildWorld>>, idx: number) {
     const [q1, q2] = w.questions;
@@ -371,7 +377,7 @@ describe('gifts', () => {
     await complete(w, 0);
     const gifts = await prisma.giftDelivery.findMany();
     expect(gifts).toHaveLength(1);
-    expect(gifts[0]).toMatchObject({ giftType: 'airtime', status: 'pending', amountFCFA: 500 });
+    expect(gifts[0]).toMatchObject({ giftType: 'airtime', status: 'pending', amount: 500 });
     expect(await prisma.prizeDrawEntry.count()).toBe(0);
     expect(gifts[0]!.code).toBeNull();
     const thanks = (await chatOf(0)).at(-1).message.body as string;

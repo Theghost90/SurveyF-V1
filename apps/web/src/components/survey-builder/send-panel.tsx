@@ -13,14 +13,14 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAccount } from '@/lib/account';
 import { api, errorMessage, ApiError } from '@/lib/api';
-import { fcfa } from '@/lib/format';
+import { money, num } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 import { formatPhone } from '@surveyflow/shared';
 
 interface ContactRow { id: string; name: string; phone: string; tags: string[]; optedOut: boolean }
 interface Contacts { total: number; tags: string[]; items: ContactRow[] }
-interface GiftReadiness { unitCostFCFA: number; balanceFCFA: number; giftsCovered: number; worstCaseFCFA: number | null; sufficient: boolean; empty: boolean }
+interface GiftReadiness { currency: string; unitCost: number; balance: number; giftsCovered: number; worstCase: number | null; sufficient: boolean; empty: boolean }
 interface Accounts { items: Array<{ id: string; status: string; displayPhone: string | null; templates: Array<{ name: string; language: string; status: string }> }> }
 
 export function SendPanel({ surveyId, status, language, onPublish, publishing, dirty }: { surveyId: string; status: string; language: string; onPublish: () => void; publishing: boolean; dirty: boolean }) {
@@ -130,7 +130,7 @@ export function SendPanel({ surveyId, status, language, onPublish, publishing, d
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
               <p className="text-sm text-muted-foreground">
-                {target === 0 && !empty && audience ? t('b.send.nobody') : remaining !== null && t('b.send.quota', { n: target, remaining: fcfa(remaining, locale) })}
+                {target === 0 && !empty && audience ? t('b.send.nobody') : remaining !== null && t('b.send.quota', { n: target, remaining: num(remaining, locale) })}
               </p>
               <Button size="lg" onClick={send} loading={busy} disabled={!!waProblem || dirty || target === 0 || (schedule && !when)} className="h-12">
                 <Send className="h-4 w-4" aria-hidden />{t('b.send.cta')}
@@ -139,8 +139,8 @@ export function SendPanel({ surveyId, status, language, onPublish, publishing, d
             {audience?.gift && target > 0 && (
               <p role={audience.gift.sufficient ? undefined : 'alert'} className={cn('rounded-xl px-4 py-3 text-sm', audience.gift.sufficient ? 'bg-canvas text-body' : 'bg-amber-soft text-amber-ink')}>
                 {audience.gift.empty ? t('w.send.giftEmpty') : audience.gift.sufficient
-                  ? t('w.send.gift', { max: fcfa(audience.gift.worstCaseFCFA ?? 0, locale), n: target, balance: fcfa(audience.gift.balanceFCFA, locale) })
-                  : t('w.send.giftLow', { max: fcfa(audience.gift.worstCaseFCFA ?? 0, locale), n: target, balance: fcfa(audience.gift.balanceFCFA, locale) })}
+                  ? t('w.send.gift', { max: money(audience.gift.worstCase ?? 0, audience.gift.currency, locale), n: target, balance: money(audience.gift.balance, audience.gift.currency, locale) })
+                  : t('w.send.giftLow', { max: money(audience.gift.worstCase ?? 0, audience.gift.currency, locale), n: target, balance: money(audience.gift.balance, audience.gift.currency, locale) })}
                 {!audience.gift.sufficient && <> <a href="/billing#wallet" target="_blank" rel="noopener noreferrer" className="font-bold underline">{t('w.send.topup')}</a></>}
               </p>
             )}

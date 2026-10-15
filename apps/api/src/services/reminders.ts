@@ -33,11 +33,11 @@ type JobKind = 'nudge' | 'reminder' | 'deadline_note' | 'progress_saved' | 'prog
 
 async function queueOnce(
   tx: Prisma.TransactionClient, userId: string, recipientId: string, statuses: Array<'sent' | 'delivered' | 'abandoned'>, kind: JobKind,
-  mark: { field: 'remindedAt'; rule: ReminderRule } | { field: 'followupAt' }, now: Date,
+  mark: { field: 'remindedAt'; rule: ReminderRule; auto?: boolean } | { field: 'followupAt' }, now: Date,
 ): Promise<boolean> {
   const claimed = await tx.surveyRecipient.updateMany({
     where: { id: recipientId, status: { in: statuses }, ...(mark.field === 'remindedAt' ? { remindedAt: null } : { followupAt: null }) },
-    data: mark.field === 'remindedAt' ? { remindedAt: now, reminderRule: mark.rule, reminderAuto: true } : { followupAt: now },
+    data: mark.field === 'remindedAt' ? { remindedAt: now, reminderRule: mark.rule, reminderAuto: mark.auto ?? true } : { followupAt: now },
   });
   if (!claimed.count) return false;
   await tx.sendJob.create({ data: { userId, recipientId, kind, scheduledFor: now } });
@@ -129,4 +129,58 @@ export async function runAutoReminders(now = new Date()): Promise<AutoReminderRe
     }
   }
   return { reminders, followups, closed };
+}
+
+// ---- manual reminders (the owner's "Remind" buttons) -----------------------------------------------------------------------
+
+export type ManualTarget = 'abandoned' | 'no_reply';
+
+export interface ManualReminderState {
+  /** Recipients whose automatic window has opened: the only ones a manual reminder may reach. */
+  ready: Array<{ id: string; rule: ReminderRule }>;
+  /** Eligible people whose window has not opened yet (or never will: deadline too close). */
+  waiting: number;
+  /** When the first waiting person's window opens. */
+  nextAt: Date | null;
+}
+
+/**
+ * The owner's manual buttons follow the SAME clock as the automatic reminders: nobody can be reminded before their window
+ * opens (3 business days after the invitation, 2 after an abandonment, 24 h for a live event). Once it has opened a manual
+ * reminder may go at any time, but still at most one per person (the claim in queueOnce).
+ */
+export async function manualReminderState(surveyId: string, target: ManualTarget, now = new Date()): Promise<ManualReminderState> {
+  const s = await prisma.survey.findUnique({ where: { id: surveyId }, include: { user: { select: { country: true } } } });
+  if (!s) return { ready: [], waiting: 0, nextAt: null };
+  const offset = COUNTRY_CONFIG[supportedCountry(s.user.country)]!.utcOffsetMinutes;
+  const sv = { kind: s.kind, deadlineAt: s.deadlineAt };
+  const rows = await prisma.surveyRecipient.findMany({
+    where: { surveyId, status: { in: target === 'abandoned' ? ['abandoned'] : ['sent', 'delivered'] }, remindedAt: null, contact: { optedOutAt: null } },
+    select: { id: true, sentAt: true, createdAt: true, abandonedAt: true }, take: MAX_PER_SURVEY,
+  });
+  const ready: ManualReminderState['ready'] = [];
+  let waiting = 0;
+  let nextAt: Date | null = null;
+  for (const r of rows) {
+    const sent = r.sentAt ?? r.createdAt;
+    const slot = target === 'abandoned' ? abandonerSlot(sent, r.abandonedAt ?? sent, sv, offset) : nonResponderSlot(sent, sv, offset);
+    if (slot && now >= slot.earliest) { ready.push({ id: r.id, rule: slot.rule }); continue; }
+    waiting++;
+    if (slot && (!nextAt || slot.earliest < nextAt)) nextAt = slot.earliest;
+  }
+  return { ready, waiting, nextAt };
+}
+
+/** Queues a manual reminder for everyone whose window is open. Same once-only claim and the same templates as the automatic ones. */
+export async function sendManualReminders(survey: { id: string; userId: string }, target: ManualTarget, now = new Date()): Promise<{ queued: number; waiting: number; nextAt: Date | null }> {
+  const state = await manualReminderState(survey.id, target, now);
+  let queued = 0;
+  for (const r of state.ready) {
+    const ok = await prisma.$transaction((tx) => queueOnce(
+      tx, survey.userId, r.id, target === 'abandoned' ? ['abandoned'] : ['sent', 'delivered'], target === 'abandoned' ? 'reminder' : 'nudge',
+      { field: 'remindedAt', rule: r.rule, auto: false }, now,
+    ));
+    if (ok) queued++;
+  }
+  return { queued, waiting: state.waiting, nextAt: state.nextAt };
 }

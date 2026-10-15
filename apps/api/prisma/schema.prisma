@@ -103,7 +103,9 @@ model User {
   onboardingDoneAt  DateTime? // ADDED
   // ADDED: prepaid gift wallet. The SURVEY OWNER funds gifts (airtime / Mobile Money), never SurveyFlow.
   // Only ever changed with a guarded UPDATE (see services/wallet.ts), so it cannot go negative.
-  giftBalanceFCFA Int @default(0)
+  // Kept in the OWNER'S currency (whole units, `giftCurrency`); the database column keeps its historical name.
+  giftBalance  Int     @default(0) @map("giftBalanceFCFA")
+  giftCurrency String? // set by the first top-up and never changed afterwards; null = no wallet money yet
   // ADDED: who the owner is (business | institution | academic), chosen in onboarding. Hook for segment-specific features.
   segment String?
 
@@ -169,7 +171,7 @@ model Survey {
   // ADDED
   language         String   @default("fr") // language of participant-facing messages
   customThankYou   String? // referenced by the spec's gift code but missing from its schema
-  giftAmountFCFA   Int? // numeric value for airtime / momo gifts
+  giftAmount       Int? @map("giftAmountFCFA") // numeric value for airtime / momo gifts, in whole units of the owner's wallet currency
   giftMaxCount     Int? // hard cap on gifts, protects the owner's budget
 
   // ADDED (automatic reminders). `kind` = general | event; `deadlineAt` is required for events. The two switches are
@@ -316,7 +318,9 @@ model GiftDelivery {
   errorMessage String?
 
   // ADDED
-  amountFCFA   Int?
+  amount       Int? @map("amountFCFA") // what the participant receives, in `currency`
+  currency     String   @default("XAF") // the owner's wallet currency when the gift was paid
+  payoutXAF    Int? // the same amount in CFA francs at the live rate when it was debited: what the payout provider is asked to send
   code         String? // discount code
   providerRef  String?
   attempts     Int      @default(0)
@@ -324,8 +328,8 @@ model GiftDelivery {
   createdAt    DateTime @default(now())
 
   // ADDED (gift wallet)
-  feeFCFA           Int       @default(0) // pass-through fee charged to the owner's wallet on top of amountFCFA
-  refundedAt        DateTime? // set when a DEFINITE failure returned amountFCFA+feeFCFA to the wallet (ambiguous failures stay debited)
+  fee               Int       @default(0) @map("feeFCFA") // pass-through fee charged to the owner's wallet on top of `amount` (same currency)
+  refundedAt        DateTime? // set when a DEFINITE failure returned amount+fee to the wallet (ambiguous failures stay debited)
   notifyViaTemplate Boolean   @default(false) // released after a top-up: the 24h window is closed, so notify with a template
 
   survey  Survey  @relation(fields: [surveyId], references: [id], onDelete: Cascade)
@@ -397,6 +401,9 @@ model PaymentTransaction {
   checkoutUrl String?
   paidAt      DateTime?
   failReason  String?
+  // ADDED (multi-currency): the plan / top-up value in CFA francs at initiation, and the live rate used (null for CFA payments).
+  amountXAF Int?
+  fxRate    Float?
 
   subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -411,7 +418,7 @@ model PaymentTransaction {
 model WalletEntry {
   id           String   @id @default(cuid())
   userId       String
-  deltaFCFA    Int // + top-up / refund, − gift debit
+  delta        Int    @map("deltaFCFA") // + top-up / refund, − gift debit, in the owner's wallet currency
   balanceAfter Int
   kind         String // topup | gift_debit | gift_refund
   refId        String? // PaymentTransaction.id or GiftDelivery.id
@@ -474,4 +481,13 @@ model SheetRow {
   createdAt DateTime @default(now())
 
   @@unique([surveyId, contactId])
+}
+
+// ADDED: live exchange rates, XAF -> currency (units of the currency per 1 XAF). Redis is the hot cache; this table is the
+// last-known-good copy used when the rate source is down (and its age decides whether it may still be used).
+model FxRate {
+  currency        String   @id
+  rate            Float
+  sourceUpdatedAt DateTime? // when the rate source published it
+  fetchedAt       DateTime @default(now())
 }

@@ -14,9 +14,9 @@ export class GiftError extends Error {
 
 export interface GiftProvider {
   readonly name: string;
-  /** phone is E.164 digits without "+"; `ref` is our idempotency/reference id. */
-  sendAirtime(phone: string, amountFCFA: number, ref: string): Promise<{ providerRef: string }>;
-  sendMoMo(phone: string, amountFCFA: number, ref: string): Promise<{ providerRef: string }>;
+  /** phone is E.164 digits without "+"; `amountXAF` is whole CFA francs (the provider speaks nothing else: a non-FCFA owner's gift is converted first); `ref` is our idempotency/reference id. */
+  sendAirtime(phone: string, amountXAF: number, ref: string): Promise<{ providerRef: string }>;
+  sendMoMo(phone: string, amountXAF: number, ref: string): Promise<{ providerRef: string }>;
 }
 
 class MockProvider implements GiftProvider {

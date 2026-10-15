@@ -11,3 +11,6 @@ apps/web/next-env.d.ts
 test-results
 playwright-report
 *.tsbuildinfo
+
+# local Redis snapshots
+dump.rdb

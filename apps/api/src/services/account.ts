@@ -1,5 +1,6 @@
+import { billingQuote } from './billing-currency';
 import type { Subscription, User } from '@prisma/client';
-import { PLANS, TRIAL_DAYS, responseOverageFCFA } from '@surveyflow/shared';
+import { OVERAGE, PLANS, TRIAL_DAYS, convertFromXAF, responseOverageFCFA } from '@surveyflow/shared';
 import { prisma } from '../lib/prisma';
 import { loadAccount } from './subscription/limits';
 
@@ -48,6 +49,7 @@ export async function accountSummary(userId: string) {
     prisma.survey.count({ where: { userId } }),
   ]);
   const { plan, usage } = ctx;
+  const { quote } = await billingQuote(ctx.user);
   return {
     user: userDto(ctx.user),
     subscription: subscriptionDto(ctx.subscription),
@@ -59,6 +61,9 @@ export async function accountSummary(userId: string) {
       periodStart: usage.periodStart,
       periodEnd: usage.periodEnd,
       responseOverageFCFA: responseOverageFCFA(plan.key, usage.responses),
+      /** The same overage in the owner's billing currency (live rate). `overageCurrency` says which. */
+      responseOverage: convertFromXAF(responseOverageFCFA(plan.key, usage.responses), quote),
+      overageCurrency: quote.currency,
     },
     onboarding: {
       whatsappConnected: whatsapp > 0,

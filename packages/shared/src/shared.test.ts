@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   PLANS, buildQuestionMessage, buildThankYouMessage, costPerAnswer, formatFCFA, fromWaId, maskPhone, normalizePhone,
-  parseAnswerId, parseTemplatePayload, planPrice, questionInputSchema, recommendPlan, responseOverageFCFA, templatePayload, toWaId, answerId,
+  parseAnswerId, parseTemplatePayload, planPriceIn, identityQuote, questionInputSchema, recommendPlan, responseOverageFCFA, templatePayload, toWaId, answerId,
   publishProblems, normalizeQuestion,
 } from './index';
 
@@ -41,8 +41,7 @@ describe('plans', () => {
   });
   it('computes cost per answer and annual price', () => {
     expect(costPerAnswer('growth', 3000)).toBeCloseTo(13, 1);
-    expect(planPrice('growth', 'XAF', 'annual')).toBe(390000);
-    expect(planPrice('starter', 'USD')).toBe(23);
+    expect(planPriceIn('growth', 'annual', identityQuote('XAF'))).toBe(390000);
   });
   it('charges overage in blocks of 100 responses', () => {
     expect(responseOverageFCFA('starter', 500)).toBe(0);

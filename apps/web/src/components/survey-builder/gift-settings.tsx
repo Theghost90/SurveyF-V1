@@ -1,13 +1,13 @@
 'use client';
 import Link from 'next/link';
 import { Gift, Lock, Wallet } from 'lucide-react';
-import type { GiftType } from '@surveyflow/shared';
+import { currencyLabel, type GiftType } from '@surveyflow/shared';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, Input, Textarea } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
 import { useWallet, unitCost } from '@/components/wallet/use-wallet';
-import { fcfa } from '@/lib/format';
+import { money, num } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 import type { DraftErrors, SurveyDraft } from './types';
@@ -26,22 +26,22 @@ function GiftCostPanel({ gift }: { gift: SurveyDraft['gift'] }) {
   const t = useT();
   const locale = useLocale();
   const { wallet } = useWallet();
-  const amount = Number(gift.giftAmountFCFA);
-  if (!wallet || !Number.isFinite(amount) || amount < 100) return null;
+  const amount = Number(gift.giftAmount);
+  if (!wallet || !Number.isFinite(amount) || amount < (wallet.limits?.giftMin ?? 1)) return null;
   const unit = unitCost(amount, wallet.feePercent);
-  const covers = Math.floor(wallet.balanceFCFA / unit);
+  const covers = Math.floor(wallet.balance / unit);
   const cap = Number(gift.giftMaxCount) > 0 ? Math.floor(Number(gift.giftMaxCount)) : null;
   const empty = covers === 0;
-  const low = !empty && cap !== null && wallet.balanceFCFA < cap * unit;
+  const low = !empty && cap !== null && wallet.balance < cap * unit;
   return (
     <section aria-label={t('w.cost.title')} className="flex flex-col gap-3 rounded-2xl border border-line bg-canvas p-4 sm:col-span-2" data-testid="gift-cost-panel">
       <h3 className="flex items-center gap-2 text-sm font-bold"><Wallet className="h-4 w-4 text-leaf" aria-hidden />{t('w.cost.title')}</h3>
       <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr]">
         <dt className="text-muted-foreground">{t('w.cost.unit')}</dt>
-        <dd className="font-semibold tabular-nums">{fcfa(unit, locale)} FCFA <span className="font-normal text-muted-foreground">({t('w.cost.unitDetail', { amount: fcfa(amount, locale), fee: fcfa(unit - amount, locale) })})</span></dd>
+        <dd className="font-semibold tabular-nums">{money(unit, wallet.currency, locale)} <span className="font-normal text-muted-foreground">({t('w.cost.unitDetail', { amount: money(amount, wallet.currency, locale), fee: money(unit - amount, wallet.currency, locale) })})</span></dd>
         <dt className="text-muted-foreground">{t('w.cost.balance')}</dt>
-        <dd className="font-semibold tabular-nums">{fcfa(wallet.balanceFCFA, locale)} FCFA <span className="font-normal text-muted-foreground">({t('w.cost.covers', { n: fcfa(covers, locale) })})</span></dd>
-        {cap !== null && <><dt className="text-muted-foreground">{t('w.cost.max')}</dt><dd className="font-semibold tabular-nums">{fcfa(cap * unit, locale)} FCFA <span className="font-normal text-muted-foreground">({t('w.cost.maxDetail', { n: fcfa(cap, locale), unit: fcfa(unit, locale) })})</span></dd></>}
+        <dd className="font-semibold tabular-nums">{money(wallet.balance, wallet.currency, locale)} <span className="font-normal text-muted-foreground">({t('w.cost.covers', { n: num(covers, locale) })})</span></dd>
+        {cap !== null && <><dt className="text-muted-foreground">{t('w.cost.max')}</dt><dd className="font-semibold tabular-nums">{money(cap * unit, wallet.currency, locale)} <span className="font-normal text-muted-foreground">({t('w.cost.maxDetail', { n: num(cap, locale), unit: money(unit, wallet.currency, locale) })})</span></dd></>}
       </dl>
       {cap === null && <p className="text-sm text-muted-foreground">{t('w.cost.noCap')}</p>}
       {(empty || low) && (
@@ -58,7 +58,8 @@ export function GiftSettings({ draft, onChange, errors, canAutomate }: { draft: 
   const t = useT();
   const g = draft.gift;
   const set = (patch: Partial<SurveyDraft['gift']>) => onChange({ ...draft, gift: { ...g, ...patch } });
-  const money = g.giftType === 'airtime' || g.giftType === 'momo';
+  const paid = g.giftType === 'airtime' || g.giftType === 'momo';
+  const { wallet } = useWallet();
 
   return (
     <Card>
@@ -89,17 +90,17 @@ export function GiftSettings({ draft, onChange, errors, canAutomate }: { draft: 
         {g.giftType !== 'none' && (
           <div className="grid gap-4 sm:grid-cols-2">
             {g.giftType !== 'custom' && (
-              <Field label={t('b.gift.value')} htmlFor="giftValue" hint={t('b.gift.valueHint')} error={errors.gift.giftValue} className={money ? '' : 'sm:col-span-2'}>
+              <Field label={t('b.gift.value')} htmlFor="giftValue" hint={t('b.gift.valueHint')} error={errors.gift.giftValue} className={paid ? '' : 'sm:col-span-2'}>
                 <Input id="giftValue" value={g.giftValue} onChange={(e) => set({ giftValue: e.target.value })} maxLength={120} placeholder={g.giftType === 'discount' ? '10% off your next order' : g.giftType === 'prize_draw' ? 'a smartphone' : '500 MB MTN data bundle'} aria-invalid={!!errors.gift.giftValue} />
               </Field>
             )}
-            {money && (
-              <Field label={t('b.gift.amount')} htmlFor="giftAmount" hint={t('b.gift.amountHint')} error={errors.gift.giftAmountFCFA}>
-                <Input id="giftAmount" type="number" inputMode="numeric" min={100} max={20000} step={50} value={g.giftAmountFCFA} onChange={(e) => set({ giftAmountFCFA: e.target.value })} aria-invalid={!!errors.gift.giftAmountFCFA} />
+            {paid && (
+              <Field label={t('b.gift.amount', { currency: currencyLabel(wallet?.currency ?? 'XAF') })} htmlFor="giftAmount" hint={t('b.gift.amountHint')} error={errors.gift.giftAmount}>
+                <Input id="giftAmount" type="number" inputMode="numeric" min={wallet?.limits?.giftMin} max={wallet?.limits?.giftMax} step={wallet?.limits ? Math.max(1, Math.round(wallet.limits.giftMin / 2)) : 1} value={g.giftAmount} onChange={(e) => set({ giftAmount: e.target.value })} aria-invalid={!!errors.gift.giftAmount} />
               </Field>
             )}
-            {money && canAutomate && <GiftCostPanel gift={g} />}
-            {money && (
+            {paid && canAutomate && <GiftCostPanel gift={g} />}
+            {paid && (
               <fieldset className="flex flex-col gap-2 sm:col-span-2">
                 <legend className="mb-1 text-sm font-semibold">{t('b.gift.delivery')}</legend>
                 <RadioGroup value={g.giftDeliveryMode} onValueChange={(v) => set({ giftDeliveryMode: v as 'immediate' | 'batch' })} className="gap-2 sm:grid-cols-2">

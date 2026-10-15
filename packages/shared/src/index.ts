@@ -6,3 +6,5 @@ export * from './wa-messages';
 export * from './wallet';
 export * from './segments';
 export * from './reminders';
+export * from './fx';
+export * from './psp-fees';

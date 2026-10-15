@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../src/lib/prisma';
 import { redis } from '../src/lib/redis';
@@ -41,11 +41,15 @@ describe('country and currency follow the visitor', () => {
     expect((await register('zz')).body.user).toMatchObject({ country: 'CM' });
   });
 
-  it('prices for a Nigerian owner come back in naira', async () => {
-    const { c } = await register('NG', { phone: '0803 123 4567' });
-    const sub = await c.get('/api/subscription');
-    expect(sub.currency).toBe('NGN');
-    expect(sub.prices.growth).toMatchObject({ monthly: 94000, annual: 940000, currency: 'NGN' });
+  it('prices for a Nigerian owner come back in naira, converted from the FCFA prices at the live rate', async () => {
+    vi.stubGlobal('fetch', async () => ({ ok: true, status: 200, json: async () => ({ result: 'success', base_code: 'XAF', time_last_update_unix: Math.floor(Date.now() / 1000), rates: { NGN: 2.4 } }) }) as Response);
+    try {
+      const { c } = await register('NG', { phone: '0803 123 4567' });
+      const sub = await c.get('/api/subscription');
+      expect(sub.currency).toBe('NGN');
+      expect(sub.prices.growth).toMatchObject({ monthly: 93_600, annual: 936_000, currency: 'NGN' }); // 39,000 × 2.4
+      expect(sub.methods).toEqual(['card']); // no Mobile Money in naira
+    } finally { vi.unstubAllGlobals(); }
   });
 
   it('follows the owner\'s location until the FIRST payment, then locks (a paying customer\'s price must not move)', async () => {
@@ -107,7 +111,7 @@ describe('profile: no country, currency or payment provider to choose; segment i
 
 // ---- receipts ----------------------------------------------------------------------------------------------
 
-const airtime = { giftType: 'airtime', giftValue: '500 FCFA airtime', giftAmountFCFA: 500, giftDeliveryMode: 'immediate' };
+const airtime = { giftType: 'airtime', giftValue: '500 FCFA airtime', giftAmount: 500, giftDeliveryMode: 'immediate' };
 
 async function complete(w: World, idx: number) {
   const [q1, q2] = w.questions;

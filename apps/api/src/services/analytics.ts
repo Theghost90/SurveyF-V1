@@ -1,6 +1,7 @@
 import { maskPhone } from '@surveyflow/shared';
 import { prisma } from '../lib/prisma';
 import { notFound } from '../lib/errors';
+import { manualReminderState } from './reminders';
 
 /**
  * Analytics (spec §7 + "ANALYTICS CALCULATIONS"), with these corrections to the spec's formulas:
@@ -132,6 +133,13 @@ export async function computeAnalytics(surveyId: string, userId: string) {
     orderBy: { sentAt: 'desc' }, take: 50,
   });
 
+  // Manual "Remind" buttons only work once the automatic window has opened: tell the page who is ready and when the rest will be.
+  const [rn, ra] = await Promise.all([manualReminderState(surveyId, 'no_reply'), manualReminderState(surveyId, 'abandoned')]);
+  const remind = {
+    noReply: { eligibleNow: rn.ready.length, waiting: rn.waiting, nextAt: rn.nextAt },
+    abandoned: { eligibleNow: ra.ready.length, waiting: ra.waiting, nextAt: ra.nextAt },
+  };
+
   const gifts = { pending: 0, sent: 0, failed: 0, unfunded: 0 } as Record<string, number>;
   for (const g of giftGroups) gifts[g.status] = g._count._all;
 
@@ -146,7 +154,7 @@ export async function computeAnalytics(surveyId: string, userId: string) {
     },
     funnel, perQuestion, dropOff,
     nonStarters: nonStarters.map((r) => ({ recipientId: r.id, name: r.contact.name, phone: maskPhone(r.contact.phone), status: r.status, sentAt: r.sentAt })),
-    gifts,
+    gifts, remind,
     timeline: daily.map((d) => ({ day: d.day.toISOString().slice(0, 10), completed: Number(d.n) })),
     generatedAt: new Date().toISOString(),
   };

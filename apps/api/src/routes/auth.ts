@@ -105,9 +105,11 @@ export default async function authRoutes(app: FastifyInstance) {
     const seen = detectedCountry(req);
     if (!seen) return;
     const country = supportedCountry(seen);
-    const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { country: true } });
+    const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { country: true, giftCurrency: true } });
     if (!user || user.country === country) return;
-    if (await prisma.paymentTransaction.count({ where: { userId: req.userId, status: 'success' } })) return;
+    // Locked once money has moved: a paid plan, a wallet in some currency, or a top-up in flight must never change currency under the owner.
+    if (user.giftCurrency) return;
+    if (await prisma.paymentTransaction.count({ where: { userId: req.userId, OR: [{ status: 'success' }, { status: 'pending', purpose: 'gift_topup' }] } })) return;
     await prisma.user.update({ where: { id: req.userId }, data: { country, preferredCurrency: currencyForCountry(country) } });
   }
 

@@ -2,8 +2,8 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { Check } from 'lucide-react';
-import { PAID_PLAN_KEYS, PLANS, costPerAnswer, currencyLabel, formatFCFA, overagePerBlock, planPrice, recommendPlan, type PaidPlanKey } from '@surveyflow/shared';
-import { useGeo } from '@/lib/geo-context';
+import { PAID_PLAN_KEYS, PLANS, currencyLabel, formatFCFA, isCfa, recommendPlan, type PaidPlanKey } from '@surveyflow/shared';
+import type { PricingData } from '@/lib/pricing';
 import { useLocale, useT } from '@/lib/i18n/client';
 import type { TFn } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -48,16 +48,16 @@ export function planFeatures(plan: PaidPlanKey, t: TFn, locale: 'en' | 'fr') {
   return list;
 }
 
-export function PricingClient({ initial = 1200 }: { initial?: number }) {
+export function PricingClient({ pricing, initial = 1200 }: { pricing: PricingData; initial?: number }) {
   const t = useT();
   const locale = useLocale();
-  const { currency } = useGeo();
+  const { currency } = pricing;
   const label = currencyLabel(currency);
   const [pos, setPos] = useState(Math.round(responsesToPos(initial)));
   const [annual, setAnnual] = useState(false);
   const responses = useMemo(() => posToResponses(pos), [pos]);
   const fit = recommendPlan(responses);
-  const per = costPerAnswer(fit, responses, currency);
+  const per = pricing.plans[fit].monthly / Math.max(1, Math.min(responses, PLANS[fit].limits.responsesPerMonth));
   const perText = new Intl.NumberFormat(locale === 'fr' ? 'fr-FR' : 'en-US', { maximumFractionDigits: per >= 10 ? 0 : per >= 1 ? 1 : 2, minimumFractionDigits: per >= 10 ? 0 : per >= 1 ? 1 : 2 }).format(per);
 
   return (
@@ -104,7 +104,7 @@ export function PricingClient({ initial = 1200 }: { initial?: number }) {
           {PAID_PLAN_KEYS.map((key) => {
             const plan = PLANS[key];
             const active = key === fit;
-            const price = planPrice(key, currency, annual ? 'annual' : 'monthly');
+            const price = pricing.plans[key][annual ? 'annual' : 'monthly'];
             return (
               <div
                 key={key}
@@ -137,8 +137,33 @@ export function PricingClient({ initial = 1200 }: { initial?: number }) {
             );
           })}
         </div>
-        <p className="mt-4 text-center text-[13px] text-muted-foreground">{t('pricing.overage', { amount: `${formatFCFA(overagePerBlock(currency), locale)} ${label}` })}</p>
+        <p className="mt-4 text-center text-[13px] text-muted-foreground">{t('pricing.overage', { amount: `${new Intl.NumberFormat(locale === 'fr' ? 'fr-FR' : 'en-US', { maximumFractionDigits: pricing.overagePer100 < 10 ? 2 : 0 }).format(pricing.overagePer100)} ${label}` })}</p>
+        <RateNote pricing={pricing} />
       </section>
     </>
+  );
+}
+
+/**
+ * Why the numbers are what they are, said plainly: converted from FCFA at today's rate, paid by international card, and — when the rate
+ * source was down — shown in FCFA instead. ExchangeRate-API's open endpoint requires attribution wherever its rates are shown.
+ */
+function RateNote({ pricing }: { pricing: PricingData }) {
+  const t = useT();
+  const locale = useLocale();
+  const converted = !isCfa(pricing.currency);
+  if (!converted && !pricing.fallback) return null;
+  const date = pricing.quote.asOf ? new Intl.DateTimeFormat(locale === 'fr' ? 'fr-FR' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(pricing.quote.asOf)) : '';
+  return (
+    <div className="mx-auto mt-3 max-w-[720px] text-center text-[13px] leading-relaxed text-muted-foreground" data-testid="rate-note">
+      {converted ? (
+        <>
+          <p>{t('pricing.rate', { currency: pricing.currency, rate: new Intl.NumberFormat(locale === 'fr' ? 'fr-FR' : 'en-US', { maximumSignificantDigits: 4 }).format(pricing.quote.rate), date: date || '—' })}</p>
+          <p>{t('pricing.card')}{' '}<a href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer" className="underline">{t('pricing.ratesBy')}</a></p>
+        </>
+      ) : (
+        <p>{t('pricing.rateDown', { currency: pricing.requestedCurrency })}</p>
+      )}
+    </div>
   );
 }

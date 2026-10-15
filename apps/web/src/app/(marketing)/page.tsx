@@ -1,16 +1,16 @@
 import Link from 'next/link';
 import { ArrowRight, Gift, Percent, Smartphone, Ticket, Wallet } from 'lucide-react';
-import { formatPrice, planPrice } from '@surveyflow/shared';
+import { formatPrice } from '@surveyflow/shared';
 import { MarketingHeader } from '@/components/marketing/header';
 import { HeroPhone } from '@/components/marketing/hero-phone';
 import { buttonVariants } from '@/components/ui/button';
-import { getGeo } from '@/lib/geo';
+import { getPricing } from '@/lib/pricing';
 import { getT } from '@/lib/i18n/server';
 import { cn } from '@/lib/utils';
 
 export default async function HomePage() {
   const { t, locale } = getT();
-  const { currency } = getGeo();
+  const pricing = await getPricing();
   const salesWa = process.env.NEXT_PUBLIC_SALES_WHATSAPP; // e.g. 237600000000 — set per deployment, never hard-coded
   const steps = [
     ['steps.ask', 'steps.askText'],
@@ -49,7 +49,7 @@ export default async function HomePage() {
               {t('hero.cta2')}
             </Link>
           </div>
-          <p className="text-sm text-muted-foreground">{t('hero.note', { price: formatPrice(planPrice('starter', currency), currency, locale) })}</p>
+          <p className="text-sm text-muted-foreground">{t('hero.note', { price: formatPrice(pricing.plans.starter.monthly, pricing.currency as never, locale) })}</p>
         </div>
         <HeroPhone />
       </section>

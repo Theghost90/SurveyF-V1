@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { PAID_GIFT_TYPES, maskPhone } from '@surveyflow/shared';
+import { PAID_GIFT_TYPES, currencyLabel, isCfa, maskPhone } from '@surveyflow/shared';
 import { env } from '../config/env';
 import { prisma } from '../lib/prisma';
 import { htmlToPdf } from './exports/pdf';
@@ -27,14 +27,14 @@ export function giftIdFromToken(token: string): string | null {
 }
 
 const L = {
-  en: { title: 'Proof of gift', delivered: 'Delivered', from: 'From', survey: 'Survey', gift: 'Gift', amount: 'Amount', to: 'Sent to', date: 'Delivered on', ref: 'Reference', no: 'Receipt no.', note: 'This document confirms that the gift above was delivered to the phone number shown. It is not a tax invoice.', issued: 'Issued by SurveyFlow on behalf of' },
-  fr: { title: 'Preuve de cadeau', delivered: 'Livré', from: 'De la part de', survey: 'Sondage', gift: 'Cadeau', amount: 'Montant', to: 'Envoyé au', date: 'Livré le', ref: 'Référence', no: 'Reçu n°', note: 'Ce document confirme que le cadeau ci-dessus a été livré au numéro indiqué. Ce n’est pas une facture.', issued: 'Émis par SurveyFlow pour le compte de' },
+  en: { title: 'Proof of gift', delivered: 'Delivered', from: 'From', survey: 'Survey', gift: 'Gift', amount: 'Amount', value: 'Value delivered', to: 'Sent to', date: 'Delivered on', ref: 'Reference', no: 'Receipt no.', note: 'This document confirms that the gift above was delivered to the phone number shown. It is not a tax invoice.', issued: 'Issued by SurveyFlow on behalf of' },
+  fr: { title: 'Preuve de cadeau', delivered: 'Livré', from: 'De la part de', survey: 'Sondage', gift: 'Cadeau', amount: 'Montant', value: 'Valeur remise', to: 'Envoyé au', date: 'Livré le', ref: 'Référence', no: 'Reçu n°', note: 'Ce document confirme que le cadeau ci-dessus a été livré au numéro indiqué. Ce n’est pas une facture.', issued: 'Émis par SurveyFlow pour le compte de' },
 } as const;
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 export interface ReceiptData {
-  number: string; business: string; survey: string; gift: string; amountFCFA: number; phone: string; deliveredAt: Date; reference: string; lang: 'en' | 'fr';
+  number: string; business: string; survey: string; gift: string; amount: number; currency: string; /** CFA francs actually delivered when the owner's currency is not FCFA */ deliveredXAF: number | null; phone: string; deliveredAt: Date; reference: string; lang: 'en' | 'fr';
 }
 
 /** Null unless this gift really was delivered. */
@@ -43,9 +43,9 @@ export async function loadReceipt(giftId: string): Promise<ReceiptData | null> {
     where: { id: giftId },
     include: { contact: { select: { phone: true } }, survey: { select: { title: true, language: true, user: { select: { businessName: true } } } } },
   });
-  if (!g || g.status !== 'sent' || !g.sentAt || !g.amountFCFA || !(PAID_GIFT_TYPES as readonly string[]).includes(g.giftType)) return null;
+  if (!g || g.status !== 'sent' || !g.sentAt || !g.amount || !(PAID_GIFT_TYPES as readonly string[]).includes(g.giftType)) return null;
   return {
-    number: `SF-${g.id.slice(-8).toUpperCase()}`, business: g.survey.user.businessName, survey: g.survey.title, gift: g.giftValue ?? '', amountFCFA: g.amountFCFA,
+    number: `SF-${g.id.slice(-8).toUpperCase()}`, business: g.survey.user.businessName, survey: g.survey.title, gift: g.giftValue ?? '', amount: g.amount, currency: g.currency, deliveredXAF: isCfa(g.currency) ? null : g.payoutXAF,
     phone: maskPhone(g.contact.phone), deliveredAt: g.sentAt, reference: g.providerRef ?? g.id, lang: g.survey.language === 'en' ? 'en' : 'fr',
   };
 }
@@ -53,7 +53,8 @@ export async function loadReceipt(giftId: string): Promise<ReceiptData | null> {
 export function buildReceiptHtml(r: ReceiptData): string {
   const t = L[r.lang];
   const date = new Intl.DateTimeFormat(r.lang === 'fr' ? 'fr-FR' : 'en-GB', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Africa/Douala' }).format(r.deliveredAt);
-  const amount = `${Math.round(r.amountFCFA).toString().replace(/\B(?=(\d{3})+(?!\d))/g, r.lang === 'fr' ? ' ' : ',')} FCFA`;
+  const fmt = (n: number) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, r.lang === 'fr' ? ' ' : ',');
+  const amount = `${fmt(r.amount)} ${currencyLabel(r.currency)}`;
   const row = (k: string, v: string) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`;
   return `<!doctype html><html lang="${r.lang}"><head><meta charset="utf-8"><style>
 *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#0B2B22;margin:0}
@@ -68,7 +69,7 @@ td{padding:7px 0;border-bottom:1px solid #e3ebe6;font-weight:600;word-break:brea
 <h1>${esc(t.title)}</h1><span class="ok">&#10003; ${esc(t.delivered)}</span>
 <table>
 ${row(t.from, r.business)}${row(t.survey, r.survey)}${row(t.gift, r.gift)}
-<tr class="amt"><th>${esc(t.amount)}</th><td>${esc(amount)}</td></tr>
+<tr class="amt"><th>${esc(t.amount)}</th><td>${esc(amount)}</td></tr>${r.deliveredXAF ? row(t.value, `${fmt(r.deliveredXAF)} FCFA`) : ''}
 ${row(t.to, r.phone)}${row(t.date, date)}${row(t.ref, r.reference)}
 </table>
 <p class="note">${esc(t.note)}<br>${esc(t.issued)} ${esc(r.business)}.</p>

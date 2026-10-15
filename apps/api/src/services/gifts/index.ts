@@ -1,9 +1,11 @@
 import type { Prisma, Survey, Contact, User } from '@prisma/client';
-import { PAID_GIFT_TYPES, buildThankYouMessage, getPlan, giftFeeFCFA, sys, toWaId, type SurveyLang } from '@surveyflow/shared';
+import { PAID_GIFT_TYPES, buildThankYouMessage, convertToXAF, getPlan, giftFee, isCfa, sys, toWaId, type Currency, type SurveyLang } from '@surveyflow/shared';
 import { env } from '../../config/env';
 import { conflict } from '../../lib/errors';
 import { generateDiscountCode } from '../../lib/crypto';
 import { prisma, type Tx } from '../../lib/prisma';
+import { walletCurrency } from '../billing-currency';
+import { getQuote } from '../fx';
 import { receiptToken, receiptUrl } from '../receipts';
 import { creditWallet, debitWallet, heldByGift } from '../wallet';
 import { credsFor } from '../whatsapp/accounts';
@@ -30,7 +32,7 @@ export interface GiftPlan {
   code?: string;
 }
 
-type SurveyWithOwner = Survey & { user: Pick<User, 'plan'> };
+type SurveyWithOwner = Survey & { user: Pick<User, 'plan' | 'giftCurrency' | 'preferredCurrency' | 'country'> };
 
 const nextTopOfHour = () => {
   const d = new Date();
@@ -59,15 +61,15 @@ export async function planGift(tx: Tx, survey: SurveyWithOwner, contact: Pick<Co
   switch (type) {
     case 'airtime':
     case 'momo': {
-      if (!survey.giftAmountFCFA) return { type: 'none' };
-      const feeFCFA = giftFeeFCFA(survey.giftAmountFCFA, env.GIFT_FEE_PERCENT);
+      if (!survey.giftAmount) return { type: 'none' };
+      const fee = giftFee(survey.giftAmount, env.GIFT_FEE_PERCENT);
       const gift = await tx.giftDelivery.create({
         data: {
-          surveyId: survey.id, contactId: contact.id, giftType: type, giftValue: survey.giftValue, amountFCFA: survey.giftAmountFCFA, feeFCFA,
+          surveyId: survey.id, contactId: contact.id, giftType: type, giftValue: survey.giftValue, amount: survey.giftAmount, fee, currency: walletCurrency(survey.user),
           status: 'pending', scheduledFor: survey.giftDeliveryMode === 'batch' ? nextTopOfHour() : new Date(),
         },
       });
-      const paid = await debitWallet(tx, survey.userId, survey.giftAmountFCFA + feeFCFA, gift.id, `Gift — ${survey.title}`);
+      const paid = await debitWallet(tx, survey.userId, survey.giftAmount + fee, gift.id, `Gift — ${survey.title}`);
       if (paid === null) {
         // Not enough prepaid balance: the participant must NOT be promised a gift. Keep the row so the owner can release it.
         await tx.giftDelivery.update({ where: { id: gift.id }, data: { status: 'unfunded' } });
@@ -134,12 +136,26 @@ async function processGift(id: string) {
     return;
   }
 
+  // The provider pays in CFA francs. A gift in another currency is converted at the live rate ONCE and that amount is pinned on the
+  // row, so a retry never re-quotes. No fresh rate: wait (the owner's money stays debited, nothing is guessed) and try again shortly.
+  let payoutXAF = gift.payoutXAF;
+  if (payoutXAF === null) {
+    if (isCfa(gift.currency)) payoutXAF = gift.amount!;
+    else {
+      const q = await getQuote(gift.currency as Currency);
+      if (!q) {
+        await prisma.giftDelivery.update({ where: { id }, data: { errorMessage: 'fx_unavailable: waiting for the exchange rate', scheduledFor: new Date(Date.now() + 10 * 60_000) } });
+        return;
+      }
+      payoutXAF = convertToXAF(gift.amount!, q);
+    }
+  }
   const ref = `sf-gift-${gift.id}`;
-  await prisma.giftDelivery.update({ where: { id }, data: { attempts: { increment: 1 }, providerRef: ref, errorMessage: null } });
+  await prisma.giftDelivery.update({ where: { id }, data: { attempts: { increment: 1 }, providerRef: ref, errorMessage: null, payoutXAF } });
   const provider = getGiftProvider();
   try {
     const phone = toWaId(gift.contact.phone);
-    const res = gift.giftType === 'airtime' ? await provider.sendAirtime(phone, gift.amountFCFA!, ref) : await provider.sendMoMo(phone, gift.amountFCFA!, ref);
+    const res = gift.giftType === 'airtime' ? await provider.sendAirtime(phone, payoutXAF, ref) : await provider.sendMoMo(phone, payoutXAF, ref);
     await prisma.giftDelivery.update({ where: { id }, data: { status: 'sent', sentAt: new Date(), providerRef: res.providerRef, errorMessage: null } });
     await notifyGiftSent(gift);
   } catch (err) {
@@ -192,8 +208,8 @@ async function failAndRefund(id: string, message: string) {
 async function reactivate(from: 'failed' | 'unfunded', id: string): Promise<boolean> {
   try {
     return await prisma.$transaction(async (tx) => {
-      const g = await tx.giftDelivery.findUnique({ where: { id }, select: { amountFCFA: true, feeFCFA: true, survey: { select: { userId: true, title: true } } } });
-      if (!g?.amountFCFA) return false;
+      const g = await tx.giftDelivery.findUnique({ where: { id }, select: { amount: true, fee: true, survey: { select: { userId: true, title: true } } } });
+      if (!g?.amount) return false;
       // The compare-and-set is what makes a double click / two tabs charge once.
       const claimed = await tx.giftDelivery.updateMany({
         where: { id, status: from, ...(from === 'failed' ? { refundedAt: { not: null } } : {}) },
@@ -201,7 +217,7 @@ async function reactivate(from: 'failed' | 'unfunded', id: string): Promise<bool
         data: { status: 'pending', attempts: 0, errorMessage: null, refundedAt: null, scheduledFor: new Date(), notifyViaTemplate: true },
       });
       if (!claimed.count) return false;
-      const ok = await debitWallet(tx, g.survey.userId, g.amountFCFA + g.feeFCFA, id, `${from === 'failed' ? 'Retry' : 'Released'} — ${g.survey.title}`);
+      const ok = await debitWallet(tx, g.survey.userId, g.amount + g.fee, id, `${from === 'failed' ? 'Retry' : 'Released'} — ${g.survey.title}`);
       if (ok === null) throw new InsufficientFunds();
       return true;
     });

@@ -168,14 +168,39 @@ describe('PSP failover', () => {
     expect(router.chain({ country: 'CM', currency: 'XAF', method: 'mobile_money' }).map((a) => a.name)).toEqual(['campay']);
   });
 
-  it('silently picks the cheapest provider by configured fee and keeps the others as failover; unknown fees keep the country order', async () => {
+  it('silently picks the cheapest provider by fee and keeps the others as failover; unknown fees keep the country order', async () => {
     const router = new PSPRouter([fake('campay', 'ok'), fake('notchpay', 'ok'), fake('payunit', 'ok'), fake('mock', 'ok')]);
     router.getAdapter('mock')!.isConfigured = () => false;
-    const names = (fees: object) => router.chain({ country: 'CM', currency: 'XAF', method: 'mobile_money' }, fees as never).map((a) => a.name);
-    expect(names({})).toEqual(['campay', 'notchpay', 'payunit']); // no fee data: configured order
-    expect(names({ notchpay: { mobile_money: 1.5 }, campay: { mobile_money: 2.5 } })).toEqual(['notchpay', 'campay', 'payunit']);
-    expect(names({ payunit: { mobile_money: 0.9 } })).toEqual(['payunit', 'campay', 'notchpay']);
-    expect(names({ payunit: { card: 0.1 } })).toEqual(['campay', 'notchpay', 'payunit']); // a card fee says nothing about MoMo
+    const names = (fees?: object) => router.chain({ country: 'CM', currency: 'XAF', method: 'mobile_money' }, fees as never).map((a) => a.name);
+    const pct = (n: number) => ({ mobile_money: { percent: n } });
+    expect(names({})).toEqual(['campay', 'notchpay', 'payunit']); // no fee data at all: configured order
+    expect(names({ notchpay: pct(1.5), campay: pct(2.5) })).toEqual(['notchpay', 'campay', 'payunit']);
+    expect(names({ payunit: pct(0.9) })).toEqual(['payunit', 'campay', 'notchpay']);
+    expect(names({ payunit: { card: { percent: 0.1 } } })).toEqual(['campay', 'notchpay', 'payunit']); // a card fee says nothing about MoMo
+    // by default the documented contract fees apply (NotchPay 1.0 %, Campay 2.0 %, PayUnit: none in the document)
+    expect(names()).toEqual(['notchpay', 'campay', 'payunit']);
+  });
+
+  it('cards are not tied to the buyer\'s country, and mobile money is; every provider is filtered by the currency it can charge', async () => {
+    const router = new PSPRouter([fake('campay', 'ok'), fake('notchpay', 'ok'), fake('camerpay', 'ok'), fake('cinetpay', 'ok'), fake('flutterwave', 'ok'), fake('mock', 'ok')]);
+    router.getAdapter('mock')!.isConfigured = () => false;
+    const chain = (p: { country: string; currency: string; method: 'card' | 'mobile_money' }) => router.chain(p, undefined).map((a) => a.name);
+    // A Nigerian, a Kenyan and a Cameroonian pay by card the same way: any card-capable provider, cheapest first (documented fees, percent only here).
+    for (const country of ['NG', 'KE', 'CM']) expect(chain({ country, currency: 'XAF', method: 'card' })).toEqual(['cinetpay', 'notchpay', 'flutterwave', 'camerpay']); // 3.5 %, 3.9 %, 4.8 %, 5.9 %
+    // Mobile money stays local: Campay (Cameroon, XAF only) and CamerPay (Cameroon) never serve a Nigerian
+    expect(chain({ country: 'NG', currency: 'NGN', method: 'mobile_money' })).toEqual(['notchpay', 'flutterwave']);
+    expect(chain({ country: 'CM', currency: 'XAF', method: 'mobile_money' })).toEqual(['notchpay', 'campay', 'cinetpay', 'camerpay']);
+    expect(chain({ country: 'CM', currency: 'XAF', method: 'card' })).not.toContain('campay'); // Campay has no cards
+  });
+
+  it('the fixed part of a card fee changes the order on a small payment (NotchPay 3.9 % + $0.30 vs Flutterwave 4.8 % on 14,500 FCFA)', async () => {
+    const router = new PSPRouter([fake('notchpay', 'ok'), fake('flutterwave', 'ok'), fake('mock', 'ok')]);
+    router.getAdapter('mock')!.isConfigured = () => false;
+    const usd = (a: number, c: string) => (c === 'USD' ? a * 580 : null);
+    const order = (amountXAF?: number) => router.chain({ country: 'NG', currency: 'NGN', method: 'card', amountXAF }, undefined, usd).map((a) => a.name);
+    expect(order()).toEqual(['notchpay', 'flutterwave']); // percent only: 3.9 < 4.8
+    expect(order(14_500)).toEqual(['flutterwave', 'notchpay']); // with the $0.30: ≈5.1 % > 4.8 %
+    expect(order(100_000)).toEqual(['notchpay', 'flutterwave']); // on a big payment the fixed part washes out
   });
 
   it('charges through the cheapest provider and fails over to the next one when it is down', async () => {
@@ -183,7 +208,7 @@ describe('PSP failover', () => {
     router.getAdapter('mock')!.isConfigured = () => false;
     const o = await registerOwner(app);
     const input = { plan: 'starter', interval: 'monthly', method: 'mobile_money', phone: '+237677000001' } as const;
-    const fees = { notchpay: { mobile_money: 1 }, campay: { mobile_money: 2 } };
+    const fees = { notchpay: { mobile_money: { percent: 1 } }, campay: { mobile_money: { percent: 2 } } };
     const orig = router.chain.bind(router);
     router.chain = (p) => orig(p, fees as never); // notchpay is cheapest but down → campay
     const tx = await initiatePayment(o.userId, input, router);

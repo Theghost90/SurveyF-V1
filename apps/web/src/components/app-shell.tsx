@@ -11,7 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Skeleton } from '@/components/ui/skeleton';
 import { useWallet } from '@/components/wallet/use-wallet';
 import { useAccount } from '@/lib/account';
-import { dateShort, fcfa } from '@/lib/format';
+import { dateShort, money, num } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 import { useEffect } from 'react';
@@ -64,8 +64,8 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
           <div className="ml-auto flex items-center gap-3 sm:ml-0">
             {account && <Link href="/billing" className="hidden sm:inline"><Badge variant={account.plan.key === 'trial' ? 'amber' : 'default'}>{t(`plan.${account.plan.key as 'trial'}`)}</Badge></Link>}
             {account?.plan.features.giftAutomation && wallet && (
-              <Link href="/billing#wallet" className="hidden sm:inline" aria-label={`${t('w.title')}: ${fcfa(wallet.balanceFCFA, locale)} FCFA`}>
-                <Badge variant={wallet.balanceFCFA === 0 ? 'amber' : 'neutral'}><Wallet className="mr-1 h-3.5 w-3.5" aria-hidden />{fcfa(wallet.balanceFCFA, locale)}</Badge>
+              <Link href="/billing#wallet" className="hidden sm:inline" aria-label={`${t('w.title')}: ${money(wallet.balance, wallet.currency, locale)}`}>
+                <Badge variant={wallet.balance === 0 ? 'amber' : 'neutral'}><Wallet className="mr-1 h-3.5 w-3.5" aria-hidden />{num(wallet.balance, locale)}</Badge>
               </Link>
             )}
             <LanguageToggle />

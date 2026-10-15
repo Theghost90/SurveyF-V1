@@ -54,20 +54,6 @@ export async function enqueueInvitations(survey: { id: string; userId: string },
   return queued;
 }
 
-export async function enqueueReminders(survey: { id: string; userId: string }, target: 'abandoned' | 'no_reply') {
-  const statuses = target === 'abandoned' ? ['abandoned'] : ['sent', 'delivered'];
-  const recipients = await prisma.surveyRecipient.findMany({
-    where: { surveyId: survey.id, status: { in: statuses as never[] }, remindedAt: null, contact: { optedOutAt: null } },
-    select: { id: true },
-  });
-  if (!recipients.length) return 0;
-  await prisma.sendJob.createMany({
-    // "No reply" gets the invitation again; "abandoned" gets the continue-where-you-left-off reminder.
-    data: recipients.map((r) => ({ userId: survey.userId, recipientId: r.id, kind: target === 'abandoned' ? 'reminder' : 'invitation' })),
-  });
-  return recipients.length;
-}
-
 export async function enqueueSessionMessage(userId: string, phoneNumberId: string, to: string, messages: OutboundMessage[]) {
   await prisma.sendJob.create({ data: { userId, kind: 'session_message', payload: { phoneNumberId, to, messages } as unknown as Prisma.InputJsonValue } });
 }

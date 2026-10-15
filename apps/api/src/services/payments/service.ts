@@ -1,10 +1,12 @@
 import { customAlphabet } from 'nanoid';
 import type { PaymentTransaction, Plan, Prisma } from '@prisma/client';
-import { ANNUAL_MONTHS_CHARGED, PLANS, WALLET_TOPUP_MAX_FCFA, WALLET_TOPUP_MIN_FCFA, currencyForCountry, planPrice, toWaId, type Currency, type PaidPlanKey, type PaymentMethod } from '@surveyflow/shared';
+import { ANNUAL_MONTHS_CHARGED, PLANS, PSP_CHARGE_CURRENCIES, convertToXAF, currencyLabel, isCfa, planPriceIn, planPriceXAF, toWaId, walletLimits, type Currency, type FxQuote, type PaidPlanKey, type PaymentMethod } from '@surveyflow/shared';
 import { env } from '../../config/env';
 import { AppError, badRequest, conflict, notFound } from '../../lib/errors';
 import { prisma } from '../../lib/prisma';
 import { notifyOwner } from '../notify';
+import { billingQuote, methodsFor, walletCurrency, walletQuote } from '../billing-currency';
+import { fixedFeeConverter } from '../fx';
 import { creditWallet } from '../wallet';
 import { pspRouter, type PSPRouter } from './router';
 import { PspError, type PSPAdapter, type VerifyResult } from './types';
@@ -35,14 +37,14 @@ export const txDto = (t: PaymentTransaction) => ({
   paymentToken: t.status === 'pending' && !t.checkoutUrl ? t.pspReference : null, createdAt: t.createdAt, paidAt: t.paidAt, failReason: t.failReason,
 });
 
-/** Pricing is ALWAYS computed here from the plan table — the client never sends an amount. */
-function priceFor(plan: PaidPlanKey, currency: Currency, interval: 'monthly' | 'annual') {
-  try {
-    return { amount: planPrice(plan, currency, interval), currency };
-  } catch {
-    return { amount: planPrice(plan, 'USD', interval), currency: 'USD' as Currency };
+/** Mobile Money only exists in CFA francs: a payment in any other currency is by international card. */
+function assertMethodForCurrency(method: PaymentMethod, currency: string) {
+  if (!methodsFor(currency).includes(method) && method !== 'bank_transfer') {
+    throw badRequest('method_unavailable', `${method === 'mobile_money' ? 'Mobile Money' : 'This payment method'} is only available when paying in CFA francs. Pay by card.`);
   }
 }
+
+const fxRateOf = (q: FxQuote) => (isCfa(q.currency) ? null : q.rate);
 
 export async function initiatePayment(userId: string, input: InitiateInput, router: PSPRouter = pspRouter): Promise<PaymentTransaction> {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { subscription: true } });
@@ -55,9 +57,14 @@ export async function initiatePayment(userId: string, input: InitiateInput, rout
   });
   if (dup) return dup;
 
-  const currency = (user.preferredCurrency || currencyForCountry(user.country)) as Currency;
-  const { amount, currency: payCurrency } = priceFor(input.plan, currency, input.interval);
-  const chain = router.chain({ country: user.country, currency: payCurrency, method: input.method });
+  // The price is the FCFA price converted at the live rate into the owner's currency (CFA francs when no fresh rate exists), and the
+  // charge is made in that same currency: the provider shows the buyer exactly the amount we show, and settles to us in XAF.
+  const { quote } = await billingQuote(user);
+  const payCurrency = quote.currency;
+  assertMethodForCurrency(input.method, payCurrency);
+  const amount = planPriceIn(input.plan, input.interval, quote);
+  const amountXAF = planPriceXAF(input.plan, input.interval);
+  const chain = router.chain({ country: user.country, currency: payCurrency, method: input.method, amountXAF }, undefined, await fixedFeeConverter());
   if (!chain.length) throw new AppError(503, 'no_psp_available', 'No payment provider is available for this country / payment method right now');
 
   const phone = (input.phone ?? user.phone ?? '').trim();
@@ -67,7 +74,7 @@ export async function initiatePayment(userId: string, input: InitiateInput, rout
 
   const tx = await prisma.paymentTransaction.create({
     data: {
-      subscriptionId: user.subscription.id, userId, pspProvider: chain[0]!.name, amount, currency: payCurrency, status: 'pending',
+      subscriptionId: user.subscription.id, userId, pspProvider: chain[0]!.name, amount, currency: payCurrency, amountXAF, fxRate: fxRateOf(quote), status: 'pending',
       reference: `sf${refId()}`, purpose: 'subscription', plan: input.plan as Plan, interval: input.interval, method: input.method, phone: phone || null,
     },
   });
@@ -102,31 +109,45 @@ async function dispatchCheckout(
 }
 
 export interface TopupInput {
-  amountFCFA: number;
+  /** Whole units of the wallet's currency. */
+  amount: number;
   method: PaymentMethod;
   phone?: string;
 }
 
 /**
- * Gift-wallet top-up. The wallet is in FCFA and gifts only exist in the FCFA zone, so the charge is always in XAF/XOF
- * (1:1) — no FX rate is ever invented. The amount is validated here; the client never decides pricing.
+ * Gift-wallet top-up, in the owner's currency. The amount is checked against the live limits of that currency (the FCFA limits converted
+ * at the current rate); the charge is made in that currency and settles to us in XAF. The wallet currency is fixed by the first
+ * top-up, so every later one must be in the same currency. The client never decides pricing: it sends an amount, the server validates it.
  */
 export async function initiateGiftTopup(userId: string, input: TopupInput, router: PSPRouter = pspRouter): Promise<PaymentTransaction> {
-  const amount = input.amountFCFA;
-  if (!Number.isInteger(amount) || amount < WALLET_TOPUP_MIN_FCFA || amount > WALLET_TOPUP_MAX_FCFA) {
-    throw badRequest('invalid_amount', `Top-up must be between ${WALLET_TOPUP_MIN_FCFA.toLocaleString('en')} and ${WALLET_TOPUP_MAX_FCFA.toLocaleString('en')} FCFA`);
-  }
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { subscription: true } });
   if (!user.subscription) throw notFound('Subscription');
 
+  const currency = walletCurrency(user);
+  if (!(PSP_CHARGE_CURRENCIES as readonly string[]).includes(currency)) {
+    throw new AppError(503, 'currency_unsupported', `Top-ups in ${currency} are not available: the payment providers cannot charge in it.`);
+  }
+  const quote = await walletQuote(user); // 503 fx_unavailable rather than guess
+  const limits = walletLimits(quote);
+  const amount = input.amount;
+  if (!Number.isInteger(amount) || amount < limits.topupMin || amount > limits.topupMax) {
+    throw badRequest('invalid_amount', `Top-up must be between ${limits.topupMin.toLocaleString('en')} and ${limits.topupMax.toLocaleString('en')} ${currencyLabel(currency)}`, { min: limits.topupMin, max: limits.topupMax, currency });
+  }
+  assertMethodForCurrency(input.method, currency);
+
+  // One currency at a time: a second top-up in another currency while one is pending would corrupt the ledger's units.
+  const other = await prisma.paymentTransaction.findFirst({ where: { userId, purpose: 'gift_topup', status: 'pending', currency: { not: currency }, createdAt: { gt: new Date(Date.now() - 24 * 3_600_000) } } });
+  if (other) throw conflict('topup_in_other_currency', `A top-up in ${other.currency} is still pending. Finish or wait for it before topping up in ${currency}.`);
+
   const dup = await prisma.paymentTransaction.findFirst({
-    where: { userId, purpose: 'gift_topup', amount, method: input.method, status: 'pending', createdAt: { gt: new Date(Date.now() - 10 * 60_000) } },
+    where: { userId, purpose: 'gift_topup', amount, currency, method: input.method, status: 'pending', createdAt: { gt: new Date(Date.now() - 10 * 60_000) } },
     orderBy: { createdAt: 'desc' },
   });
   if (dup) return dup;
 
-  const currency: Currency = user.preferredCurrency === 'XOF' ? 'XOF' : 'XAF';
-  const chain = router.chain({ country: user.country, currency, method: input.method });
+  const amountXAF = convertToXAF(amount, quote);
+  const chain = router.chain({ country: user.country, currency, method: input.method, amountXAF }, undefined, await fixedFeeConverter());
   if (!chain.length) throw new AppError(503, 'no_psp_available', 'No payment provider is available for this country / payment method right now');
 
   const phone = (input.phone ?? user.phone ?? '').trim();
@@ -135,7 +156,7 @@ export async function initiateGiftTopup(userId: string, input: TopupInput, route
   }
   const tx = await prisma.paymentTransaction.create({
     data: {
-      subscriptionId: user.subscription.id, userId, pspProvider: chain[0]!.name, amount, currency, status: 'pending',
+      subscriptionId: user.subscription.id, userId, pspProvider: chain[0]!.name, amount, currency, amountXAF, fxRate: fxRateOf(quote), status: 'pending',
       reference: `sf${refId()}`, purpose: 'gift_topup', plan: null, interval: 'monthly', method: input.method, phone: phone || null,
     },
   });
@@ -173,14 +194,14 @@ export async function settleTransaction(txId: string, v: VerifyResult, log: { wa
     if (claimed.count === 0) return false; // another delivery got here first
     if (tx.purpose === 'gift_topup') {
       // Credit what we ASKED for (tx.amount), not what the PSP says it collected: an overpayment must not mint wallet balance.
-      await creditWallet(db, tx.userId, tx.amount, 'topup', tx.id, `Top-up (${tx.method === 'card' ? 'card' : 'Mobile Money'} · ${tx.pspProvider})`);
+      await creditWallet(db, tx.userId, tx.amount, 'topup', tx.id, `Top-up (${tx.method === 'card' ? 'card' : 'Mobile Money'} · ${tx.pspProvider})`, tx.currency as Currency);
     } else {
       await activateSubscription(db, tx, v.pspReference ?? tx.pspReference ?? undefined);
     }
     return true;
   });
   if (activated) {
-    const msg = tx.purpose === 'gift_topup' ? `✅ SurveyFlow: ${tx.amount.toLocaleString('en')} FCFA added to your gift wallet.` : `✅ SurveyFlow: payment received. Your ${tx.plan} plan is active.`;
+    const msg = tx.purpose === 'gift_topup' ? `✅ SurveyFlow: ${tx.amount.toLocaleString('en')} ${currencyLabel(tx.currency)} added to your gift wallet.` : `✅ SurveyFlow: payment received. Your ${tx.plan} plan is active.`;
     void notifyOwner(tx.userId, msg).catch(() => undefined);
     return 'activated';
   }

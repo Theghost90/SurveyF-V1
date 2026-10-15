@@ -18,12 +18,19 @@ import { planFeatures } from '@/components/marketing/pricing-client';
 import { WalletCard } from '@/components/wallet/wallet-card';
 import type { Account } from '@/lib/account';
 import { ApiError, api, errorMessage } from '@/lib/api';
-import { dateShort, fcfa, money } from '@/lib/format';
+import { dateShort, money, num } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 
 type SubscriptionData = Account & {
+  /** What this owner is charged in (their currency at the live rate; FCFA when no fresh rate exists: `fallback`). */
   currency: string;
+  requestedCurrency: string;
+  fallback: boolean;
+  quote: { rate: number; asOf: string | null; source: string };
+  /** Mobile Money only exists in CFA francs: every other currency pays by card. */
+  methods: Array<'mobile_money' | 'card'>;
+  overagePer100: number;
   prices: Record<PaidPlanKey, { monthly: number; annual: number; currency: string }>;
   invoices: Array<{ id: string; plan: string; interval: string; method: string; psp: string; amount: number; currency: string; paidAt: string | null; reference: string }>;
 };
@@ -75,11 +82,11 @@ export function SubscriptionPage({ initialPlan, initialInterval }: { initialPlan
           {meters.map((m) => (
             <div key={m.label} className="flex flex-col gap-2">
               <span className="text-sm font-semibold text-body">{m.label}</span>
-              <span className="font-display text-2xl font-extrabold">{fcfa(m.used, locale)}<span className="text-base text-muted-foreground"> / {m.max === null ? '∞' : fcfa(m.max, locale)}</span></span>
+              <span className="font-display text-2xl font-extrabold">{num(m.used, locale)}<span className="text-base text-muted-foreground"> / {m.max === null ? '∞' : num(m.max, locale)}</span></span>
               <Progress value={m.used} max={m.max} label={m.label} />
             </div>
           ))}
-          {usage.responseOverageFCFA > 0 && <p className="rounded-xl bg-amber-soft p-3 text-sm text-amber-ink sm:col-span-3">{t('dash.overage', { n: fcfa(usage.responseOverageFCFA, locale) })} {t('bill.overageNote')}</p>}
+          {usage.responseOverageFCFA > 0 && <p className="rounded-xl bg-amber-soft p-3 text-sm text-amber-ink sm:col-span-3">{t('dash.overage', { n: money(usage.responseOverage, usage.overageCurrency, locale) })} {t('bill.overageNote', { amount: money(data.overagePer100, data.currency, locale) })}</p>}
         </CardContent>
       </Card>
 
@@ -91,6 +98,7 @@ export function SubscriptionPage({ initialPlan, initialInterval }: { initialPlan
           {(['monthly', 'annual'] as const).map((v) => <button key={v} type="button" aria-pressed={interval === v} onClick={() => setInterval_(v)} className={cn('min-h-[34px] rounded-full px-3', interval === v ? 'bg-ink text-white' : 'text-muted-foreground')}>{v === 'monthly' ? t('pricing.monthly') : t('pricing.annual')}</button>)}
         </div>
       </div>
+      <FxNote data={data} />
       <div className="grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(290px,1fr))]">
         {PAID_PLAN_KEYS.map((key) => {
           const price = data.prices[key];
@@ -101,7 +109,7 @@ export function SubscriptionPage({ initialPlan, initialInterval }: { initialPlan
             <Card key={key} className={cn('flex flex-col gap-4 p-6', featured && 'border-2 border-brand')}>
               <div className="flex items-center justify-between"><h3 className="font-display text-2xl font-bold">{t(`plan.${key}`)}</h3>{current && <Badge variant="brand">{t('bill.current')}</Badge>}</div>
               <p className="text-sm text-muted-foreground">{t(`plan.${key}Who`)}</p>
-              <div className="flex items-baseline gap-1.5"><span className="font-display text-4xl font-extrabold tracking-tight">{fcfa(interval === 'annual' ? price.annual : price.monthly, locale)}</span><span className="text-sm text-muted-foreground">{price.currency === 'XAF' || price.currency === 'XOF' ? 'FCFA' : price.currency} / {interval === 'annual' ? t('bill.year') : t('bill.month')}</span></div>
+              <div className="flex items-baseline gap-1.5"><span className="font-display text-4xl font-extrabold tracking-tight">{num(interval === 'annual' ? price.annual : price.monthly, locale)}</span><span className="text-sm text-muted-foreground">{price.currency === 'XAF' || price.currency === 'XOF' ? 'FCFA' : price.currency} / {interval === 'annual' ? t('bill.year') : t('bill.month')}</span></div>
               <Button size="lg" variant={featured ? 'brand' : 'default'} disabled={lower} onClick={() => setCheckout(key)}>{current ? t('bill.renew') : lower ? t('bill.lower') : t('bill.select')}</Button>
               <ul className="flex flex-col gap-2 text-sm">
                 {planFeatures(key, t, locale).map((f) => <li key={f.text} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-leaf" strokeWidth={2.6} aria-hidden /><span>{f.text}{f.soon && <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">{t('pricing.soon')}</span>}</span></li>)}
@@ -127,7 +135,7 @@ export function SubscriptionPage({ initialPlan, initialInterval }: { initialPlan
 function CheckoutDialog({ plan, interval, data, onClose }: { plan: PaidPlanKey | null; interval: 'monthly' | 'annual'; data: SubscriptionData; onClose: () => void }) {
   const t = useT();
   const locale = useLocale();
-  const [method, setMethod] = useState<'mobile_money' | 'card'>('mobile_money');
+  const [method, setMethod] = useState<'mobile_money' | 'card'>(data.methods[0] ?? 'card');
   const [phone, setPhone] = useState(formatPhone(data.user.phone));
   const example = phoneExampleFor(data.user.country);
   const [busy, setBusy] = useState(false);
@@ -179,16 +187,34 @@ function CheckoutDialog({ plan, interval, data, onClose }: { plan: PaidPlanKey |
         ) : (
           <>
             <RadioGroup value={method} onValueChange={(v) => setMethod(v as typeof method)} aria-label={t('bill.method')}>
-              <label className={cn('flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3.5 font-medium', method === 'mobile_money' ? 'border-leaf bg-mint/40' : 'border-line')}><RadioGroupItem value="mobile_money" /><Smartphone className="h-5 w-5 text-leaf" aria-hidden />{t('bill.momo')}</label>
+              {data.methods.includes('mobile_money') && <label className={cn('flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3.5 font-medium', method === 'mobile_money' ? 'border-leaf bg-mint/40' : 'border-line')}><RadioGroupItem value="mobile_money" /><Smartphone className="h-5 w-5 text-leaf" aria-hidden />{t('bill.momo')}</label>}
               <label className={cn('flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3.5 font-medium', method === 'card' ? 'border-leaf bg-mint/40' : 'border-line')}><RadioGroupItem value="card" /><CreditCard className="h-5 w-5 text-leaf" aria-hidden />{t('bill.card')}</label>
             </RadioGroup>
             {method === 'mobile_money' && <Field label={t('bill.momoPhone')} htmlFor="pay-phone" hint={t('bill.momoHint')}><Input id="pay-phone" type="tel" placeholder={example} value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" /></Field>}
             {error && <p role="alert" className="text-sm font-medium text-destructive">{error}</p>}
             <DialogFooter><Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button><Button size="lg" variant="brand" loading={busy} onClick={pay}>{t('bill.pay', { amount: money(amount, price.currency, locale) })}</Button></DialogFooter>
             <p className="text-xs text-muted-foreground">{t('bill.secure')}</p>
+            <FxNote data={data} compact />
           </>
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Says how a non-FCFA price was made (live rate, card payment) or why prices are in FCFA although the owner's currency is another. */
+function FxNote({ data, compact = false }: { data: SubscriptionData; compact?: boolean }) {
+  const t = useT();
+  const locale = useLocale();
+  const converted = data.currency !== 'XAF' && data.currency !== 'XOF';
+  if (!converted && !data.fallback) return null;
+  const date = data.quote.asOf ? dateShort(data.quote.asOf, locale) : '';
+  return (
+    <p className={cn('text-muted-foreground', compact ? 'text-xs' : 'mb-5 text-sm')} data-testid="fx-note">
+      {converted
+        ? <>{t('pricing.rate', { currency: data.currency, rate: new Intl.NumberFormat(locale === 'fr' ? 'fr-FR' : 'en-US', { maximumSignificantDigits: 4 }).format(data.quote.rate), date: date || '—' })} {t('pricing.card')}{' '}
+            <a href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer" className="underline">{t('pricing.ratesBy')}</a></>
+        : t('pricing.rateDown', { currency: data.requestedCurrency })}
+    </p>
   );
 }

@@ -115,7 +115,7 @@ type RecipientWithSurvey = SurveyRecipient & {
 async function loadSurvey(id: string) {
   return prisma.survey.findUnique({
     where: { id },
-    include: { questions: { orderBy: { order: 'asc' } }, user: { select: { plan: true, locale: true } } },
+    include: { questions: { orderBy: { order: 'asc' } }, user: { select: { plan: true, locale: true, giftCurrency: true, preferredCurrency: true, country: true } } },
   });
 }
 

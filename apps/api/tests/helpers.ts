@@ -1,3 +1,4 @@
+import { currencyForCountry, type Currency } from '@surveyflow/shared';
 import { createHmac } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
@@ -67,18 +68,18 @@ export async function setPlan(userId: string, plan: 'trial' | 'starter' | 'growt
 }
 
 /** Funds the gift wallet through the same code path a settled top-up uses, so balance and ledger stay consistent. */
-export async function fundWallet(userId: string, amount: number) {
-  await prisma.$transaction((tx) => creditWallet(tx, userId, amount, 'topup', `test-topup-${Date.now()}`, 'test top-up'));
+export async function fundWallet(userId: string, amount: number, currency?: Currency) {
+  await prisma.$transaction((tx) => creditWallet(tx, userId, amount, 'topup', `test-topup-${Date.now()}`, 'test top-up', currency));
 }
 
 /** balance == sum(ledger) and never negative: the two properties the wallet must hold after ANY sequence of operations. */
 export async function walletState(userId: string) {
   const [u, agg, entries] = await Promise.all([
-    prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { giftBalanceFCFA: true } }),
-    prisma.walletEntry.aggregate({ where: { userId }, _sum: { deltaFCFA: true } }),
+    prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { giftBalance: true } }),
+    prisma.walletEntry.aggregate({ where: { userId }, _sum: { delta: true } }),
     prisma.walletEntry.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
   ]);
-  return { balance: u.giftBalanceFCFA, ledgerSum: agg._sum.deltaFCFA ?? 0, entries };
+  return { balance: u.giftBalance, ledgerSum: agg._sum.delta ?? 0, entries };
 }
 
 export const sampleQuestions = () => [
@@ -96,9 +97,12 @@ export interface World {
 }
 
 /** Owner + simulated WhatsApp number + N contacts + a published survey, invitations sent (worker run). */
-export async function buildWorld(app: FastifyInstance, opts: { contacts?: number; plan?: 'trial' | 'starter' | 'growth' | 'business'; gift?: Record<string, unknown>; send?: boolean; questions?: unknown[]; wallet?: number } = {}): Promise<World> {
+export async function buildWorld(app: FastifyInstance, opts: { country?: string; contacts?: number; plan?: 'trial' | 'starter' | 'growth' | 'business'; gift?: Record<string, unknown>; send?: boolean; questions?: unknown[]; wallet?: number } = {}): Promise<World> {
   const owner = await registerOwner(app, { plan: opts.plan });
-  if (opts.wallet) await fundWallet(owner.userId, opts.wallet);
+  // An owner in another country: their currency (and so their wallet's) is that country's, as if they had registered from there.
+  const currency = currencyForCountry(opts.country ?? 'CM');
+  if (opts.country) await prisma.user.update({ where: { id: owner.userId }, data: { country: opts.country, preferredCurrency: currency } });
+  if (opts.wallet) await fundWallet(owner.userId, opts.wallet, currency);
   const acct = await owner.post('/api/whatsapp/accounts/mock');
   if (acct.status !== 201) throw new Error('mock account: ' + JSON.stringify(acct));
   const phoneNumberId = acct.items[0].phoneNumberId as string;

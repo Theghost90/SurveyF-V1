@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
-import { dateTime, fcfa } from '@/lib/format';
+import { currencyLabel } from '@surveyflow/shared';
+import { dateTime, money, num } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 import { TopupDialog } from './topup-dialog';
@@ -28,7 +29,7 @@ export function WalletCard({ canUse, phone }: { canUse: boolean; phone: string }
           <CardTitle className="flex items-center gap-2"><Wallet className="h-5 w-5 text-leaf" aria-hidden />{t('w.title')}</CardTitle>
           <CardDescription className="max-w-2xl">{t('w.sub')}</CardDescription>
         </div>
-        {canUse && wallet && <Button variant="brand" onClick={() => setOpen(true)}><Plus className="h-4 w-4" aria-hidden />{t('w.topup')}</Button>}
+        {canUse && wallet && <Button variant="brand" disabled={wallet.fxUnavailable} onClick={() => setOpen(true)}><Plus className="h-4 w-4" aria-hidden />{t('w.topup')}</Button>}
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         {!wallet ? <Skeleton className="h-24" /> : (
@@ -37,16 +38,17 @@ export function WalletCard({ canUse, phone }: { canUse: boolean; phone: string }
               <div>
                 <p className="text-sm font-semibold text-body">{t('w.balance')}</p>
                 <p className="font-display text-4xl font-extrabold tabular-nums tracking-tight" data-testid="wallet-balance">
-                  {fcfa(wallet.balanceFCFA, locale)}<span className="ml-1.5 text-base font-semibold text-muted-foreground">FCFA</span>
+                  {num(wallet.balance, locale)}<span className="ml-1.5 text-base font-semibold text-muted-foreground">{currencyLabel(wallet.currency)}</span>
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 pb-1.5">
-                {wallet.inFlight.count > 0 && <Badge variant="neutral">{t('w.inFlight', { n: wallet.inFlight.count, amount: fcfa(wallet.inFlight.fcfa, locale) })}</Badge>}
-                {wallet.unfunded.count > 0 && <Badge variant="warn">{t('w.unfunded', { n: wallet.unfunded.count, amount: fcfa(wallet.unfunded.fcfa, locale) })}</Badge>}
-                {wallet.needsCheck.count > 0 && <Badge variant="danger">{t('w.needsCheck', { n: wallet.needsCheck.count, amount: fcfa(wallet.needsCheck.fcfa, locale) })}</Badge>}
+                {wallet.inFlight.count > 0 && <Badge variant="neutral">{t('w.inFlight', { n: wallet.inFlight.count, amount: money(wallet.inFlight.amount, wallet.currency, locale) })}</Badge>}
+                {wallet.unfunded.count > 0 && <Badge variant="warn">{t('w.unfunded', { n: wallet.unfunded.count, amount: money(wallet.unfunded.amount, wallet.currency, locale) })}</Badge>}
+                {wallet.needsCheck.count > 0 && <Badge variant="danger">{t('w.needsCheck', { n: wallet.needsCheck.count, amount: money(wallet.needsCheck.amount, wallet.currency, locale) })}</Badge>}
               </div>
             </div>
 
+            {wallet.fxUnavailable && <p role="status" className="rounded-xl bg-amber-soft px-4 py-3 text-sm text-amber-ink">{t('w.fxDown', { currency: currencyLabel(wallet.currency) })}</p>}
             {!canUse ? (
               <p className="flex items-center gap-2 rounded-xl bg-amber-soft px-4 py-3 text-sm text-amber-ink"><Lock className="h-4 w-4 shrink-0" aria-hidden />{t('w.locked')}</p>
             ) : (
@@ -69,8 +71,8 @@ export function WalletCard({ canUse, phone }: { canUse: boolean; phone: string }
                         <TR key={e.id}>
                           <TD className="whitespace-nowrap">{dateTime(e.at, locale)}</TD>
                           <TD><span className="font-semibold">{t(`w.kind.${e.kind}`)}</span>{e.note && <span className="ml-2 text-muted-foreground">{e.note}</span>}</TD>
-                          <TD className={cn('whitespace-nowrap text-right font-semibold tabular-nums', e.deltaFCFA > 0 ? 'text-leaf' : 'text-body')}>{e.deltaFCFA > 0 ? '+' : '−'}{fcfa(Math.abs(e.deltaFCFA), locale)}</TD>
-                          <TD className="hidden whitespace-nowrap text-right tabular-nums text-muted-foreground sm:table-cell">{fcfa(e.balanceAfter, locale)}</TD>
+                          <TD className={cn('whitespace-nowrap text-right font-semibold tabular-nums', e.delta > 0 ? 'text-leaf' : 'text-body')}>{e.delta > 0 ? '+' : '−'}{num(Math.abs(e.delta), locale)}</TD>
+                          <TD className="hidden whitespace-nowrap text-right tabular-nums text-muted-foreground sm:table-cell">{num(e.balanceAfter, locale)}</TD>
                         </TR>
                       ))}
                     </TBody>

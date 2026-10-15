@@ -4,14 +4,13 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import { Briefcase, Building2, Check, GraduationCap, Plus, Upload } from 'lucide-react';
-import { CUSTOMER_SEGMENTS, PAID_PLAN_KEYS, formatPrice, planPrice, type CustomerSegment } from '@surveyflow/shared';
+import { CUSTOMER_SEGMENTS, PAID_PLAN_KEYS, formatPrice, type CustomerSegment, type Currency, type PaidPlanKey } from '@surveyflow/shared';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { AddContactDialog, ImportDialog } from '@/components/contacts/contact-dialogs';
 import { WhatsAppConnect } from '@/components/settings/whatsapp-connect';
 import { useAccount } from '@/lib/account';
 import { api, errorMessage } from '@/lib/api';
-import { useOwnerCountry } from '@/lib/geo-context';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -29,7 +28,8 @@ function Wizard() {
   const params = useSearchParams();
   const { account, mutate } = useAccount();
   const { data: contacts, mutate: refreshContacts } = useSWR<{ total: number }>('/contacts?pageSize=1');
-  const { currency } = useOwnerCountry();
+  // Prices come from the API: the FCFA prices converted at the live rate into the owner's currency (FCFA when no fresh rate exists).
+  const { data: sub } = useSWR<{ currency: string; prices: Record<PaidPlanKey, { monthly: number }> }>('/subscription');
   const [step, setStep] = useState(1);
   const [savingSeg, setSavingSeg] = useState(false);
   const positioned = useRef(false);
@@ -113,7 +113,7 @@ function Wizard() {
               {PAID_PLAN_KEYS.map((k) => (
                 <Link key={k} href={`/billing?plan=${k}&interval=${params.get('interval') ?? 'monthly'}`} className={cn('flex flex-col gap-1 rounded-2xl border-2 p-4 no-underline', wanted === k ? 'border-brand bg-mint/40' : 'border-line hover:bg-canvas')}>
                   <span className="font-display text-xl font-bold text-ink">{t(`plan.${k}`)}</span>
-                  <span className="text-sm text-body">{formatPrice(planPrice(k, currency), currency, locale)} / {t('bill.month')}</span>
+                  <span className="text-sm text-body">{sub ? formatPrice(sub.prices[k].monthly, sub.currency as Currency, locale) : '…'} / {t('bill.month')}</span>
                 </Link>
               ))}
             </div>

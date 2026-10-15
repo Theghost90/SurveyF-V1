@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { giftFeeFCFA, giftUnitCostFCFA, worstCaseGiftCostFCFA } from '@surveyflow/shared';
+import { giftFee, giftUnitCost, worstCaseGiftCost } from '@surveyflow/shared';
 import { env } from '../src/config/env';
 import { prisma } from '../src/lib/prisma';
 import { redis } from '../src/lib/redis';
@@ -15,8 +15,8 @@ beforeAll(async () => { app = await makeApp(); });
 afterAll(async () => { await app.close(); await prisma.$disconnect(); redis.disconnect(); });
 beforeEach(async () => { setGiftProvider(null); await resetAll(); });
 
-const airtime = { giftType: 'airtime', giftValue: '500 FCFA airtime', giftAmountFCFA: 500, giftDeliveryMode: 'immediate' };
-const FEE = giftFeeFCFA(500, env.GIFT_FEE_PERCENT);
+const airtime = { giftType: 'airtime', giftValue: '500 FCFA airtime', giftAmount: 500, giftDeliveryMode: 'immediate' };
+const FEE = giftFee(500, env.GIFT_FEE_PERCENT);
 const COST = 500 + FEE; // what ONE gift costs the owner
 
 async function complete(w: World, idx: number) {
@@ -37,20 +37,20 @@ async function expectConsistent(userId: string) {
 
 describe('cost rules (shared)', () => {
   it('rounds the fee UP so SurveyFlow never loses a fraction of a franc, and prices exposure with the gift cap', () => {
-    expect(giftFeeFCFA(500, 5)).toBe(25);
-    expect(giftFeeFCFA(501, 5)).toBe(26); // 25.05 → 26
-    expect(giftFeeFCFA(500, 0)).toBe(0);
-    expect(giftUnitCostFCFA(500, 5)).toBe(525);
-    expect(worstCaseGiftCostFCFA({ amountFCFA: 500, percent: 5, invited: 1000, alreadyGifted: 0, maxCount: 100 })).toBe(52_500);
-    expect(worstCaseGiftCostFCFA({ amountFCFA: 500, percent: 5, invited: 40, alreadyGifted: 0, maxCount: null })).toBe(21_000);
-    expect(worstCaseGiftCostFCFA({ amountFCFA: 500, percent: 5, invited: 40, alreadyGifted: 100, maxCount: 100 })).toBe(0);
+    expect(giftFee(500, 5)).toBe(25);
+    expect(giftFee(501, 5)).toBe(26); // 25.05 → 26
+    expect(giftFee(500, 0)).toBe(0);
+    expect(giftUnitCost(500, 5)).toBe(525);
+    expect(worstCaseGiftCost({ amount: 500, percent: 5, invited: 1000, alreadyGifted: 0, maxCount: 100 })).toBe(52_500);
+    expect(worstCaseGiftCost({ amount: 500, percent: 5, invited: 40, alreadyGifted: 0, maxCount: null })).toBe(21_000);
+    expect(worstCaseGiftCost({ amount: 500, percent: 5, invited: 40, alreadyGifted: 100, maxCount: 100 })).toBe(0);
   });
 });
 
 describe('wallet top-up (through the real payment settle path)', () => {
   it('is refused on plans without gift automation (a balance that can never be spent must not be collected)', async () => {
     const o = await registerOwner(app); // trial
-    const r = await o.post('/api/wallet/topup', { amountFCFA: 10_000, method: 'mobile_money', phone: '+237677000001' });
+    const r = await o.post('/api/wallet/topup', { amount: 10_000, method: 'mobile_money', phone: '+237677000001' });
     expect(r.status).toBe(402);
     expect(r.error).toBe('plan_feature');
   });
@@ -58,24 +58,24 @@ describe('wallet top-up (through the real payment settle path)', () => {
   it('validates the amount server-side and credits only after the PSP confirms, exactly once', async () => {
     const o = await registerOwner(app, { plan: 'growth' });
     const body = { method: 'mobile_money', phone: '+237677000001' };
-    expect((await o.post('/api/wallet/topup', { ...body, amountFCFA: 500 })).status).toBe(400); // below minimum
-    expect((await o.post('/api/wallet/topup', { ...body, amountFCFA: 5_000_000 })).status).toBe(400); // above cap
-    expect((await o.post('/api/wallet/topup', { ...body, amountFCFA: 1234.5 })).status).toBe(400); // not whole francs
+    expect((await o.post('/api/wallet/topup', { ...body, amount: 500 })).status).toBe(400); // below minimum
+    expect((await o.post('/api/wallet/topup', { ...body, amount: 5_000_000 })).status).toBe(400); // above cap
+    expect((await o.post('/api/wallet/topup', { ...body, amount: 1234.5 })).status).toBe(400); // not whole francs
 
-    const init = await o.post('/api/wallet/topup', { ...body, amountFCFA: 10_000 });
+    const init = await o.post('/api/wallet/topup', { ...body, amount: 10_000 });
     expect(init.status).toBe(201);
     expect(init.body).toMatchObject({ purpose: 'gift_topup', amount: 10_000, currency: 'XAF', status: 'pending', plan: null });
-    expect((await o.post('/api/wallet/topup', { ...body, amountFCFA: 10_000 })).id).toBe(init.id); // double click: one charge
+    expect((await o.post('/api/wallet/topup', { ...body, amount: 10_000 })).id).toBe(init.id); // double click: one charge
 
-    expect((await o.get('/api/wallet')).balanceFCFA).toBe(0); // the redirect / pending state never credits
+    expect((await o.get('/api/wallet')).balance).toBe(0); // the redirect / pending state never credits
     await o.post(`/api/payments/mock/${init.reference}`, { outcome: 'success' });
     for (let i = 0; i < 3; i++) await o.get(`/api/payments/${init.id}`); // polling + webhook retries
     await o.post(`/api/payments/mock/${init.reference}`, { outcome: 'success' });
 
     const w = await o.get('/api/wallet');
-    expect(w.balanceFCFA).toBe(10_000);
+    expect(w.balance).toBe(10_000);
     expect(w.entries).toHaveLength(1);
-    expect(w.entries[0]).toMatchObject({ kind: 'topup', deltaFCFA: 10_000, balanceAfter: 10_000 });
+    expect(w.entries[0]).toMatchObject({ kind: 'topup', delta: 10_000, balanceAfter: 10_000 });
     expect((await o.get('/api/auth/me')).plan.key).toBe('growth'); // a top-up must not touch the subscription
     expect((await o.get('/api/subscription')).invoices).toHaveLength(0); // and is not a plan invoice
     await expectConsistent(o.userId);
@@ -85,7 +85,7 @@ describe('wallet top-up (through the real payment settle path)', () => {
     const o = await registerOwner(app, { plan: 'growth' });
     const body = { method: 'mobile_money', phone: '+237677000001' };
 
-    const declined = await o.post('/api/wallet/topup', { ...body, amountFCFA: 5_000 });
+    const declined = await o.post('/api/wallet/topup', { ...body, amount: 5_000 });
     expect((await o.post(`/api/payments/mock/${declined.reference}`, { outcome: 'failed' })).body.status).toBe('failed');
 
     const under = await prisma.paymentTransaction.create({ data: { ...(await txBase(o.userId)), amount: 8_000, reference: 'sfunder', purpose: 'gift_topup', plan: null } });
@@ -93,7 +93,7 @@ describe('wallet top-up (through the real payment settle path)', () => {
 
     const over = await prisma.paymentTransaction.create({ data: { ...(await txBase(o.userId)), amount: 8_000, reference: 'sfover', purpose: 'gift_topup', plan: null } });
     expect(await settleTransaction(over.id, { status: 'success', amount: 9_999, currency: 'XAF' }, { warn() {} })).toBe('activated');
-    expect((await o.get('/api/wallet')).balanceFCFA).toBe(8_000);
+    expect((await o.get('/api/wallet')).balance).toBe(8_000);
     await expectConsistent(o.userId);
   });
 });
@@ -111,8 +111,8 @@ describe('gifts are paid by the owner', () => {
     expect(s.balance).toBe(10_000 - COST);
     expect(s.entries.map((e) => e.kind)).toEqual(['topup', 'gift_debit']);
     const g = (await prisma.giftDelivery.findFirst())!;
-    expect(g).toMatchObject({ status: 'pending', amountFCFA: 500, feeFCFA: FEE });
-    expect(s.entries[1]).toMatchObject({ deltaFCFA: -COST, refId: g.id });
+    expect(g).toMatchObject({ status: 'pending', amount: 500, fee: FEE });
+    expect(s.entries[1]).toMatchObject({ delta: -COST, refId: g.id });
     expect(((await chatOf(0)).at(-1).message.body as string)).toContain('500 FCFA airtime');
 
     await processDueGifts();
@@ -166,7 +166,7 @@ describe('releasing the unfunded backlog (explicit, never automatic)', () => {
 
     await fundWallet(w.owner.userId, COST * 2);
     expect(await prisma.giftDelivery.count({ where: { status: 'unfunded' } })).toBe(3); // a top-up never auto-spends
-    expect((await w.owner.get('/api/wallet')).unfunded).toMatchObject({ count: 3, fcfa: COST * 3 });
+    expect((await w.owner.get('/api/wallet')).unfunded).toMatchObject({ count: 3, amount: COST * 3 });
 
     const r = await w.owner.post(`/api/surveys/${w.surveyId}/gifts/release`);
     expect(r).toMatchObject({ released: 2, remaining: 1 });
@@ -221,8 +221,8 @@ describe('failures give the money back — except when we cannot know', () => {
     await failThreeTimes();
     setGiftProvider(null);
     // spend the refunded money elsewhere (a second survey's gift) so the retry cannot be covered
-    await prisma.user.update({ where: { id: w.owner.userId }, data: { giftBalanceFCFA: 0 } });
-    await prisma.walletEntry.create({ data: { userId: w.owner.userId, deltaFCFA: -COST, balanceAfter: 0, kind: 'gift_debit', note: 'spent elsewhere' } });
+    await prisma.user.update({ where: { id: w.owner.userId }, data: { giftBalance: 0 } });
+    await prisma.walletEntry.create({ data: { userId: w.owner.userId, delta: -COST, balanceAfter: 0, kind: 'gift_debit', note: 'spent elsewhere' } });
     expect(await w.owner.post(`/api/surveys/${w.surveyId}/gifts/retry`)).toMatchObject({ requeued: 0, insufficient: 1 });
     expect((await prisma.giftDelivery.findFirst())!.status).toBe('failed');
 
@@ -237,7 +237,7 @@ describe('failures give the money back — except when we cannot know', () => {
   it('refunds only what the LEDGER says was debited: a gift that was never charged can never mint balance', async () => {
     const w = await buildWorld(app, { plan: 'growth', gift: airtime });
     // a pre-wallet / hand-inserted pending gift with no ledger entry
-    await prisma.giftDelivery.create({ data: { surveyId: w.surveyId, contactId: w.contactIds[0]!, giftType: 'airtime', giftValue: 'x', amountFCFA: 500, feeFCFA: FEE, status: 'pending' } });
+    await prisma.giftDelivery.create({ data: { surveyId: w.surveyId, contactId: w.contactIds[0]!, giftType: 'airtime', giftValue: 'x', amount: 500, fee: FEE, status: 'pending' } });
     await failThreeTimes();
     expect((await prisma.giftDelivery.findFirst())!.status).toBe('failed');
     const s = await expectConsistent(w.owner.userId);
@@ -253,9 +253,9 @@ describe('failures give the money back — except when we cannot know', () => {
     const g = (await prisma.giftDelivery.findFirst())!;
     expect(g).toMatchObject({ status: 'failed', refundedAt: null });
     expect((await expectConsistent(w.owner.userId)).balance).toBe(5_000 - COST);
-    expect((await w.owner.get('/api/wallet')).needsCheck).toMatchObject({ count: 1, fcfa: COST });
+    expect((await w.owner.get('/api/wallet')).needsCheck).toMatchObject({ count: 1, amount: COST });
     expect(await w.owner.post(`/api/surveys/${w.surveyId}/gifts/retry`)).toMatchObject({ requeued: 0 });
-    expect((await w.owner.get(`/api/surveys/${w.surveyId}/gifts`)).money).toMatchObject({ needsCheck: { count: 1, fcfa: COST }, failedRefunded: 0 });
+    expect((await w.owner.get(`/api/surveys/${w.surveyId}/gifts`)).money).toMatchObject({ needsCheck: { count: 1, amount: COST }, failedRefunded: 0 });
   });
 });
 
@@ -281,10 +281,10 @@ describe('warnings the owner sees (non-blocking)', () => {
     const s = await o.post('/api/surveys', { title: 'T', questions: [{ text: 'q', type: 'text', required: true }], gift: airtime });
     const pub = await o.post(`/api/surveys/${s.id}/publish`);
     expect(pub.status).toBe(200);
-    expect(pub.giftWarning).toMatchObject({ code: 'gift_wallet_empty', unitCostFCFA: COST, balanceFCFA: 0 });
+    expect(pub.giftWarning).toMatchObject({ code: 'gift_wallet_empty', unitCost: COST, balance: 0 });
 
     const aud = await o.post(`/api/surveys/${s.id}/audience`, { all: true });
-    expect(aud.gift).toMatchObject({ unitCostFCFA: COST, worstCaseFCFA: COST * 4, sufficient: false, empty: true });
+    expect(aud.gift).toMatchObject({ unitCost: COST, worstCase: COST * 4, sufficient: false, empty: true });
 
     await fundWallet(o.userId, COST * 4);
     expect((await o.post(`/api/surveys/${s.id}/audience`, { all: true })).gift).toMatchObject({ sufficient: true, giftsCovered: 4 });

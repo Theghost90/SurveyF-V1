@@ -1,13 +1,15 @@
 import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
-import { PAID_GIFT_TYPES, normalizeQuestion, publishProblems, surveyInputSchema, TEMPLATE_NAMES, type SurveyInput } from '@surveyflow/shared';
+import { PAID_GIFT_TYPES, currencyLabel, normalizeQuestion, publishProblems, surveyInputSchema, TEMPLATE_NAMES, walletLimits, type SurveyInput } from '@surveyflow/shared';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { assertCanActivateSurvey, assertCanSendMessages, assertFeature, assertNotSuspended, loadAccount, messagesRemaining } from '../services/subscription/limits';
-import { enqueueInvitations, enqueueReminders } from '../services/whatsapp/sender';
+import { enqueueInvitations } from '../services/whatsapp/sender';
+import { manualReminderState, sendManualReminders } from '../services/reminders';
 import { isTemplateApproved } from '../services/whatsapp/accounts';
 import { assertNoGiftsInFlight, releaseUnfundedGifts, retryFailedGifts } from '../services/gifts';
+import { walletCurrency, walletQuote } from '../services/billing-currency';
 import { giftReadiness } from '../services/wallet';
 import { receiptUrl } from '../services/receipts';
 import { randomInt } from 'node:crypto';
@@ -47,7 +49,7 @@ function surveyData(input: SurveyInput) {
     scheduledAt: input.scheduledAt ?? null,
     giftType: input.gift.giftType,
     giftValue: input.gift.giftType === 'none' || input.gift.giftType === 'custom' ? null : (input.gift.giftValue ?? null),
-    giftAmountFCFA: input.gift.giftType === 'airtime' || input.gift.giftType === 'momo' ? (input.gift.giftAmountFCFA ?? null) : null,
+    giftAmount: input.gift.giftType === 'airtime' || input.gift.giftType === 'momo' ? (input.gift.giftAmount ?? null) : null,
     giftDeliveryMode: input.gift.giftDeliveryMode,
     giftMaxCount: input.gift.giftMaxCount ?? null,
     kind: input.kind,
@@ -72,7 +74,7 @@ function questionRows(surveyId: string, input: SurveyInput) {
 function dto(s: Awaited<ReturnType<typeof owned>>) {
   return {
     id: s.id, title: s.title, description: s.description, status: s.status, language: s.language,
-    giftType: s.giftType, giftValue: s.giftValue, giftAmountFCFA: s.giftAmountFCFA, giftDeliveryMode: s.giftDeliveryMode, giftMaxCount: s.giftMaxCount,
+    giftType: s.giftType, giftValue: s.giftValue, giftAmount: s.giftAmount, giftDeliveryMode: s.giftDeliveryMode, giftMaxCount: s.giftMaxCount,
     customThankYou: s.customThankYou, scheduledAt: s.scheduledAt, whatsappAccountId: s.whatsappAccountId,
     kind: s.kind, deadlineAt: s.deadlineAt, autoRemindNonResponders: s.autoRemindNonResponders, autoRemindAbandoners: s.autoRemindAbandoners,
     createdAt: s.createdAt, publishedAt: s.publishedAt, closedAt: s.closedAt,
@@ -106,7 +108,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
   app.post('/api/surveys', auth, async (req, reply) => {
     const input = surveyInputSchema.parse(req.body);
     assertDeadlineOk(input.deadlineAt);
-    await assertGiftAllowed(req.userId, input.gift.giftType);
+    await assertGiftAllowed(req.userId, input.gift);
     const account = await prisma.whatsAppAccount.findFirst({ where: { userId: req.userId, status: 'active' }, orderBy: { createdAt: 'asc' } });
     const survey = await prisma.$transaction(async (tx) => {
       const s = await tx.survey.create({ data: { userId: req.userId, whatsappAccountId: account?.id ?? null, ...surveyData(input) } });
@@ -124,7 +126,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
     const existing = await owned(req.userId, id);
     const input = surveyInputSchema.parse(req.body);
     assertDeadlineOk(input.deadlineAt, existing.deadlineAt);
-    await assertGiftAllowed(req.userId, input.gift.giftType);
+    await assertGiftAllowed(req.userId, input.gift);
 
     // Once a survey has been published, its questions are frozen. Editing them would silently
     // change what already-collected answers mean (labels, option sets, question order).
@@ -163,7 +165,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
       const c = await tx.survey.create({
         data: {
           userId: req.userId, title: `${s.title} (copy)`, description: s.description, language: s.language, customThankYou: s.customThankYou,
-          giftType: s.giftType, giftValue: s.giftValue, giftAmountFCFA: s.giftAmountFCFA, giftDeliveryMode: s.giftDeliveryMode, giftMaxCount: s.giftMaxCount,
+          giftType: s.giftType, giftValue: s.giftValue, giftAmount: s.giftAmount, giftDeliveryMode: s.giftDeliveryMode, giftMaxCount: s.giftMaxCount,
           whatsappAccountId: s.whatsappAccountId, kind: s.kind, autoRemindNonResponders: s.autoRemindNonResponders, autoRemindAbandoners: s.autoRemindAbandoners,
         },
       });
@@ -253,12 +255,14 @@ export default async function surveyRoutes(app: FastifyInstance) {
     if (s.status !== 'active') throw conflict('not_active', 'The survey must be active to send reminders');
     const ctx = await loadAccount(req.userId);
     assertNotSuspended(ctx);
-    const eligible = await prisma.surveyRecipient.count({
-      where: { surveyId: s.id, status: { in: target === 'abandoned' ? ['abandoned'] : ['sent', 'delivered'] }, remindedAt: null, contact: { optedOutAt: null } },
-    });
-    if (!eligible) throw badRequest('nobody_to_remind', 'Nobody is eligible: each participant is reminded at most once');
-    assertCanSendMessages(ctx, eligible);
-    return { queued: await enqueueReminders(s, target) };
+    const state = await manualReminderState(s.id, target);
+    if (!state.ready.length) {
+      // Waiting people exist but their window has not opened: say so (and when), instead of the generic "nobody".
+      if (state.waiting > 0) throw conflict('reminder_not_yet', 'It is too early to remind these people: the reminder window has not opened yet', { waiting: state.waiting, availableAt: state.nextAt });
+      throw badRequest('nobody_to_remind', 'Nobody is eligible: each participant is reminded at most once');
+    }
+    assertCanSendMessages(ctx, state.ready.length);
+    return sendManualReminders(s, target);
   });
 
   // ---- gifts -----------------------------------------------------------------------------------------
@@ -266,19 +270,21 @@ export default async function surveyRoutes(app: FastifyInstance) {
   app.get('/api/surveys/:id/gifts', auth, async (req) => {
     const s = await owned(req.userId, (req.params as { id: string }).id);
     const paid = { surveyId: s.id, giftType: { in: [...PAID_GIFT_TYPES] } };
-    const [items, draw, byStatus, held] = await Promise.all([
+    const [items, draw, byStatus, held, owner] = await Promise.all([
       prisma.giftDelivery.findMany({ where: { surveyId: s.id }, orderBy: { createdAt: 'desc' }, take: 200, include: { contact: { select: { name: true, phone: true } } } }),
       prisma.prizeDrawEntry.count({ where: { surveyId: s.id } }),
-      prisma.giftDelivery.groupBy({ by: ['status'], where: paid, _count: { _all: true }, _sum: { amountFCFA: true, feeFCFA: true } }),
+      prisma.giftDelivery.groupBy({ by: ['status'], where: paid, _count: { _all: true }, _sum: { amount: true, fee: true } }),
       // unknown outcome: debited and deliberately never auto-refunded or retried
-      prisma.giftDelivery.aggregate({ where: { ...paid, status: 'failed', refundedAt: null }, _count: { _all: true }, _sum: { amountFCFA: true, feeFCFA: true } }),
+      prisma.giftDelivery.aggregate({ where: { ...paid, status: 'failed', refundedAt: null }, _count: { _all: true }, _sum: { amount: true, fee: true } }),
+      prisma.user.findUniqueOrThrow({ where: { id: req.userId }, select: { giftCurrency: true, preferredCurrency: true, country: true } }),
     ]);
     // What this survey has cost the owner so far = delivered + in the provider pipeline + unknown-outcome (debited, not refunded).
-    const cost = (statuses: string[]) => byStatus.filter((g) => statuses.includes(g.status)).reduce((a, g) => ({ count: a.count + g._count._all, fcfa: a.fcfa + (g._sum.amountFCFA ?? 0) + (g._sum.feeFCFA ?? 0) }), { count: 0, fcfa: 0 });
+    const cost = (statuses: string[]) => byStatus.filter((g) => statuses.includes(g.status)).reduce((a, g) => ({ count: a.count + g._count._all, amount: a.amount + (g._sum.amount ?? 0) + (g._sum.fee ?? 0) }), { count: 0, amount: 0 });
     const failed = cost(['failed']);
-    const needsCheck = { count: held._count._all, fcfa: (held._sum.amountFCFA ?? 0) + (held._sum.feeFCFA ?? 0) };
+    const needsCheck = { count: held._count._all, amount: (held._sum.amount ?? 0) + (held._sum.fee ?? 0) };
     return {
       drawEntries: draw,
+      currency: walletCurrency(owner), // every amount below is in the owner's wallet currency
       money: {
         sent: cost(['sent']), inFlight: cost(['pending']), unfunded: cost(['unfunded']),
         failedRefunded: failed.count - needsCheck.count,            // definite failures: money went back to the wallet
@@ -286,9 +292,9 @@ export default async function surveyRoutes(app: FastifyInstance) {
       },
       items: items.map((g) => ({
         id: g.id, type: g.giftType, value: g.giftValue, status: g.status, sentAt: g.sentAt, error: g.errorMessage, contact: g.contact.name, code: g.code,
-        costFCFA: g.amountFCFA ? g.amountFCFA + g.feeFCFA : null, refunded: !!g.refundedAt,
+        cost: g.amount ? g.amount + g.fee : null, refunded: !!g.refundedAt,
         // Only for a gift that was really delivered (the endpoint enforces the same rule).
-        receiptUrl: g.status === 'sent' && g.amountFCFA && (PAID_GIFT_TYPES as readonly string[]).includes(g.giftType) ? receiptUrl(g.id) : null,
+        receiptUrl: g.status === 'sent' && g.amount && (PAID_GIFT_TYPES as readonly string[]).includes(g.giftType) ? receiptUrl(g.id) : null,
       })),
     };
   });
@@ -330,6 +336,17 @@ export default async function surveyRoutes(app: FastifyInstance) {
   });
 }
 
-async function assertGiftAllowed(userId: string, giftType: string) {
-  if (GIFT_AUTOMATION.has(giftType)) assertFeature(await loadAccount(userId), 'giftAutomation', 'Gift automation');
+/**
+ * Gifts need the plan feature, and a paid gift's amount must sit inside the limits of the owner's wallet currency (100–20,000 FCFA
+ * converted at the live rate and tidied: e.g. 200–50,000 NGN). The range is currency-aware, so it cannot live in the shared schema.
+ */
+async function assertGiftAllowed(userId: string, gift: { giftType: string; giftAmount?: number | null }) {
+  if (GIFT_AUTOMATION.has(gift.giftType)) assertFeature(await loadAccount(userId), 'giftAutomation', 'Gift automation');
+  if ((gift.giftType === 'airtime' || gift.giftType === 'momo') && gift.giftAmount) {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { giftCurrency: true, preferredCurrency: true, country: true } });
+    const { giftMin, giftMax } = walletLimits(await walletQuote(user));
+    if (gift.giftAmount < giftMin || gift.giftAmount > giftMax) {
+      throw badRequest('gift_amount_range', `The gift amount must be between ${giftMin.toLocaleString('en')} and ${giftMax.toLocaleString('en')} ${currencyLabel(walletCurrency(user))}`, { min: giftMin, max: giftMax, currency: walletCurrency(user) });
+    }
+  }
 }

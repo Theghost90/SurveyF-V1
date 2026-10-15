@@ -13,7 +13,7 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { SurveyStatusBadge } from '@/components/status-badge';
 import { useWallet } from '@/components/wallet/use-wallet';
 import { ApiError, api, errorMessage } from '@/lib/api';
-import { dateTime, fcfa } from '@/lib/format';
+import { dateTime, money, num } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 
@@ -26,11 +26,15 @@ interface Analytics {
   dropOff: { questionNumber: number; questionText: string; count: number; suggestion: string } | null;
   nonStarters: Array<{ recipientId: string; name: string; phone: string; status: string; sentAt: string | null }>;
   gifts: { pending: number; sent: number; failed: number; unfunded: number };
+  /** The manual "Remind" buttons follow the automatic window: who can be reminded right now, and when the others become eligible. */
+  remind: { noReply: { eligibleNow: number; waiting: number; nextAt: string | null }; abandoned: { eligibleNow: number; waiting: number; nextAt: string | null } };
   generatedAt: string;
 }
 interface GiftMoney {
   items: Array<{ id: string; value: string | null; status: string; sentAt: string | null; contact: string; receiptUrl: string | null }>;
-  money: { sent: { count: number; fcfa: number }; inFlight: { count: number; fcfa: number }; unfunded: { count: number; fcfa: number }; failedRefunded: number; needsCheck: { count: number; fcfa: number } };
+  /** The owner's wallet currency: every amount in `money` and `items` is in it. */
+  currency: string;
+  money: { sent: { count: number; amount: number }; inFlight: { count: number; amount: number }; unfunded: { count: number; amount: number }; failedRefunded: number; needsCheck: { count: number; amount: number } };
 }
 interface ResponsesPage { total: number; page: number; pageSize: number; questions: Array<{ id: string; number: number; text: string }>; items: Array<{ contactId: string; name: string; phone: string; status: string; completedAt: string | null; abandonedAtQuestion: number | null; answers: Record<string, string> }> }
 
@@ -112,10 +116,9 @@ export function AnalyticsDashboard({ id }: { id: string }) {
       setBusy(null);
     }
   }
-  const abandonedEligible = data.totals.abandoned;
   // The wallet must cover at least the first waiting gift for "pay these gifts" to do anything.
-  const unfundedUnit = giftData && giftData.money.unfunded.count > 0 ? Math.ceil(giftData.money.unfunded.fcfa / giftData.money.unfunded.count) : 0;
-  const canRelease = !!wallet && unfundedUnit > 0 && wallet.balanceFCFA >= unfundedUnit;
+  const unfundedUnit = giftData && giftData.money.unfunded.count > 0 ? Math.ceil(giftData.money.unfunded.amount / giftData.money.unfunded.count) : 0;
+  const canRelease = !!wallet && unfundedUnit > 0 && wallet.balance >= unfundedUnit;
 
   return (
     <>
@@ -174,11 +177,18 @@ export function AnalyticsDashboard({ id }: { id: string }) {
             <CardHeader className="flex-row flex-wrap items-start justify-between gap-3">
               <div><CardTitle>{t('a.didntStart', { n: tt.noReply })}</CardTitle><CardDescription>{t('a.didntStartSub')}</CardDescription></div>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" loading={busy === 'no_reply'} disabled={tt.noReply === 0 || data.survey.status !== 'active'} onClick={() => remind('no_reply')}><Send className="h-4 w-4" aria-hidden />{t('a.remindNoReply')}</Button>
-                <Button size="sm" variant="outline" loading={busy === 'abandoned'} disabled={abandonedEligible === 0 || data.survey.status !== 'active'} onClick={() => remind('abandoned')}><RefreshCw className="h-4 w-4" aria-hidden />{t('a.remindAbandoned', { n: abandonedEligible })}</Button>
+                <Button size="sm" variant="outline" loading={busy === 'no_reply'} disabled={data.remind.noReply.eligibleNow === 0 || data.survey.status !== 'active'} onClick={() => remind('no_reply')}><Send className="h-4 w-4" aria-hidden />{t('a.remindNoReply')}{data.remind.noReply.eligibleNow > 0 ? ` (${data.remind.noReply.eligibleNow})` : ''}</Button>
+                <Button size="sm" variant="outline" loading={busy === 'abandoned'} disabled={data.remind.abandoned.eligibleNow === 0 || data.survey.status !== 'active'} onClick={() => remind('abandoned')}><RefreshCw className="h-4 w-4" aria-hidden />{t('a.remindAbandoned', { n: data.remind.abandoned.eligibleNow })}</Button>
               </div>
             </CardHeader>
             <CardContent>
+              {/* Nobody is chased too soon: a reminder opens 3 business days after the invitation (2 after someone stops, 24 h for a live event). */}
+              <p className="mb-3 text-sm text-muted-foreground" data-testid="remind-rule">{t('a.remindRule')}</p>
+              {([['noReply', 'a.waitNoReply'], ['abandoned', 'a.waitAbandoned']] as const).map(([k, key]) => data.remind[k].waiting > 0 && (
+                <p key={k} role="status" className="mb-2 rounded-xl bg-amber-soft px-3.5 py-2.5 text-sm text-amber-ink" data-testid={`remind-wait-${k}`}>
+                  {data.remind[k].nextAt ? t(key, { n: data.remind[k].waiting, date: dateTime(data.remind[k].nextAt!, locale) }) : t('a.waitNever', { n: data.remind[k].waiting })}
+                </p>
+              ))}
               {data.nonStarters.length === 0 ? <p className="text-sm text-muted-foreground">{t('a.everyoneReplied')}</p> : (
                 <ul className="flex max-h-44 flex-wrap gap-2 overflow-y-auto scrollbar-thin">
                   {data.nonStarters.map((n) => <li key={n.recipientId} className="rounded-full bg-canvas px-3 py-1.5 text-sm"><span className="font-semibold">{n.name}</span> <span className="text-muted-foreground">{n.phone}</span></li>)}
@@ -203,7 +213,7 @@ export function AnalyticsDashboard({ id }: { id: string }) {
                 </div>
                 {giftData && (
                   <p className="basis-full text-sm text-muted-foreground" data-testid="gift-spent">
-                    {t('w.a.spent', { amount: fcfa(giftData.money.sent.fcfa + giftData.money.inFlight.fcfa + giftData.money.needsCheck.fcfa, locale) })}
+                    {t('w.a.spent', { amount: money(giftData.money.sent.amount + giftData.money.inFlight.amount + giftData.money.needsCheck.amount, giftData.currency, locale) })}
                   </p>
                 )}
                 {giftData && giftData.items.some((g) => g.receiptUrl) && (
@@ -226,7 +236,7 @@ export function AnalyticsDashboard({ id }: { id: string }) {
                     <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
                     <span className="flex-1">{t('w.a.unfunded', { n: giftData.money.unfunded.count })}</span>
                     {canRelease
-                      ? <Button size="sm" variant="brand" loading={busy === 'release'} onClick={releaseGifts}>{t('w.a.release', { amount: fcfa(giftData.money.unfunded.fcfa, locale) })}</Button>
+                      ? <Button size="sm" variant="brand" loading={busy === 'release'} onClick={releaseGifts}>{t('w.a.release', { amount: money(giftData.money.unfunded.amount, giftData.currency, locale) })}</Button>
                       : <Link href="/billing#wallet" className={buttonVariants({ size: 'sm', variant: 'brand' })}>{t('w.a.topupFirst')}</Link>}
                   </div>
                 )}

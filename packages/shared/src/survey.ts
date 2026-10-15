@@ -78,13 +78,14 @@ export const giftConfigSchema = z
   .object({
     giftType: z.enum(GIFT_TYPES).default('none'),
     giftValue: z.string().trim().max(120).nullish(),
-    giftAmountFCFA: z.number().int().min(100).max(20_000).nullish(),
+    // Whole units of the owner's wallet currency. The allowed range depends on the currency (walletLimits) and is enforced by the API.
+    giftAmount: z.number().int().min(1).nullish(),
     giftDeliveryMode: z.enum(['immediate', 'batch']).default('immediate'),
     giftMaxCount: z.number().int().min(1).max(100_000).nullish(),
   })
   .superRefine((g, ctx) => {
     const need = (field: string, message: string) => ctx.addIssue({ code: 'custom', message, path: [field] });
-    if ((g.giftType === 'airtime' || g.giftType === 'momo') && !g.giftAmountFCFA) need('giftAmountFCFA', 'Enter the amount in FCFA');
+    if ((g.giftType === 'airtime' || g.giftType === 'momo') && !g.giftAmount) need('giftAmount', 'Enter the gift amount');
     if ((g.giftType === 'discount' || g.giftType === 'prize_draw' || g.giftType === 'airtime' || g.giftType === 'momo') && !g.giftValue)
       need('giftValue', 'Describe the gift (shown to the participant)');
   });
