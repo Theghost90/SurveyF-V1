@@ -62,7 +62,7 @@ export async function setPlan(userId: string, plan: 'trial' | 'starter' | 'growt
   await prisma.user.update({ where: { id: userId }, data: { plan } });
   await prisma.subscription.update({
     where: { userId },
-    data: { plan, status: plan === 'trial' ? 'trial' : 'active', amountFCFA: plan === 'trial' ? 0 : 9500, currentPeriodStart: now, currentPeriodEnd: new Date(now.getTime() + 30 * 86_400_000) },
+    data: { plan, status: plan === 'trial' ? 'trial' : 'active', amountFCFA: plan === 'trial' ? 0 : 14500, currentPeriodStart: now, currentPeriodEnd: new Date(now.getTime() + 30 * 86_400_000) },
   });
 }
 

@@ -26,8 +26,8 @@ describe('phone', () => {
 });
 
 describe('plans', () => {
-  it('uses the spec prices and limits', () => {
-    expect(PLANS.starter.priceFCFA).toBe(9500);
+  it('uses the owner-set prices and the spec limits', () => {
+    expect(PLANS.starter.priceFCFA).toBe(14500);
     expect(PLANS.growth.limits.responsesPerMonth).toBe(3000);
     expect(PLANS.business.limits.activeSurveys).toBeNull();
     expect(PLANS.starter.features.giftAutomation).toBe(false);
@@ -40,9 +40,9 @@ describe('plans', () => {
     expect(recommendPlan(12000)).toBe('business');
   });
   it('computes cost per answer and annual price', () => {
-    expect(costPerAnswer('growth', 3000)).toBeCloseTo(9.67, 1);
-    expect(planPrice('growth', 'XAF', 'annual')).toBe(290000);
-    expect(planPrice('starter', 'USD')).toBe(15);
+    expect(costPerAnswer('growth', 3000)).toBeCloseTo(13, 1);
+    expect(planPrice('growth', 'XAF', 'annual')).toBe(390000);
+    expect(planPrice('starter', 'USD')).toBe(23);
   });
   it('charges overage in blocks of 100 responses', () => {
     expect(responseOverageFCFA('starter', 500)).toBe(0);
@@ -50,8 +50,8 @@ describe('plans', () => {
     expect(responseOverageFCFA('starter', 700)).toBe(1000);
   });
   it('formats FCFA', () => {
-    expect(formatFCFA(29000)).toBe('29,000');
-    expect(formatFCFA(75000, 'fr')).toBe('75 000');
+    expect(formatFCFA(39000)).toBe('39,000');
+    expect(formatFCFA(95000, 'fr')).toBe('95\u202f000');
   });
 });
 

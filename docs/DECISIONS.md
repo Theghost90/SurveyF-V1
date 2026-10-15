@@ -12,7 +12,7 @@ build environment · ❌ not built in V1.
 
 | Topic | Spec (docx) | Design ("SurveyFlow Hero & Pricing") | Used |
 |---|---|---|---|
-| Plan prices | Starter 9,500 · Growth 29,000 · Business 75,000 FCFA | 14,500 · 39,000 · 95,000 (hero says "from 14,500") | **Spec.** One-line change in `packages/shared/src/plans.ts` if the design numbers are the intended ones. Nothing else needs to move. |
+| Plan prices | Starter 9,500 · Growth 29,000 · Business 75,000 FCFA | 14,500 · 39,000 · 95,000 (hero says "from 14,500") | **Design prices — owner decision (2026-10-15).** Changed in `packages/shared/src/plans.ts`; seed, tests and e2e updated. Non-FCFA prices (USD/EUR/NGN/KES) are *derived* at the blueprint's implied rates and rounded: placeholders until set properly. Annual = 10 × monthly (145,000 / 390,000 / 950,000). |
 | "First proposal" | — | Hero **A** ("Ask → Hear → Know → Act") and Pricing **A** ("How many voices?") | Those two. |
 | Hero CTA "Watch a survey in 60 seconds" | — | No video asset exists | Replaced with "See how it works" (anchor). |
 | "Builder Bot & Analytics Bot", "Quick numbers on WhatsApp", "47 new answers on your WhatsApp" | Builder is a **web dashboard**; the only bot command is `START` | Marketed as features | **Removed from the copy** — not built, and selling them would be a false claim. |
@@ -102,9 +102,14 @@ Each of these is covered by an automated test (see `apps/api/tests`).
 1. **Who pays for gifts? — DECIDED: the survey owner (SurveyFlow's customer), and the owner chooses per survey whether to
    offer a gift at all.** Implementation and what it leaves open: §3.1 below.
 2. **Free-tier economics** under `TRIAL_EXPIRY_POLICY=starter` (see §2.9).
-3. **Meta category.** Survey invitations are declared `UTILITY` (per spec). Meta may re-categorise mass survey invitations as
-   `MARKETING`, which is priced differently — check the per-message cost against the 9,500 FCFA Starter before launch.
-4. **Prices** (§1) and whether Starter should include PDF/Excel export (spec: yes; the design had `[TO CONFIRM]`).
+3. **Meta message categories — NOT yet handled in code.** The owner's position: Meta will bill some survey invitations as
+   *marketing* and others as *utility*. The code still declares every template `UTILITY` (blueprint) and has no way to pick a
+   category per survey, to submit a marketing variant, or to follow Meta's re-categorisation. Needed: a per-survey choice
+   (e.g. "feedback on a recent transaction" = utility, "unsolicited / promotional" = marketing) mapped to two template
+   families, status handling when Meta re-categorises, and a cost warning in the send panel. The Meta page quoted for this
+   (`messenger-platform/.../utility-messages`) is for **Messenger**; WhatsApp has its own category rules — confirm against the
+   WhatsApp Business Platform docs before building. Check per-message cost against the 14,500 FCFA Starter before launch.
+4. **Prices** — decided (§1: 14,500 / 39,000 / 95,000 FCFA); still open: non-FCFA prices and whether Starter should include PDF/Excel export (spec: yes; the design had `[TO CONFIRM]`).
 5. **Overage invoicing** (500 FCFA / 100 responses; messages pass-through) is displayed but **not billed automatically**.
 6. **Legal pages** (`/privacy`, `/terms`) are *drafts describing what the software does* and are labelled as such. Counsel must
    replace them. The data-protection reference (Cameroon Law No. 2024/017) should be confirmed by counsel.
@@ -157,6 +162,23 @@ SurveyFlow pays participants first and chases the owner for the money, which is 
    notice. Consider a cut-off (e.g. 30 days).
 7. **Payout path is still unverified** (§4): the Campay airtime / Mobile Money calls were written from documentation. With the
    owner's money now behind them, they must pass a sandbox run before real funds are accepted.
+
+### 3.2 Blueprint features found missing or different (reviewed 2026-10-15)
+
+- **Reminder to abandoners "sent after 24h of inactivity" (blueprint §3, message table) — only half built.** At 24 h the
+  participant is marked *abandoned* automatically, but the reminder is **not** sent automatically: the owner must press
+  "Remind abandoners" in analytics (once per participant). The automatic version needs a scheduled job that, when a participant
+  turns abandoned, queues the `survey_reminder` template (the 24 h window has just closed, so a template is the only option),
+  with a per-survey on/off switch and the same once-only rule. Not built yet.
+- **Currency by geolocation — not built.** There is no IP/geolocation lookup. The owner's currency comes from the `country` set at
+  sign-up (default Cameroon → XAF), and the registration form has no country field, so in practice every owner is billed in XAF.
+  The public pricing page shows FCFA only. Per-country currency would need a country selector (or Accept-Language / geo-IP as a
+  *suggestion*), real prices per currency, and PSPs that settle in it.
+- **"Download receipt" — not built, and I mis-described it earlier.** In the blueprint it is a button at the end of the
+  **participant's** thank-you message (proof of the gift), not an owner billing feature. WhatsApp interactive messages cannot
+  trigger a file download; it needs a URL button to a hosted receipt page, which conflicts with the blueprint's own "no external
+  links" principle and needs a public domain. It was dropped for scope, not because it is infeasible. Owner invoices (billing page) exist
+  as a list without PDF download.
 
 ## 4. What is verified and what is not
 

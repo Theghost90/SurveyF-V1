@@ -22,7 +22,7 @@ describe('payment flow (mock PSP through the real settle path)', () => {
     // a client-supplied amount is ignored: the schema does not even accept one
     const init = await o.post('/api/payments/initiate', { ...momo, amount: 1 });
     expect(init.status).toBe(201);
-    expect(init.body).toMatchObject({ amount: 29000, currency: 'XAF', status: 'pending', psp: 'mock' });
+    expect(init.body).toMatchObject({ amount: 39000, currency: 'XAF', status: 'pending', psp: 'mock' });
     expect(init.checkoutUrl).toContain('/billing/mock-checkout?ref=');
 
     // double-click protection: same pending payment, not a second charge
@@ -38,7 +38,7 @@ describe('payment flow (mock PSP through the real settle path)', () => {
     expect(paid.body.status).toBe('success');
     const me = await o.get('/api/auth/me');
     expect(me.plan.key).toBe('growth');
-    expect(me.subscription).toMatchObject({ status: 'active', plan: 'growth', amountFCFA: 29000 });
+    expect(me.subscription).toMatchObject({ status: 'active', plan: 'growth', amountFCFA: 39000 });
     const end1 = me.subscription.currentPeriodEnd;
 
     // PSPs retry webhooks and browsers poll: settling again must not extend the period
@@ -48,7 +48,7 @@ describe('payment flow (mock PSP through the real settle path)', () => {
 
     const sub = await o.get('/api/subscription');
     expect(sub.invoices).toHaveLength(1);
-    expect(sub.prices.growth).toMatchObject({ monthly: 29000, annual: 290000, currency: 'XAF' });
+    expect(sub.prices.growth).toMatchObject({ monthly: 39000, annual: 390000, currency: 'XAF' });
   });
 
   it('a declined payment leaves the plan untouched', async () => {
@@ -61,7 +61,7 @@ describe('payment flow (mock PSP through the real settle path)', () => {
   it('annual billing charges 10 months ("2 months free") and runs 12 months', async () => {
     const o = await registerOwner(app);
     const init = await o.post('/api/payments/initiate', { ...momo, plan: 'starter', interval: 'annual' });
-    expect(init.amount).toBe(95000);
+    expect(init.amount).toBe(145000); // 10 × 14,500
     await o.post(`/api/payments/mock/${init.reference}`, { outcome: 'success' });
     const s = (await o.get('/api/auth/me')).subscription;
     const months = (new Date(s.currentPeriodEnd).getTime() - new Date(s.currentPeriodStart).getTime()) / 86_400_000;
@@ -84,7 +84,7 @@ describe('payment security', () => {
   const makeTx = async (userId: string, psp = 'flutterwave') => {
     const sub = await prisma.subscription.findUniqueOrThrow({ where: { userId } });
     return prisma.paymentTransaction.create({
-      data: { subscriptionId: sub.id, userId, pspProvider: psp, amount: 29000, currency: 'XAF', status: 'pending', reference: 'sftestref001', plan: 'growth', interval: 'monthly', method: 'card' },
+      data: { subscriptionId: sub.id, userId, pspProvider: psp, amount: 39000, currency: 'XAF', status: 'pending', reference: 'sftestref001', plan: 'growth', interval: 'monthly', method: 'card' },
     });
   };
   const fwVerify = (status: string, amount: number, currency = 'XAF') =>
@@ -112,7 +112,7 @@ describe('payment security', () => {
   it('activates on a verified payment and ignores retried webhooks', async () => {
     const o = await registerOwner(app);
     await makeTx(o.userId);
-    vi.stubGlobal('fetch', fwVerify('successful', 29000));
+    vi.stubGlobal('fetch', fwVerify('successful', 39000));
     await hook({ 'verif-hash': 'flw-hash-123' });
     const end1 = (await prisma.subscription.findUniqueOrThrow({ where: { userId: o.userId } })).currentPeriodEnd;
     expect((await prisma.user.findUniqueOrThrow({ where: { id: o.userId } })).plan).toBe('growth');
@@ -126,7 +126,7 @@ describe('payment security', () => {
     const tx = await makeTx(o.userId);
     expect(await settleTransaction(tx.id, { status: 'success', amount: 100, currency: 'XAF' }, { warn: () => undefined })).toBe('amount_mismatch');
     const tx2 = await prisma.paymentTransaction.create({ data: { ...{ ...tx, id: undefined, createdAt: undefined }, reference: 'sftestref002', status: 'pending' } as never });
-    expect(await settleTransaction(tx2.id, { status: 'success', amount: 29000, currency: 'USD' }, { warn: () => undefined })).toBe('amount_mismatch');
+    expect(await settleTransaction(tx2.id, { status: 'success', amount: 39000, currency: 'USD' }, { warn: () => undefined })).toBe('amount_mismatch');
     expect((await prisma.user.findUniqueOrThrow({ where: { id: o.userId } })).plan).toBe('trial');
   });
 });

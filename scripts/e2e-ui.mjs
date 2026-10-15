@@ -236,14 +236,14 @@ await step('exports: PDF and Excel download with sensible files', async () => {
 await step('billing: subscribe to Growth through the mock checkout; plan, limits and invoice update', async () => {
   await page.goto(`${base}/billing?plan=growth`);
   await page.getByRole('heading', { name: /subscribe to growth/i }).waitFor({ timeout: 15000 });
-  await page.getByRole('button', { name: /^pay 29,000/i }).click();
+  await page.getByRole('button', { name: /^pay 39,000/i }).click();
   await page.waitForURL(/mock-checkout/, { timeout: 30000 });
   await page.getByRole('button', { name: /pay \(success\)/i }).click();
   await page.getByRole('heading', { name: 'Payment received' }).waitFor({ timeout: 30000 });
   await page.goto(`${base}/billing`);
   await page.getByText('Growth', { exact: true }).first().waitFor();
   await page.getByText(/Renews on/).waitFor();
-  await page.getByText('29,000 FCFA').last().waitFor();
+  await page.getByText('39,000 FCFA').last().waitFor();
   await shot('billing-after');
 });
 

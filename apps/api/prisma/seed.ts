@@ -42,7 +42,7 @@ async function main() {
     data: {
       email, passwordHash: await bcrypt.hash('demo-password-123', 12), name: 'Jean-Paul Nkou', businessName: 'Boulangerie Akwa',
       phone: '+237677000000', plan: 'growth', country: 'CM', locale: 'en', preferredCurrency: 'XAF', onboardingDoneAt: now,
-      subscription: { create: { plan: 'growth', status: 'active', currentPeriodStart: hoursAgo(24 * 10), currentPeriodEnd: new Date(now.getTime() + 20 * 86_400_000), amountFCFA: 29_000, paymentMethod: 'mobile_money', pspProvider: 'mock', interval: 'monthly' } },
+      subscription: { create: { plan: 'growth', status: 'active', currentPeriodStart: hoursAgo(24 * 10), currentPeriodEnd: new Date(now.getTime() + 20 * 86_400_000), amountFCFA: 39_000, paymentMethod: 'mobile_money', pspProvider: 'mock', interval: 'monthly' } },
     },
   });
   const account = await prisma.whatsAppAccount.create({
@@ -158,7 +158,7 @@ async function main() {
 
   // a successful past payment for the invoice list
   const sub = await prisma.subscription.findUniqueOrThrow({ where: { userId: user.id } });
-  await prisma.paymentTransaction.create({ data: { subscriptionId: sub.id, userId: user.id, pspProvider: 'mock', amount: 29_000, currency: 'XAF', status: 'success', reference: 'sfdemoinvoice00000001', plan: 'growth', interval: 'monthly', method: 'mobile_money', paidAt: hoursAgo(24 * 10), createdAt: hoursAgo(24 * 10) } });
+  await prisma.paymentTransaction.create({ data: { subscriptionId: sub.id, userId: user.id, pspProvider: 'mock', amount: 39_000, currency: 'XAF', status: 'success', reference: 'sfdemoinvoice00000001', plan: 'growth', interval: 'monthly', method: 'mobile_money', paidAt: hoursAgo(24 * 10), createdAt: hoursAgo(24 * 10) } });
 
   console.log('\nSeeded demo data.\n  Email:    demo@surveyflow.test\n  Password: demo-password-123\n  Plan:     Growth (simulated WhatsApp number, mock gifts, mock checkout)\n');
 }

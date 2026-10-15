@@ -3,9 +3,10 @@
  * The marketing site, the dashboard, the payment layer and the plan-limit
  * middleware all import from here, so prices can never drift apart.
  *
- * Prices follow the V1 spec (§5.2). NOTE: the "SurveyFlow Hero & Pricing" design
- * artifact shows different example prices (14,500 / 39,000 / 95,000). Change them
- * HERE if those are the intended ones — nothing else needs to move.
+ * Prices are the owner's decision (14,500 / 39,000 / 95,000 FCFA), which supersede the
+ * blueprint's 9,500 / 29,000 / 75,000. Change them HERE — nothing else needs to move.
+ * Non-FCFA prices below are DERIVED from the blueprint's implied exchange rates and rounded;
+ * they are placeholders until real prices are set for those currencies.
  */
 
 export const PLAN_KEYS = ['trial', 'starter', 'growth', 'business'] as const;
@@ -57,19 +58,19 @@ export const PLANS: Record<PlanKey, PlanDef> = {
   },
   starter: {
     key: 'starter',
-    priceFCFA: 9_500,
+    priceFCFA: 14_500,
     limits: { activeSurveys: 3, responsesPerMonth: 500, messagesPerMonth: 1_000, teamMembers: 1 },
     features: { exports: true, googleSheets: false, giftAutomation: false, apiAccess: false, prioritySupport: false, whiteLabel: false },
   },
   growth: {
     key: 'growth',
-    priceFCFA: 29_000,
+    priceFCFA: 39_000,
     limits: { activeSurveys: 15, responsesPerMonth: 3_000, messagesPerMonth: 7_000, teamMembers: 3 },
     features: { exports: true, googleSheets: true, giftAutomation: true, apiAccess: false, prioritySupport: true, whiteLabel: false },
   },
   business: {
     key: 'business',
-    priceFCFA: 75_000,
+    priceFCFA: 95_000,
     limits: { activeSurveys: null, responsesPerMonth: 15_000, messagesPerMonth: 30_000, teamMembers: 10 },
     features: { exports: true, googleSheets: true, giftAutomation: true, apiAccess: true, prioritySupport: true, whiteLabel: true },
   },
@@ -87,11 +88,11 @@ export const OVERAGE = { responsesBlockSize: 100, responsesBlockFCFA: 500 } as c
 
 export type Currency = 'XAF' | 'XOF' | 'USD' | 'EUR' | 'NGN' | 'KES' | 'GHS';
 
-/** Spec §9.7 multi-currency price table. */
+/** Multi-currency price table (FCFA = owner's prices; other currencies derived, see header). */
 export const PLAN_PRICES: Record<PaidPlanKey, Partial<Record<Currency, number>>> = {
-  starter: { XAF: 9_500, XOF: 9_500, USD: 15, EUR: 14, NGN: 22_000, KES: 2_000 },
-  growth: { XAF: 29_000, XOF: 29_000, USD: 47, EUR: 44, NGN: 70_000, KES: 6_200 },
-  business: { XAF: 75_000, XOF: 75_000, USD: 120, EUR: 110, NGN: 180_000, KES: 15_500 },
+  starter: { XAF: 14_500, XOF: 14_500, USD: 23, EUR: 22, NGN: 35_000, KES: 3_100 },
+  growth: { XAF: 39_000, XOF: 39_000, USD: 62, EUR: 59, NGN: 94_000, KES: 8_200 },
+  business: { XAF: 95_000, XOF: 95_000, USD: 152, EUR: 145, NGN: 228_000, KES: 20_000 },
 };
 
 export function planPrice(plan: PaidPlanKey, currency: Currency, interval: 'monthly' | 'annual' = 'monthly'): number {

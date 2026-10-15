@@ -8,7 +8,7 @@ import { addMonths } from '../payments/service';
  * Idempotent: safe to run every few minutes, from any replica.
  *
  * Unpaid trial end: the spec says "auto-downgrade to Starter if no payment method added". Starter is a PAID plan
- * (9,500 FCFA) and the lifecycle says unpaid → suspended, so these two statements conflict. Implemented as written
+ * (14,500 FCFA) and the lifecycle says unpaid → suspended, so these two statements conflict. Implemented as written
  * (TRIAL_EXPIRY_POLICY=starter): the account drops to Starter LIMITS at no charge — in effect a permanent free tier.
  * TRIAL_EXPIRY_POLICY=suspend makes the account read-only until it pays. See docs/DECISIONS.md.
  */
