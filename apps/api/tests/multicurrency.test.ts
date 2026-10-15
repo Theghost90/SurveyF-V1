@@ -80,6 +80,46 @@ describe('a plan paid in the owner\'s currency', () => {
   });
 });
 
+describe('the euro: chargeable at the CFA franc\'s fixed peg, no live rate involved', () => {
+  // No supported country uses EUR yet (a French visitor still gets Cameroon/FCFA), so an owner is put on EUR directly.
+  async function euroOwner(plan?: 'growth') {
+    const c = await registerFrom('CM', plan);
+    await prisma.user.update({ where: { id: c.userId }, data: { preferredCurrency: 'EUR' } });
+    return c;
+  }
+
+  it('prices, charges by card and records the XAF equivalent — and the network is never touched', async () => {
+    const f = vi.fn();
+    vi.stubGlobal('fetch', f);
+    const c = await euroOwner();
+    const sub = await c.get('/api/subscription');
+    expect(sub).toMatchObject({ currency: 'EUR', requestedCurrency: 'EUR', fallback: false, quote: { source: 'peg' }, methods: ['card'] });
+    expect(sub.prices).toMatchObject({ starter: { monthly: 22, annual: 221, currency: 'EUR' }, growth: { monthly: 59 }, business: { monthly: 145 } }); // 14,500 / 655.957 = 22.1 …
+    const init = await c.post('/api/payments/initiate', { plan: 'starter', interval: 'monthly', method: 'card' });
+    expect(init.status).toBe(201);
+    expect(init.body).toMatchObject({ currency: 'EUR', amount: 22, method: 'card' });
+    const row = await prisma.paymentTransaction.findFirstOrThrow({ where: { reference: init.reference } });
+    expect(row).toMatchObject({ amount: 22, currency: 'EUR', amountXAF: 14_431 }); // 22 × 655.957, what the provider settles
+    expect(row.fxRate).toBeCloseTo(1 / 655.957, 8);
+    expect((await c.raw('POST', '/api/payments/initiate', { plan: 'starter', interval: 'monthly', method: 'mobile_money', phone: '+237677000001' })).json.error).toBe('method_unavailable');
+    await settleMock(c, init.reference);
+    expect((await c.get('/api/auth/me')).subscription).toMatchObject({ status: 'active', plan: 'starter', amountFCFA: 14_500 }); // canonical FCFA price stays
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it('the wallet is topped up in euros and its limits are euro values', async () => {
+    const c = await euroOwner('growth');
+    const before = await c.get('/api/wallet');
+    expect(before).toMatchObject({ currency: 'EUR', balance: 0, fxUnavailable: false, methods: ['card'] });
+    expect(before.limits).toEqual({ topupMin: 2, topupMax: 2_000, presets: [10, 20, 50, 100, 200], giftMin: 1, giftMax: 20 });
+    const init = await c.post('/api/wallet/topup', { amount: 20, method: 'card' });
+    expect(init.body).toMatchObject({ purpose: 'gift_topup', amount: 20, currency: 'EUR' });
+    await settleMock(c, init.reference);
+    expect(await c.get('/api/wallet')).toMatchObject({ currency: 'EUR', balance: 20 });
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: c.userId } })).giftCurrency).toBe('EUR');
+  });
+});
+
 describe('the gift wallet in the owner\'s currency', () => {
   it('shows the wallet and its limits in naira, tops up in naira by card, and the ledger holds naira', async () => {
     fxUp();

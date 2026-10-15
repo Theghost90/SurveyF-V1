@@ -4,7 +4,7 @@ import {
   COUNTRY_CONFIG, DEFAULT_COUNTRY, PAID_PLAN_KEYS, abandonerSlot, addBusinessDays, alignToSendWindow, closingNoteFor, countryWithCurrency,
   currencyForCountry, dialPrefix, endOfLocalDay, followupSlot, formatDeadline, formatPrice, localDateString, nonResponderSlot, overagePerBlock, rankByFee,
   supportedCountry, usesEventRule, type Currency, type FxQuote, PSP_CHARGE_CURRENCIES, PSP_FEE_SOURCES, convertToXAF, costPerAnswer, documentedFees, effectiveFeeXAF, eurQuote, giftFee, giftUnitCost,
-  identityQuote, planPriceIn, planPrices, roundNice, roundPrice, walletLimits,
+  identityQuote, planPriceIn, planPrices, roundNice, roundPrice, walletLimits, PSP_CAPABILITIES,
 } from './index';
 
 const CM = 60; // Cameroon: UTC+1, no DST
@@ -37,6 +37,21 @@ describe('countries and phone examples', () => {
   it('every supported country\'s currency is one the payment providers can charge in (so a price in it can actually be collected)', () => {
     for (const c of Object.values(COUNTRY_CONFIG)) expect(PSP_CHARGE_CURRENCIES, c.name).toContain(c.currency as Currency);
     expect(PAID_PLAN_KEYS).toHaveLength(3);
+  });
+});
+
+describe('the euro', () => {
+  it('is a currency the providers charge in: every provider but Campay (Cameroon mobile money, XAF only)', () => {
+    expect(PSP_CHARGE_CURRENCIES).toContain('EUR');
+    for (const [psp, cap] of Object.entries(PSP_CAPABILITIES)) expect(cap.currencies.includes('EUR'), psp).toBe(psp !== 'campay');
+  });
+  it('is priced at the CFA franc\'s fixed peg (655.957 per euro), whole euros, annual = 10 months converted once', () => {
+    expect(planPrices(eurQuote())).toEqual({ starter: { monthly: 22, annual: 221 }, growth: { monthly: 59, annual: 595 }, business: { monthly: 145, annual: 1450 } });
+    expect(convertToXAF(22, eurQuote())).toBe(14_431);
+    expect(overagePerBlock(eurQuote())).toBe(0.76);
+  });
+  it('has euro wallet limits of tidy values (the gift minimum is one whole euro: amounts are whole units)', () => {
+    expect(walletLimits(eurQuote())).toEqual({ topupMin: 2, topupMax: 2_000, presets: [10, 20, 50, 100, 200], giftMin: 1, giftMax: 20 });
   });
 });
 

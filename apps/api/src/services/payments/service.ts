@@ -1,6 +1,6 @@
 import { customAlphabet } from 'nanoid';
 import type { PaymentTransaction, Plan, Prisma } from '@prisma/client';
-import { ANNUAL_MONTHS_CHARGED, PLANS, PSP_CHARGE_CURRENCIES, convertToXAF, currencyLabel, isCfa, planPriceIn, planPriceXAF, toWaId, walletLimits, type Currency, type FxQuote, type PaidPlanKey, type PaymentMethod } from '@surveyflow/shared';
+import { ANNUAL_MONTHS_CHARGED, PLANS, PSP_CHARGE_CURRENCIES, convertToXAF, currencyLabel, isCfa, planPriceIn, toWaId, walletLimits, type Currency, type FxQuote, type PaidPlanKey, type PaymentMethod } from '@surveyflow/shared';
 import { env } from '../../config/env';
 import { AppError, badRequest, conflict, notFound } from '../../lib/errors';
 import { prisma } from '../../lib/prisma';
@@ -63,7 +63,9 @@ export async function initiatePayment(userId: string, input: InitiateInput, rout
   const payCurrency = quote.currency;
   assertMethodForCurrency(input.method, payCurrency);
   const amount = planPriceIn(input.plan, input.interval, quote);
-  const amountXAF = planPriceXAF(input.plan, input.interval);
+  // What the provider will settle in XAF for the amount charged (not the canonical FCFA price: the two differ by the price rounding,
+  // and this column is what a provider's settlement report is reconciled against — the canonical price is Subscription.amountFCFA).
+  const amountXAF = convertToXAF(amount, quote);
   const chain = router.chain({ country: user.country, currency: payCurrency, method: input.method, amountXAF }, undefined, await fixedFeeConverter());
   if (!chain.length) throw new AppError(503, 'no_psp_available', 'No payment provider is available for this country / payment method right now');
 

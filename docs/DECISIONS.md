@@ -12,7 +12,7 @@ build environment · ❌ not built in V1.
 
 | Topic | Spec (docx) | Design ("SurveyFlow Hero & Pricing") | Used |
 |---|---|---|---|
-| Plan prices | Starter 9,500 · Growth 29,000 · Business 75,000 FCFA | 14,500 · 39,000 · 95,000 (hero says "from 14,500") | **Design prices — owner decision (2026-10-15).** Changed in `packages/shared/src/plans.ts`; seed, tests and e2e updated. Non-FCFA prices (USD/EUR/NGN/KES) are *derived* at the blueprint's implied rates and rounded: placeholders until set properly. Annual = 10 × monthly (145,000 / 390,000 / 950,000). |
+| Plan prices | Starter 9,500 · Growth 29,000 · Business 75,000 FCFA | 14,500 · 39,000 · 95,000 (hero says "from 14,500") | **Design prices — owner decision (2026-10-15).** Changed in `packages/shared/src/plans.ts`; seed, tests and e2e updated. Non-FCFA prices are no longer typed in: they are these FCFA prices at a live exchange rate (§3.3, "Multi-currency money"). Annual = 10 × monthly (145,000 / 390,000 / 950,000). |
 | "First proposal" | — | Hero **A** ("Ask → Hear → Know → Act") and Pricing **A** ("How many voices?") | Those two. |
 | Hero CTA "Watch a survey in 60 seconds" | — | No video asset exists | Replaced with "See how it works" (anchor). |
 | "Builder Bot & Analytics Bot", "Quick numbers on WhatsApp", "47 new answers on your WhatsApp" | Builder is a **web dashboard**; the only bot command is `START` | Marketed as features | **Removed from the copy** — not built, and selling them would be a false claim. |
@@ -110,7 +110,7 @@ Each of these is covered by an automated test (see `apps/api/tests`).
    (`messenger-platform/.../utility-messages`) is for **Messenger**; WhatsApp has its own category rules — confirm against the
    WhatsApp Business Platform docs before building. Check per-message cost against the 14,500 FCFA Starter before launch.
    **Automatic reminders and closing notes (§3.3) add more template messages to this question.**
-4. **Prices** — decided (§1: 14,500 / 39,000 / 95,000 FCFA); still open: the non-FCFA prices (placeholders, §3.3) and whether Starter should include PDF/Excel export (spec: yes; the design had `[TO CONFIRM]`).
+4. **Prices** — decided (§1: 14,500 / 39,000 / 95,000 FCFA); non-FCFA prices are live conversions (§3.3); still open: whether Starter should include PDF/Excel export (spec: yes; the design had `[TO CONFIRM]`).
 5. **Overage invoicing** (500 FCFA / 100 responses; messages pass-through) is displayed but **not billed automatically**.
 6. **Legal pages** (`/privacy`, `/terms`) are *drafts describing what the software does* and are labelled as such. Counsel must
    replace them. The data-protection reference (Cameroon Law No. 2024/017) should be confirmed by counsel.
@@ -215,15 +215,21 @@ Local testing: `DEV_GEO_COUNTRY=NG` (ignored in production builds). Unsupported 
   table is stored in `FxRate` as the last-known-good copy. A table older than `FX_MAX_STALE_HOURS` (72) is **not used**; a rate that jumps > 50 % from the previous one is rejected as bad data. **No fresh rate ⇒ prices are shown and charged in FCFA with an explicit
   notice — an invented conversion is never served.** Top-ups pause (503 `fx_unavailable`) instead of guessing; a gift whose payout cannot be converted waits (still debited) and goes out when a rate is back.
 - *Charging.* The owner pays in **their currency** (the amount we display), by **international card** only: Mobile Money (MTN MoMo / Orange Money) exists only in CFA francs, so outside the FCFA zone it is not offered (and refused by the API). The providers settle to SurveyFlow
-  in XAF. The currency list the providers can charge in is the owner's: XAF, XOF, ZAR, GHS, KES, NGN, UGX, USD, GBP (Campay: XAF only, it is Cameroon mobile money); EUR is not on that list, so a euro price falls back to FCFA.
-  Each payment records its FCFA value and the rate used (`amountXAF`, `fxRate`); the subscription itself is recorded at its canonical FCFA price.
+  in XAF. The currency list the providers can charge in is the owner's: XAF, XOF, ZAR, GHS, KES, NGN, UGX, USD, GBP, EUR (Campay: XAF only, it is Cameroon mobile money). The euro is priced at the CFA franc's **fixed peg** (655.957), so it needs no live rate and carries no
+  ExchangeRate-API attribution (the note says "fixed peg" instead). **No supported country uses EUR (nor USD, GBP, ZAR, UGX) yet**: `COUNTRY_CONFIG` has CFA countries, Nigeria, Kenya and Ghana only, and every other visitor (France, the US …) still gets Cameroon / FCFA. Those currencies are
+  chargeable but unreachable until countries are added — which is a separate decision (see "Open" below).
+  Each payment records the XAF the provider will settle for the amount charged (`amountXAF`, the amount converted back at the rate used — the same meaning for subscriptions and top-ups) and the rate (`fxRate`); the subscription itself is recorded at its canonical FCFA price (`amountFCFA`).
   **Two of the owner's statements conflict and I chose one:** "the merchant receives the exact amount in XAF" (charge in XAF, let the provider show the buyer a converted figure) versus "pay the plan in naira / shillings" (charge in the buyer's currency). I charge in the buyer's currency, so the buyer pays
   exactly the figure we showed and the provider's own conversion decides the XAF that lands: **SurveyFlow bears the difference between our rate and the provider's** (usually small, never zero) — reconcile against the provider statements. Switching to "charge XAF" is a small change; say so.
 - *Wallet and gifts in the owner's currency.* The wallet balance, top-up limits and presets, the gift amount, its limits (100–20,000 FCFA converted and tidied: e.g. 200–50,000 NGN, 20–5,000 KES), the fee, the ledger, refunds, analytics, the cost panel and the receipt are all in the owner's wallet currency (whole units). The **first top-up fixes the
   wallet's currency** (enforced inside the SQL update); a second top-up in another currency is refused. Gift amounts are only ever set after a paid plan, i.e. after the currency has locked.
 - *Gift payout.* The payout provider (Campay) speaks **CFA francs only**: each gift is converted to XAF at the live rate just before sending, that amount is pinned on the row (retries never re-quote), and the receipt shows both ("500 NGN … value delivered 208 FCFA").
   **Open risks you should weigh: (1) SurveyFlow carries the exchange-rate risk between a customer's top-up and the payout; (2) Campay pays Cameroonian MTN/Orange numbers only — a Nigerian or Kenyan owner's participants cannot receive airtime through it, so such gifts will fail and be refunded until a provider for those countries is integrated; the plumbing
-  (currency, conversion, refund) is in place, the rail is not.** "We'll start selling in Cameroon" makes this latent, not urgent.
+  (currency, conversion, refund) is in place, the rail is not.** "We'll start selling in Cameroon" makes this latent, not urgent. **Owner's decision (2026-10-15): accepted as is** — the wallet UI keeps letting a non-CFA owner top up and send gifts; a definite payout failure refunds the wallet, an
+  ambiguous one is held for manual check (§ gifts), as before.
+- **Open — adding countries outside the current list** (France/euro zone, US, UK …) so that EUR/USD/GBP are actually reachable: (a) `utcOffsetMinutes` is a fixed offset ("none of these countries observes DST"), which is wrong for Europe/US and would shift the 08:00–19:00 reminder window by an hour half the year;
+  (b) amounts are whole units, and for a currency worth 656 FCFA a unit is coarse: the smallest gift is 1 EUR (≈ 656 FCFA vs 100 FCFA at home) and the percentage fee is rounded **up** to a whole unit (5 % of a 1-EUR gift costs 1 EUR, so the gift costs 2) — minor units (cents) would be needed first;
+  (c) mobile-money lists, phone prefixes and the onboarding country choice for each new country.
 - Owner-facing amounts that are not money (response counts, message quotas) are unchanged. The hero chat demo still shows a "500 FCFA airtime" bubble (illustration).
 
 **PSPs: contract fees, automatic choice, CamerPay.** Owners never see or choose a provider. Per payment, among providers that are configured and support the buyer's country (mobile money) or any country (cards, which are international), the currency and the method, the **cheapest for this payment** comes first and the rest remain as failover.
@@ -293,10 +299,10 @@ its network policy blocks these hosts. Treat each as "needs a sandbox pass":
 | Campay airtime/MoMo gifts | The spec says Campay can send airtime; the endpoint used is unverified. **Higher stakes now: owners' prepaid money is what pays through it.** |
 | Gift fee, wallet legality, treasury float | Not code questions — see §3.1 items 1–3. |
 | Reminder / closing-note templates and the receipt URL button | New templates (`survey_nudge`, `survey_deadline_note`, `survey_progress_saved[_deadline]`, `survey_gift_notice` with a URL button) have never been submitted to Meta; the URL-button payload follows Meta's documented component shape. Meta may re-categorise the reminders as marketing (§3 item 3). |
-| NGN / KES / GHS / USD / EUR settlement | Prices exist for these currencies (placeholders) but nobody checked that each PSP can charge in them. |
+| NGN / KES / GHS / USD / EUR settlement | Prices are live conversions now (not placeholders); that each PSP can charge in these currencies is the owner's statement, not something tested (see "Provider currencies"). |
 | **CamerPay** | Adapter written from public documentation pages; the host was unreachable from the build environment, so no request was ever sent. Initiate path/fields, the webhook signing string and field names must be confirmed in the sandbox/dashboard (the pages disagree on `callback_url` vs `merchant_callback_url`); there is no known status endpoint, so settlement relies on the webhook. |
 | Live exchange-rate source | `open.er-api.com` was not reachable from the build environment either: the service is exercised against a stub with the documented response shape (and the browser runs against `scripts/fx-stub.mjs`). Check one real fetch before launch. |
-| Provider currencies | The owner states the providers accept XAF, XOF, ZAR, GHS, KES, NGN, UGX, USD, GBP; this is taken as given and never tested against a provider account. |
+| Provider currencies | The owner states the providers accept XAF, XOF, ZAR, GHS, KES, NGN, UGX, USD, GBP and EUR (EUR confirmed 2026-10-15); this is taken as given and never tested against a provider account. |
 | Provider fees | Taken from the owner's contract-fee document, not from the providers' live pricing pages (not reachable). |
 | Google OAuth + Sheets | Implemented on plain REST; exercised only with Google stubbed. |
 | Puppeteer on Docker/Fly/Railway | Works here with the bundled Chromium; the Dockerfile installs `chromium` but has not been built (no Docker daemon). |

@@ -211,7 +211,9 @@ function FxNote({ data, compact = false }: { data: SubscriptionData; compact?: b
   const date = data.quote.asOf ? dateShort(data.quote.asOf, locale) : '';
   return (
     <p className={cn('text-muted-foreground', compact ? 'text-xs' : 'mb-5 text-sm')} data-testid="fx-note">
-      {converted
+      {converted && data.quote.source === 'peg'
+        ? <>{t('pricing.pegRate')} {t('pricing.card')}</>
+        : converted
         ? <>{t('pricing.rate', { currency: data.currency, rate: new Intl.NumberFormat(locale === 'fr' ? 'fr-FR' : 'en-US', { maximumSignificantDigits: 4 }).format(data.quote.rate), date: date || '—' })} {t('pricing.card')}{' '}
             <a href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer" className="underline">{t('pricing.ratesBy')}</a></>
         : t('pricing.rateDown', { currency: data.requestedCurrency })}

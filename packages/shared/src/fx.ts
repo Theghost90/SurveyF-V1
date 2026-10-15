@@ -10,8 +10,8 @@
 export const CURRENCIES = ['XAF', 'XOF', 'ZAR', 'GHS', 'KES', 'NGN', 'UGX', 'USD', 'GBP', 'EUR'] as const;
 export type Currency = (typeof CURRENCIES)[number];
 
-/** Currencies the payment providers can charge in (the owner's statement: XAF, XOF, ZAR, GHS, KES, NGN, UGX, USD, GBP). */
-export const PSP_CHARGE_CURRENCIES: readonly Currency[] = ['XAF', 'XOF', 'ZAR', 'GHS', 'KES', 'NGN', 'UGX', 'USD', 'GBP'];
+/** Currencies the payment providers can charge in (the owner's statement: XAF, XOF, ZAR, GHS, KES, NGN, UGX, USD, GBP, EUR). */
+export const PSP_CHARGE_CURRENCIES: readonly Currency[] = ['XAF', 'XOF', 'ZAR', 'GHS', 'KES', 'NGN', 'UGX', 'USD', 'GBP', 'EUR'];
 
 export const isCurrency = (v: unknown): v is Currency => (CURRENCIES as readonly unknown[]).includes(v);
 export const isCfa = (c: string): boolean => c === 'XAF' || c === 'XOF';

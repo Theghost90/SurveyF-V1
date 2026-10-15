@@ -156,7 +156,13 @@ function RateNote({ pricing }: { pricing: PricingData }) {
   const date = pricing.quote.asOf ? new Intl.DateTimeFormat(locale === 'fr' ? 'fr-FR' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(pricing.quote.asOf)) : '';
   return (
     <div className="mx-auto mt-3 max-w-[720px] text-center text-[13px] leading-relaxed text-muted-foreground" data-testid="rate-note">
-      {converted ? (
+      {converted && pricing.quote.source === 'peg' ? (
+        // the euro is the CFA franc's fixed peg: no live rate is involved, so nothing to attribute
+        <>
+          <p>{t('pricing.pegRate')}</p>
+          <p>{t('pricing.card')}</p>
+        </>
+      ) : converted ? (
         <>
           <p>{t('pricing.rate', { currency: pricing.currency, rate: new Intl.NumberFormat(locale === 'fr' ? 'fr-FR' : 'en-US', { maximumSignificantDigits: 4 }).format(pricing.quote.rate), date: date || '—' })}</p>
           <p>{t('pricing.card')}{' '}<a href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer" className="underline">{t('pricing.ratesBy')}</a></p>

@@ -79,10 +79,10 @@ export const CARD_PSPS: PspName[] = ['camerpay', 'notchpay', 'cinetpay', 'flutte
 
 /**
  * What each PSP can actually do — used to filter the failover chain. Currencies: the owner states that the providers accept XAF, XOF,
- * ZAR, GHS, KES, NGN, UGX, USD and GBP (Campay is Cameroon mobile money only, so XAF). Mobile money is local to the buyer's country;
- * card has no country limit (see CARD_PSPS).
+ * ZAR, GHS, KES, NGN, UGX, USD, GBP and EUR (Campay is Cameroon mobile money only, so XAF). Mobile money is local to the buyer's
+ * country; card has no country limit (see CARD_PSPS).
  */
-const ALL_CHARGE: Currency[] = ['XAF', 'XOF', 'ZAR', 'GHS', 'KES', 'NGN', 'UGX', 'USD', 'GBP'];
+const ALL_CHARGE: Currency[] = ['XAF', 'XOF', 'ZAR', 'GHS', 'KES', 'NGN', 'UGX', 'USD', 'GBP', 'EUR'];
 export const PSP_CAPABILITIES: Record<PspName, { countries: string[] | '*'; methods: PaymentMethod[]; currencies: Currency[] }> = {
   notchpay: { countries: ['CM', 'CI', 'SN', 'NG', 'GH', 'KE'], methods: ['mobile_money', 'card', 'bank_transfer'], currencies: ALL_CHARGE },
   cinetpay: { countries: ['CI', 'SN', 'CM', 'ML', 'BF', 'BJ', 'TG', 'NE'], methods: ['mobile_money', 'card'], currencies: ALL_CHARGE },
@@ -90,5 +90,5 @@ export const PSP_CAPABILITIES: Record<PspName, { countries: string[] | '*'; meth
   payunit: { countries: ['CM'], methods: ['mobile_money', 'card'], currencies: ALL_CHARGE },
   camerpay: { countries: ['CM'], methods: ['mobile_money', 'card'], currencies: ALL_CHARGE },
   flutterwave: { countries: '*', methods: ['mobile_money', 'card', 'bank_transfer'], currencies: ALL_CHARGE },
-  mock: { countries: '*', methods: ['mobile_money', 'card', 'bank_transfer'], currencies: [...ALL_CHARGE, 'EUR'] },
+  mock: { countries: '*', methods: ['mobile_money', 'card', 'bank_transfer'], currencies: ALL_CHARGE },
 };

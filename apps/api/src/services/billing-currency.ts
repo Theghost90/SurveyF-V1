@@ -23,7 +23,8 @@ export async function walletQuote(u: { giftCurrency: string | null; preferredCur
 
 /**
  * What a subscription is priced and charged in: the owner's currency at the live rate, as long as the payment providers can charge in it.
- * No fresh rate (or a currency they cannot charge, like EUR) → CFA francs, flagged `fallback`, never an invented conversion.
+ * No fresh rate (or a currency they cannot charge) → CFA francs, flagged `fallback`, never an invented conversion. The euro needs no
+ * live rate: it is the CFA franc's fixed peg (655.957 XAF), so it is never in that fallback for lack of a rate.
  */
 export async function billingQuote(u: { preferredCurrency: string | null; country: string }): Promise<{ quote: FxQuote; fallback: boolean; requested: Currency }> {
   const requested = ownerCurrency(u);
