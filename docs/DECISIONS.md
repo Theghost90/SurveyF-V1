@@ -292,7 +292,7 @@ its network policy blocks these hosts. Treat each as "needs a sandbox pass":
 
 | Area | Risk |
 |---|---|
-| Meta Cloud API client, Embedded Signup flow, template submission/approval, status webhooks | Payload shapes follow Meta's public docs; never sent to Meta. |
+| Meta Cloud API client, Embedded Signup flow, template submission/approval, status webhooks | Payload shapes follow Meta's public docs; never sent to Meta. **Runnable check: `scripts/meta-check.mts` (`docs/META_CHECK.md`) — not yet run by the owner against a real Meta app** (the build environment cannot reach Meta). Tech Provider status (business verification + app review) and the Embedded Signup popup cannot be scripted. |
 | Flutterwave v3 | Endpoints confirmed by documentation search; not called. |
 | Notch Pay, CinetPay | Init/verify endpoints confirmed by documentation search; **webhook signature schemes are unconfirmed** (safe default: bad signature ⇒ rejected; the status poll still activates paid subscriptions). |
 | **Campay, PayUnit** | **Lowest confidence**: paths/fields written from memory (PayUnit's endpoint paths and Campay's airtime endpoint especially). Do not enable without sandbox verification. |
