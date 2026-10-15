@@ -34,6 +34,9 @@ export function Bubble({ message }: { message: OutboundMessage }) {
       {message.kind === 'buttons' && (
         <div className="flex max-w-[88%] flex-col gap-1">{message.buttons.map((b) => <div key={b.id} className="rounded-lg bg-white py-2 text-center text-[13px] font-semibold text-[#0a7cc4] shadow-sm">{b.title}</div>)}</div>
       )}
+      {message.kind === 'link' && (
+        <div className="flex max-w-[88%] flex-col gap-1"><div className="rounded-lg bg-white py-2 text-center text-[13px] font-semibold text-[#0a7cc4] shadow-sm">{message.buttonLabel}</div></div>
+      )}
       {message.kind === 'list' && (
         <>
           <div className="flex max-w-[88%] items-center justify-center gap-1.5 rounded-lg bg-white py-2 text-center text-[13px] font-semibold text-[#0a7cc4] shadow-sm"><List className="h-3.5 w-3.5" aria-hidden />{message.buttonLabel}</div>

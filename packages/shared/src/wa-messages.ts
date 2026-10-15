@@ -9,7 +9,9 @@ import { WA_LIMITS, ratingOptions, type QuestionOption, type QuestionType, type 
 export type OutboundMessage =
   | { kind: 'text'; body: string }
   | { kind: 'buttons'; body: string; buttons: Array<{ id: string; title: string }> }
-  | { kind: 'list'; body: string; buttonLabel: string; rows: Array<{ id: string; title: string; description?: string }> };
+  | { kind: 'list'; body: string; buttonLabel: string; rows: Array<{ id: string; title: string; description?: string }> }
+  /** A message with ONE button that opens a link (WhatsApp "interactive cta_url"): free inside the 24 h window, unlike a template. */
+  | { kind: 'link'; body: string; buttonLabel: string; url: string };
 
 export interface QuestionLike {
   id: string;
@@ -59,7 +61,9 @@ const en = {
     giftMomo: (v: string) => `🎁 Your gift: ${v}. It will be sent to your Mobile Money wallet.`,
     giftDiscount: (code: string, v: string) => `🎁 Your code: *${code}*${v ? ` — ${v}` : ''}`,
     giftDraw: (v: string) => `🎟️ You're entered in the prize draw${v ? ` (${v})` : ''}. Good luck!`,
-    giftSent: (v: string, receiptUrl?: string) => `✅ Your gift (${v}) has been sent. Thank you for taking part!${receiptUrl ? `\n\nDownload your receipt: ${receiptUrl}` : ''}`,
+    giftSent: (v: string) => `✅ Your gift (${v}) has been sent. Thank you for taking part!`,
+    /** Label of the button that opens the receipt (WhatsApp limits a button label to 20 characters). */
+    receiptButton: 'Download receipt',
 } ;
 
 const fr: typeof en = {
@@ -82,9 +86,8 @@ const fr: typeof en = {
     giftMomo: (v: string) => `🎁 Votre cadeau : ${v}. Il sera envoyé sur votre compte Mobile Money.`,
     giftDiscount: (code: string, v: string) => `🎁 Votre code : *${code}*${v ? ` — ${v}` : ''}`,
     giftDraw: (v: string) => `🎟️ Vous participez au tirage au sort${v ? ` (${v})` : ''}. Bonne chance !`,
-    giftSent: (v: string, receiptUrl?: string) => `✅ Votre cadeau (${v}) a été envoyé. Merci de votre participation !${receiptUrl ? `
-
-Téléchargez votre reçu : ${receiptUrl}` : ''}`,
+    giftSent: (v: string) => `✅ Votre cadeau (${v}) a été envoyé. Merci de votre participation !`,
+    receiptButton: 'Télécharger le reçu',
 };
 
 const STR: Record<SurveyLang, typeof en> = { en, fr };

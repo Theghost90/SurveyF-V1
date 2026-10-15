@@ -81,6 +81,8 @@ export default function SimulatorPage() {
                   <div key={c.id} className="flex flex-col gap-1">
                     <div className="max-w-[88%] self-start rounded-[4px_12px_12px_12px] bg-white px-3 py-2 text-[13px] leading-[1.4] shadow-sm"><WaText text={c.message.body} /></div>
                     {c.message.kind === 'buttons' && <div className="flex max-w-[88%] flex-col gap-1">{c.message.buttons.map((b) => <button key={b.id} type="button" disabled={busy} onClick={() => send({ type: 'reply', id: b.id, title: b.title })} className={btn}>{b.title}</button>)}</div>}
+                    {/* the same button as the template's URL button: opens the receipt, through the site's proxy */}
+                    {c.message.kind === 'link' && <div className="flex max-w-[88%] flex-col gap-1"><a href={`/proxy/receipts/${c.message.url.split('/api/receipts/')[1] ?? ''}`} target="_blank" rel="noopener noreferrer" className={cn(btn, 'text-center no-underline')}>{c.message.buttonLabel}</a></div>}
                     {c.message.kind === 'list' && (
                       <>
                         <button type="button" onClick={() => setListOpen(listOpen === c.id ? null : c.id)} className={cn(btn, 'flex max-w-[88%] items-center justify-center gap-1.5')} aria-expanded={listOpen === c.id}><ListIcon className="h-3.5 w-3.5" aria-hidden />{c.message.buttonLabel}</button>

@@ -180,7 +180,8 @@ async function notifyGiftSent(gift: { id: string; surveyId: string; contactId: s
     const value = gift.giftValue ?? '';
     if (gift.survey.giftDeliveryMode === 'immediate' && gift.survey.account && !gift.notifyViaTemplate) {
       // Inside the 24h window the participant just opened by answering: plain text is free.
-      await getGateway().sendMessage(credsFor(gift.survey.account), toWaId(gift.contact.phone), { kind: 'text', body: sys(lang).giftSent(value, receiptUrl(gift.id)) });
+      // Same look as the template path below: a short message and a "Download receipt" button, not a raw URL in the text.
+      await getGateway().sendMessage(credsFor(gift.survey.account), toWaId(gift.contact.phone), { kind: 'link', body: sys(lang).giftSent(value), buttonLabel: sys(lang).receiptButton, url: receiptUrl(gift.id) });
     } else {
       const recipient = await prisma.surveyRecipient.findUnique({ where: { surveyId_contactId: { surveyId: gift.surveyId, contactId: gift.contactId } }, select: { id: true } });
       if (recipient) await enqueueGiftNotice(gift.survey.userId, recipient.id, value, receiptToken(gift.id));

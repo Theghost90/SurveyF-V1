@@ -198,6 +198,33 @@ await step('wallet history explains every movement and the header chip shows the
   await shot('08-wallet-history');
 });
 
+await step('funded wallet, participant answers in the open 24 h window: the sent-notice has a "Download receipt" BUTTON, not a raw URL', async () => {
+  // The other path (batch / late gift) is a template and was checked above; this is the free-text window path, which must look the same.
+  const sid = state.survey.id;
+  const cid = state.contacts[1].id;
+  const send = (b) => call('POST', `/dev/simulator/${cid}/send`, b);
+  await send({ type: 'template', payload: `START:${sid}`, title: 'Start' });
+  const q = (await call('GET', `/surveys/${sid}`)).json.questions;
+  await send({ type: 'reply', id: `a:${q[0].id}:${q[0].options[0].id}`, title: 'Good' });
+  await send({ type: 'text', text: 'All good' });
+  await call('POST', '/dev/jobs/run');
+  const chat = (await call('GET', `/dev/simulator/${cid}`)).json.chat.filter((c) => c.direction === 'out');
+  const notice = chat.at(-1).message;
+  expect(notice?.kind === 'link' && notice.buttonLabel === 'Download receipt' && /\/api\/receipts\//.test(notice.url), `expected a link-button message, got ${JSON.stringify(chat.at(-1))}`);
+  expect(!/receipts/.test(notice.body), `the text must not contain the URL: ${notice.body}`);
+  await page.goto(`${base}/simulator`);
+  await page.locator('#sim-contact').click();
+  await page.getByRole('option').nth(1).click();
+  const sim = page.locator('[aria-label="Simulated chat"]');
+  const btn = sim.getByRole('link', { name: 'Download receipt' });
+  await btn.waitFor({ timeout: 15000 });
+  expect((await btn.getAttribute('href')).startsWith('/proxy/receipts/'), 'simulator button should point at the receipt');
+  expect(!/localhost:4223|\/api\/receipts\//.test(await sim.innerText()), 'no raw receipt URL may be visible in the chat');
+  const pdf = await page.request.get(new URL(await btn.getAttribute('href'), base).toString());
+  expect(pdf.status() === 200 && (pdf.headers()['content-type'] ?? '').includes('application/pdf'), `the button must open a PDF, got ${pdf.status()}`);
+  await shot('07c-simulator-receipt-button-in-window');
+});
+
 await step('French UI: the wallet and cost warnings are fully translated', async () => {
   await ctx.addCookies([{ name: 'sf_lang', value: 'fr', url: base }]);
   await page.goto(`${base}/billing`);

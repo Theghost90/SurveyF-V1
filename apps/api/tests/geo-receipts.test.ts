@@ -138,9 +138,11 @@ describe('proof of gift (receipt)', () => {
     const list = (await w.owner.get(`/api/surveys/${w.surveyId}/gifts`)).items[0];
     expect(list.status).toBe('sent');
     expect(list.receiptUrl).toBe(receiptUrl(g.id));
-    const sentNotice = (await chatOf(0)).at(-1).message.body as string;
-    expect(sentNotice).toMatch(/has been sent/);
-    expect(sentNotice).toContain(receiptUrl(g.id));
+    // inside the 24 h window: a short message with a "Download receipt" BUTTON (same look as the template path), never a raw URL in the text
+    const sentNotice = (await chatOf(0)).at(-1).message;
+    expect(sentNotice).toMatchObject({ kind: 'link', buttonLabel: 'Download receipt', url: receiptUrl(g.id) });
+    expect(sentNotice.body).toMatch(/has been sent/);
+    expect(sentNotice.body).not.toContain('/api/receipts/');
 
     const res = await get(pathOf(list.receiptUrl)); // no Authorization header: the participant has no account
     expect(res.statusCode).toBe(200);

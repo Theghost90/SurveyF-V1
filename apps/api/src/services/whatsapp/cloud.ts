@@ -67,6 +67,12 @@ export class CloudApiGateway implements WhatsAppGateway {
         },
       });
     }
+    if (msg.kind === 'link') {
+      return this.send(creds, {
+        to, type: 'interactive',
+        interactive: { type: 'cta_url', body: { text: msg.body }, action: { name: 'cta_url', parameters: { display_text: msg.buttonLabel, url: msg.url } } },
+      });
+    }
     return this.send(creds, {
       to, type: 'interactive',
       interactive: {
