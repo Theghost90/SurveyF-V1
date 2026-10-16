@@ -20,6 +20,7 @@ import type { Account } from '@/lib/account';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { dateShort, money, num } from '@/lib/format';
 import { failKey, watchPayment } from '@/lib/pay-poll';
+import { PaymentsInProgress, StillPending } from './payment-states';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 
@@ -64,6 +65,7 @@ export function SubscriptionPage({ initialPlan, initialInterval }: { initialPlan
   return (
     <>
       <PageHeader title={t('bill.title')} sub={t('bill.sub')} />
+      <PaymentsInProgress />
 
       <Card className="mb-8">
         <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
@@ -142,6 +144,7 @@ function CheckoutDialog({ plan, interval, data, onClose }: { plan: PaidPlanKey |
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<{ id: string } | null>(null);
+  const [waiting, setWaiting] = useState<{ id: string; reference: string } | null>(null);
 
   if (!plan) return null;
   const price = data.prices[plan];
@@ -154,14 +157,22 @@ function CheckoutDialog({ plan, interval, data, onClose }: { plan: PaidPlanKey |
       const tx = await api<{ id: string; reference: string; checkoutUrl: string | null; paymentToken: string | null }>('/subscription/upgrade', { method: 'PUT', body: { plan, interval, method, phone: method === 'mobile_money' ? phone : undefined } });
       if (tx.checkoutUrl) { window.location.href = tx.checkoutUrl; return; }
       setPending({ id: tx.id });
-      watchPayment(tx.id, {
-        done: (s) => { if (s.status === 'success') { window.location.href = `/billing/return?ref=${tx.id}`; return; } setPending(null); setBusy(false); setError(t(failKey(s.failCode))); },
-        timeout: () => { setPending(null); setBusy(false); setError(t('bill.payFailed')); },
-      });
+      watch(tx.id, tx.reference);
     } catch (err) {
       setError(errorMessage(err, t));
       setBusy(false);
     }
+  }
+  function watch(id: string, reference: string) {
+    watchPayment(id, {
+      done: (s) => {
+        if (s.status === 'success') { window.location.href = `/billing/return?ref=${id}`; return; }
+        setPending(null); setWaiting(null); setBusy(false);
+        setError(s.status === 'review' ? t('bill.reviewHelp', { ref: reference }) : s.status === 'expired' ? t('bill.expiredHelp') : t(failKey(s.failCode)));
+      },
+      // Not decided yet is not "failed": the customer may approve in a minute, or already did.
+      timeout: () => { setPending(null); setWaiting({ id, reference }); setBusy(false); },
+    });
   }
 
   return (
@@ -171,7 +182,9 @@ function CheckoutDialog({ plan, interval, data, onClose }: { plan: PaidPlanKey |
           <DialogTitle>{t('bill.checkout', { plan: t(`plan.${plan}`) })}</DialogTitle>
           <DialogDescription>{interval === 'annual' ? t('pricing.annual') : t('pricing.monthly')} · {money(amount, price.currency, locale)}</DialogDescription>
         </DialogHeader>
-        {pending ? (
+        {waiting ? (
+          <StillPending reference={waiting.reference} onClose={onClose} onCheckAgain={() => { const w = waiting; setWaiting(null); setPending({ id: w.id }); watch(w.id, w.reference); }} />
+        ) : pending ? (
           <div role="status" className="flex flex-col items-center gap-3 py-6 text-center">
             <Smartphone className="h-10 w-10 text-leaf" aria-hidden />
             <p className="font-display text-xl font-bold">{t('bill.approve')}</p>

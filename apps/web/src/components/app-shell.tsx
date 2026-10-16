@@ -42,6 +42,7 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
     !sub ? null
     : sub.status === 'suspended' ? { tone: 'danger' as const, text: t('app.suspended'), cta: t('app.renew') }
     : sub.status === 'past_due' ? { tone: 'warn' as const, text: t('app.pastDue', { date: sub.graceEndsAt ? dateShort(sub.graceEndsAt, locale) : '' }), cta: t('app.renew') }
+    : sub.status === 'active' && sub.amountFCFA > 0 && sub.daysLeft <= 5 ? { tone: 'warn' as const, text: t(sub.cancelAtPeriodEnd ? 'app.endsSoon' : 'app.renewsSoon', { n: sub.daysLeft }), cta: sub.cancelAtPeriodEnd ? t('common.upgrade') : t('app.renew') }
     : sub.status === 'trial' ? { tone: 'info' as const, text: sub.daysLeft === 1 ? t('app.trialLeftOne') : t('app.trialLeft', { n: sub.daysLeft }), cta: t('common.upgrade') }
     : null;
 

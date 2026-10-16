@@ -22,3 +22,10 @@ export const rlCredentials = (max = 10, timeWindow = '1 minute') => ({
     },
   },
 });
+
+/**
+ * Calls the global rate limit must not touch. Only Meta's webhook: its volume follows our customers' participants and Meta signs every call.
+ * The payment providers' webhooks are NOT exempt (they carry their own, generous, per-route limit): some providers cannot sign, so the
+ * address is public, and every call there can cost us a verification request to the provider.
+ */
+export const isRateLimitExempt = (url: string): boolean => url.startsWith('/api/webhook/');

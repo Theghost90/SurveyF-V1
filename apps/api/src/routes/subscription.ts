@@ -8,7 +8,6 @@ import { billingQuote, methodsFor } from '../services/billing-currency';
 import { initiatePayment, txDto } from '../services/payments/service';
 import { initiateSchema } from './payments';
 
-const rank: Record<string, number> = { trial: 0, starter: 1, growth: 2, business: 3 };
 
 export default async function subscriptionRoutes(app: FastifyInstance) {
   const auth = { preHandler: app.authenticate };
@@ -40,11 +39,7 @@ export default async function subscriptionRoutes(app: FastifyInstance) {
    */
   app.put('/api/subscription/upgrade', { ...auth, ...rl(20) }, async (req) => {
     const body = initiateSchema.parse(req.body);
-    const sub = await prisma.subscription.findUniqueOrThrow({ where: { userId: req.userId } });
-    const paidAndActive = sub.amountFCFA > 0 && ['active', 'past_due'].includes(sub.status);
-    if (paidAndActive && rank[body.plan]! < rank[sub.plan]!) {
-      throw conflict('downgrade_not_supported', 'To move to a lower plan, cancel at period end and subscribe again afterwards.');
-    }
+    // The downgrade guard is inside initiatePayment, so POST /api/payments/initiate cannot bypass it.
     return txDto(await initiatePayment(req.userId, body as { plan: PaidPlanKey; interval: 'monthly' | 'annual'; method: 'mobile_money' | 'card' | 'bank_transfer'; phone?: string }));
   });
 

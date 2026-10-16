@@ -107,6 +107,8 @@ export const en = {
   'app.pastDue': 'Your subscription payment is overdue. Renew before {date} to avoid suspension.',
   'app.suspended': 'Your account is suspended: you can view and export data, but not publish or send. Renew to continue.',
   'app.renew': 'Renew now',
+  'app.renewsSoon': 'Your plan ends in {n} day(s). Renewal is not automatic: renew now so your surveys keep running.',
+  'app.endsSoon': 'You cancelled: your plan ends in {n} day(s).',
   'app.finishSetup': 'Finish setting up',
   'app.finishSetupText': 'Connect WhatsApp, add contacts and create your first survey.',
 
@@ -258,6 +260,8 @@ export const fr: Record<keyof typeof en, string> = {
   'app.pastDue': 'Le paiement de votre abonnement est en retard. Renouvelez avant le {date} pour éviter la suspension.',
   'app.suspended': 'Votre compte est suspendu : vous pouvez consulter et exporter vos données, mais pas publier ni envoyer. Renouvelez pour continuer.',
   'app.renew': 'Renouveler',
+  'app.renewsSoon': 'Votre forfait se termine dans {n} jour(s). Le renouvellement n’est pas automatique : renouvelez maintenant pour que vos sondages continuent.',
+  'app.endsSoon': 'Vous avez résilié : votre forfait se termine dans {n} jour(s).',
   'app.finishSetup': 'Terminer la configuration',
   'app.finishSetupText': 'Connectez WhatsApp, ajoutez vos contacts et créez votre premier sondage.',
 

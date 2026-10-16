@@ -60,11 +60,16 @@ export default async function paymentRoutes(app: FastifyInstance) {
       req.log.warn({ psp, ref: parsed.reference }, 'webhook for unknown transaction');
       return reply.code(200).send({ ok: true });
     }
-    await refreshTransaction(tx, pspRouter, req.log, { force: true });
+    const { verifyError } = await refreshTransaction(tx, pspRouter, req.log, { force: true });
+    // We could not ask the provider (its verification endpoint is down, or our database hiccuped): answering 200 would tell it "handled" and it
+    // would never call again. 503 makes it retry; once verified, ANY outcome (paid, failed, still pending) is a 200.
+    if (verifyError) return reply.code(503).send({ error: 'verification_unavailable' });
     return reply.code(200).send({ ok: true });
   };
-  app.post('/api/payments/webhook/:psp', webhook);
-  app.get('/api/payments/webhook/:psp', webhook); // CinetPay / Campay notify via GET as well
+  // Not exempt from rate limiting (the global exemption is Meta's webhook only): an unsigned provider's webhook is an open door to our
+  // provider-verification calls. 600 a minute per address is far above what a provider sends and far below a flood.
+  app.post('/api/payments/webhook/:psp', { ...rl(600) }, webhook);
+  app.get('/api/payments/webhook/:psp', { ...rl(600) }, webhook); // CinetPay / Campay notify via GET as well
 
   /** Demo checkout: "pay" or "fail" a mock payment. Only exists when PSP_MOCK=true (never in production). */
   if (env.PSP_MOCK && !env.isProd) {

@@ -372,7 +372,8 @@ model Subscription {
   interval          String    @default("monthly") // monthly | annual
   cancelAtPeriodEnd Boolean   @default(false)
   graceEndsAt       DateTime?
-  reminderSentAt    DateTime?
+  reminderSentAt    DateTime? // "your plan renews in 3 days" notice sent for this period (reset by every payment)
+  pastDueNoticeAt   DateTime? // "payment overdue, renew before …" notice sent for this lapse (reset by every payment)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 

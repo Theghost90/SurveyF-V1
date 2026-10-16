@@ -151,6 +151,18 @@ function load(): Env {
       const local = /^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$)/i.test(u.hostname) || !u.hostname.includes('.');
       if (u.protocol !== 'https:' || local) problems.push('PUBLIC_API_URL must be the API\'s public https address (receipt links and PSP/Meta callbacks are built from it), not localhost or a private address');
     } catch { problems.push('PUBLIC_API_URL is not a valid URL'); }
+    // A production API that cannot take a payment would fail every customer at the last step, long after it started.
+    const anyPsp = !!(e.NOTCHPAY_API_KEY || (e.CINETPAY_API_KEY && e.CINETPAY_SITE_ID) || e.CAMPAY_API_KEY || (e.PAYUNIT_API_KEY && e.PAYUNIT_API_USERNAME && e.PAYUNIT_API_PASSWORD)
+      || e.FLUTTERWAVE_SECRET_KEY || (e.CAMERPAY_API_KEY && e.CAMERPAY_WEBHOOK_SECRET));
+    if (!anyPsp) problems.push('No payment provider is configured (NOTCHPAY_API_KEY, CINETPAY_*, CAMPAY_API_KEY, PAYUNIT_*, FLUTTERWAVE_SECRET_KEY or CAMERPAY_*): customers could not pay');
+    // Not fatal (the status poll and the reconciliation still settle payments), but every webhook of such a provider is refused as unsigned.
+    for (const [name, key, secret, varName] of [
+      ['NotchPay', e.NOTCHPAY_API_KEY, e.NOTCHPAY_WEBHOOK_HASH, 'NOTCHPAY_WEBHOOK_HASH'],
+      ['Flutterwave', e.FLUTTERWAVE_SECRET_KEY, e.FLUTTERWAVE_WEBHOOK_HASH, 'FLUTTERWAVE_WEBHOOK_HASH'],
+      ['Campay', e.CAMPAY_API_KEY, e.CAMPAY_WEBHOOK_KEY, 'CAMPAY_WEBHOOK_KEY'],
+    ] as const) {
+      if (key && !secret) console.warn(`[payments] ${name} is configured but ${varName} is not: its webhooks will be rejected as unsigned and payments settle only through polling and reconciliation (slower)`);
+    }
     if (problems.length) {
       console.error('Refusing to start in production:\n' + problems.map((p) => '  - ' + p).join('\n'));
       process.exit(1);

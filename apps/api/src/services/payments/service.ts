@@ -4,11 +4,12 @@ import { ANNUAL_MONTHS_CHARGED, PLANS, PSP_CHARGE_CURRENCIES, convertToXAF, curr
 import { env } from '../../config/env';
 import { AppError, badRequest, conflict, notFound } from '../../lib/errors';
 import { prisma } from '../../lib/prisma';
-import { redis } from '../../lib/redis';
+import { redis, withLock } from '../../lib/redis';
 import { notifyOwner } from '../notify';
 import { billingQuote, methodsFor, walletCurrency, walletQuote } from '../billing-currency';
 import { fixedFeeConverter } from '../fx';
 import { creditWallet } from '../wallet';
+import { breakerFail, breakerOk, breakerOpen } from './breaker';
 import { pspRouter, type PSPRouter } from './router';
 import { PspError, type PSPAdapter, type VerifyResult } from './types';
 
@@ -70,16 +71,71 @@ function payerPhone(input: { phone?: string }, user: { phone: string; country: s
   return normalized ?? '';
 }
 
+/** Plan order for "is this a downgrade?" (trial = 0). */
+export const PLAN_RANK: Record<string, number> = { trial: 0, starter: 1, growth: 2, business: 3 };
+
+/**
+ * How long an identical pending payment is handed back instead of starting a second one. A hosted card page stays valid for a while; a Mobile
+ * Money prompt dies within about a minute at the operator, so a customer who retries after that needs a NEW prompt, not the dead one.
+ */
+const REUSE_MS: Record<string, number> = { card: 10 * 60_000, bank_transfer: 10 * 60_000, mobile_money: 90_000 };
+/** A row that was never dispatched (the process died between "create" and "call the provider") is not reusable after this. */
+const DISPATCH_GRACE_MS = 40_000;
+/** Payments one customer may have in flight at once: a runaway client must not be able to start twenty charges. */
+const MAX_PENDING = 4;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * "Is there already an identical payment in flight? If not, create one" as ONE step per customer (a short Redis lock), because as two steps
+ * eight simultaneous clicks created two charges. Starting the payment at the provider happens after, outside the lock.
+ */
+async function reserveTransaction(
+  userId: string, method: string, same: Prisma.PaymentTransactionWhereInput, data: Prisma.PaymentTransactionUncheckedCreateInput,
+): Promise<{ tx: PaymentTransaction; fresh: boolean }> {
+  try {
+    return await withLock(`payinit:${userId}`, async () => {
+      const now = Date.now();
+      const dup = await prisma.paymentTransaction.findFirst({
+        where: {
+          ...same, userId, status: 'pending', createdAt: { gt: new Date(now - (REUSE_MS[method] ?? 600_000)) },
+          OR: [{ checkoutUrl: { not: null } }, { pspReference: { not: null } }, { createdAt: { gt: new Date(now - DISPATCH_GRACE_MS) } }],
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (dup) return { tx: dup, fresh: false };
+      const open = await prisma.paymentTransaction.count({ where: { userId, status: 'pending', createdAt: { gt: new Date(now - 30 * 60_000) } } });
+      if (open >= MAX_PENDING) throw new AppError(429, 'too_many_pending', 'You already have several payments in progress. Wait for them to be confirmed before starting another, so you are never charged twice.');
+      return { tx: await prisma.paymentTransaction.create({ data }), fresh: true };
+    }, { ttlMs: 10_000, waitMs: 8_000 });
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('lock timeout')) throw new AppError(409, 'payment_busy', 'Another payment is being started. Please wait a few seconds and try again.');
+    throw err;
+  }
+}
+
+/** The caller got an identical in-flight payment that another request is still starting at the provider: wait for its checkout, do not start a second. */
+async function awaitDispatch(tx: PaymentTransaction): Promise<PaymentTransaction> {
+  const deadline = Date.now() + 25_000;
+  let cur = tx;
+  for (;;) {
+    if (cur.status === 'failed') throw new AppError(502, 'psp_unavailable', 'We could not reach any payment provider. Please try again in a moment.');
+    if (cur.status !== 'pending' || cur.checkoutUrl || cur.pspReference || Date.now() > deadline) return cur;
+    await sleep(300);
+    cur = await prisma.paymentTransaction.findUniqueOrThrow({ where: { id: tx.id } });
+  }
+}
+
 export async function initiatePayment(userId: string, input: InitiateInput, router: PSPRouter = pspRouter): Promise<PaymentTransaction> {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { subscription: true } });
-  if (!user.subscription) throw notFound('Subscription');
+  const sub = user.subscription;
+  if (!sub) throw notFound('Subscription');
 
-  // Double-click / refresh protection: reuse a fresh identical pending payment instead of creating a second charge.
-  const dup = await prisma.paymentTransaction.findFirst({
-    where: { userId, plan: input.plan, interval: input.interval, method: input.method, status: 'pending', createdAt: { gt: new Date(Date.now() - 10 * 60_000) } },
-    orderBy: { createdAt: 'desc' },
-  });
-  if (dup) return dup;
+  // The downgrade guard lives HERE, not in one route: every way of starting a payment passes through it. (Paying for a lower plan would
+  // replace the higher one at once and throw away what is left of it.)
+  if (sub.amountFCFA > 0 && ['active', 'past_due'].includes(sub.status) && PLAN_RANK[input.plan]! < PLAN_RANK[sub.plan]!) {
+    throw conflict('downgrade_not_supported', 'To move to a lower plan, cancel at period end and subscribe again afterwards.');
+  }
 
   // The price is the FCFA price converted at the live rate into the owner's currency (CFA francs when no fresh rate exists), and the
   // charge is made in that same currency: the provider shows the buyer exactly the amount we show, and settles to us in XAF.
@@ -95,37 +151,46 @@ export async function initiatePayment(userId: string, input: InitiateInput, rout
 
   const phone = payerPhone(input, user, input.method);
 
-  const tx = await prisma.paymentTransaction.create({
-    data: {
-      subscriptionId: user.subscription.id, userId, pspProvider: chain[0]!.name, amount, currency: payCurrency, amountXAF, fxRate: fxRateOf(quote), status: 'pending',
+  const { tx, fresh } = await reserveTransaction(
+    userId, input.method, { purpose: 'subscription', plan: input.plan as Plan, interval: input.interval, method: input.method },
+    {
+      subscriptionId: sub.id, userId, pspProvider: chain[0]!.name, amount, currency: payCurrency, amountXAF, fxRate: fxRateOf(quote), status: 'pending',
       reference: `sf${refId()}`, purpose: 'subscription', plan: input.plan as Plan, interval: input.interval, method: input.method, phone: phone || null,
     },
-  });
+  );
+  if (!fresh) return awaitDispatch(tx);
   return dispatchCheckout(tx, chain, user, `SurveyFlow ${PLANS[input.plan].key} (${input.interval})`, phone);
 }
 
 /**
  * Walks the PSP failover chain for an already-created pending transaction. Shared by subscriptions and gift top-ups so
  * both get the same failover, the same reference rules and the same "mark failed if nobody answers" behaviour.
+ * A provider that has been failing is moved to the END of the chain (see breaker.ts), so a down provider costs one customer's wait, not everyone's.
  */
 async function dispatchCheckout(
   tx: PaymentTransaction, chain: PSPAdapter[], user: { name: string; email: string }, description: string, phone: string,
 ): Promise<PaymentTransaction> {
   const returnUrl = `${env.webOrigins[0]}/billing/return?ref=${tx.reference}`;
   const notifyUrl = (psp: string) => `${env.PUBLIC_API_URL}/api/payments/webhook/${psp}`;
+  const tripped = await Promise.all(chain.map((a) => breakerOpen(a.name)));
+  const ordered = [...chain.filter((_, i) => !tripped[i]), ...chain.filter((_, i) => tripped[i])];
   let lastErr: Error | null = null;
-  for (const adapter of chain) {
+  for (const adapter of ordered) {
+    let r: Awaited<ReturnType<PSPAdapter['initiatePayment']>>;
     try {
-      const r = await adapter.initiatePayment({
+      r = await adapter.initiatePayment({
         amount: tx.amount, currency: tx.currency as Currency, method: tx.method as PaymentMethod, reference: tx.reference, customerName: user.name, customerEmail: user.email,
         customerPhone: toWaId(phone || '0'), description, returnUrl, notifyUrl: notifyUrl(adapter.name),
       });
-      return prisma.paymentTransaction.update({ where: { id: tx.id }, data: { pspProvider: adapter.name, pspReference: r.pspReference ?? r.paymentToken ?? null, checkoutUrl: r.checkoutUrl ?? null } });
     } catch (err) {
       lastErr = err as Error;
+      if (err instanceof PspError && err.retryable) await breakerFail(adapter.name);
       if (err instanceof PspError && !err.retryable) break;
-      // otherwise fail over to the next provider in the chain
+      continue; // otherwise fail over to the next provider in the chain
     }
+    await breakerOk(adapter.name);
+    // Outside the try on purpose: a database hiccup AFTER the provider accepted the payment must not look like "the provider failed" and start a second one.
+    return prisma.paymentTransaction.update({ where: { id: tx.id }, data: { pspProvider: adapter.name, pspReference: r.pspReference ?? r.paymentToken ?? null, checkoutUrl: r.checkoutUrl ?? null } });
   }
   await prisma.paymentTransaction.update({ where: { id: tx.id }, data: { status: 'failed', failReason: `psp_unavailable: ${(lastErr?.message ?? 'no provider answered').slice(0, 270)}` } });
   throw new AppError(502, 'psp_unavailable', 'We could not reach any payment provider. Please try again in a moment.');
@@ -163,23 +228,19 @@ export async function initiateGiftTopup(userId: string, input: TopupInput, route
   const other = await prisma.paymentTransaction.findFirst({ where: { userId, purpose: 'gift_topup', status: 'pending', currency: { not: currency }, createdAt: { gt: new Date(Date.now() - 24 * 3_600_000) } } });
   if (other) throw conflict('topup_in_other_currency', `A top-up in ${other.currency} is still pending. Finish or wait for it before topping up in ${currency}.`);
 
-  const dup = await prisma.paymentTransaction.findFirst({
-    where: { userId, purpose: 'gift_topup', amount, currency, method: input.method, status: 'pending', createdAt: { gt: new Date(Date.now() - 10 * 60_000) } },
-    orderBy: { createdAt: 'desc' },
-  });
-  if (dup) return dup;
-
   const amountXAF = convertToXAF(amount, quote);
   const chain = router.chain({ country: user.country, currency, method: input.method, amountXAF }, undefined, await fixedFeeConverter());
   if (!chain.length) throw new AppError(503, 'no_psp_available', 'No payment provider is available for this country / payment method right now');
 
   const phone = payerPhone(input, user, input.method);
-  const tx = await prisma.paymentTransaction.create({
-    data: {
+  const { tx, fresh } = await reserveTransaction(
+    userId, input.method, { purpose: 'gift_topup', amount, currency, method: input.method },
+    {
       subscriptionId: user.subscription.id, userId, pspProvider: chain[0]!.name, amount, currency, amountXAF, fxRate: fxRateOf(quote), status: 'pending',
       reference: `sf${refId()}`, purpose: 'gift_topup', plan: null, interval: 'monthly', method: input.method, phone: phone || null,
     },
-  });
+  );
+  if (!fresh) return awaitDispatch(tx);
   return dispatchCheckout(tx, chain, user, 'SurveyFlow gift wallet top-up', phone);
 }
 
@@ -249,7 +310,7 @@ async function activateSubscription(db: Prisma.TransactionClient, tx: PaymentTra
       plan: tx.plan, status: 'active', currentPeriodStart: start, currentPeriodEnd: end, interval: tx.interval,
       amountFCFA: PLANS[plan].priceFCFA * (tx.interval === 'annual' ? ANNUAL_MONTHS_CHARGED : 1),
       paymentMethod: tx.method, pspProvider: tx.pspProvider, pspTransactionId: pspTxId ?? null,
-      cancelAtPeriodEnd: false, graceEndsAt: null, reminderSentAt: null,
+      cancelAtPeriodEnd: false, graceEndsAt: null, reminderSentAt: null, pastDueNoticeAt: null,
     },
   });
   await db.user.update({ where: { id: tx.userId }, data: { plan: tx.plan } });

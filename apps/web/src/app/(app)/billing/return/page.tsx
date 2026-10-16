@@ -1,14 +1,17 @@
 'use client';
 import Link from 'next/link';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useSWRConfig } from 'swr';
-import { CheckCircle2, Loader2, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, Loader2, XCircle } from 'lucide-react';
 import { buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { StillPending } from '@/components/billing/payment-states';
 import { useAccount } from '@/lib/account';
-import { failKey, watchPayment, type PayState } from '@/lib/pay-poll';
 import { useT } from '@/lib/i18n/client';
+import { failKey, watchPayment, type PayState } from '@/lib/pay-poll';
+
+type View = 'pending' | 'success' | 'failed' | 'waiting' | 'review' | 'expired';
 
 /** Landing page after a PSP checkout. It never trusts the redirect: it asks the API, which re-verifies with the PSP. */
 function Return() {
@@ -16,26 +19,34 @@ function Return() {
   const ref = useSearchParams().get('ref');
   const { mutate } = useAccount();
   const { mutate: mutateGlobal } = useSWRConfig();
-  const [status, setStatus] = useState<'pending' | 'success' | 'failed'>('pending');
+  const [view, setView] = useState<View>('pending');
   const [wallet, setWallet] = useState(false);
   const [failCode, setFailCode] = useState<PayState['failCode']>(null);
+  const [round, setRound] = useState(0);
 
   useEffect(() => {
-    if (!ref) { setStatus('failed'); return; }
+    if (!ref) { setView('failed'); return; }
+    setView('pending');
     return watchPayment(ref, {
       done: (tx) => {
-        if (tx.status === 'success') { setWallet(tx.purpose === 'gift_topup'); setStatus('success'); void mutate(); void mutateGlobal('/wallet'); return; }
-        setFailCode(tx.failCode); setStatus('failed');
+        if (tx.status === 'success') { setWallet(tx.purpose === 'gift_topup'); setView('success'); void mutate(); void mutateGlobal('/wallet'); return; }
+        setFailCode(tx.failCode);
+        setView(tx.status === 'review' ? 'review' : tx.status === 'expired' ? 'expired' : 'failed');
       },
-      timeout: () => setStatus('failed'),
+      // Out of patience while the provider has not decided: not a failure (see StillPending).
+      timeout: () => setView('waiting'),
     });
-  }, [ref, mutate, mutateGlobal]);
+  }, [ref, round, mutate, mutateGlobal]);
+  const again = useCallback(() => setRound((n) => n + 1), []);
 
   return (
     <Card className="mx-auto mt-10 flex max-w-md flex-col items-center gap-4 p-10 text-center" role="status">
-      {status === 'pending' && <><Loader2 className="h-10 w-10 animate-spin text-leaf" aria-hidden /><h1 className="text-2xl font-extrabold">{t('bill.verifying')}</h1><p className="text-muted-foreground">{t('bill.verifyingHelp')}</p></>}
-      {status === 'success' && <><CheckCircle2 className="h-12 w-12 text-leaf" aria-hidden /><h1 className="text-2xl font-extrabold">{wallet ? t('w.paid') : t('bill.paid')}</h1><p className="text-muted-foreground">{wallet ? t('w.paidHelp') : t('bill.paidHelp')}</p><Link href={wallet ? '/billing#wallet' : '/dashboard'} className={buttonVariants({})}>{wallet ? t('w.title') : t('app.nav.dashboard')}</Link></>}
-      {status === 'failed' && <><XCircle className="h-12 w-12 text-destructive" aria-hidden /><h1 className="text-2xl font-extrabold">{t('bill.notPaid')}</h1><p className="text-muted-foreground">{t(failKey(failCode))}</p><Link href="/billing" className={buttonVariants({})}>{t('common.retry')}</Link></>}
+      {view === 'pending' && <><Loader2 className="h-10 w-10 animate-spin text-leaf" aria-hidden /><h1 className="text-2xl font-extrabold">{t('bill.verifying')}</h1><p className="text-muted-foreground">{t('bill.verifyingHelp')}</p></>}
+      {view === 'success' && <><CheckCircle2 className="h-12 w-12 text-leaf" aria-hidden /><h1 className="text-2xl font-extrabold">{wallet ? t('w.paid') : t('bill.paid')}</h1><p className="text-muted-foreground">{wallet ? t('w.paidHelp') : t('bill.paidHelp')}</p><Link href={wallet ? '/billing#wallet' : '/dashboard'} className={buttonVariants({})}>{wallet ? t('w.title') : t('app.nav.dashboard')}</Link></>}
+      {view === 'waiting' && <StillPending reference={ref ?? ''} onCheckAgain={again} />}
+      {view === 'review' && <><Clock className="h-12 w-12 text-leaf" aria-hidden /><h1 className="text-2xl font-extrabold">{t('bill.st.review')}</h1><p className="text-muted-foreground" data-testid="pay-review">{t('bill.reviewHelp', { ref: ref ?? '' })}</p><Link href="/billing" className={buttonVariants({})}>{t('bill.title')}</Link></>}
+      {view === 'expired' && <><Clock className="h-12 w-12 text-leaf" aria-hidden /><h1 className="text-2xl font-extrabold">{t('bill.notPaid')}</h1><p className="text-muted-foreground">{t('bill.expiredHelp')}</p><Link href="/billing" className={buttonVariants({})}>{t('common.retry')}</Link></>}
+      {view === 'failed' && <><XCircle className="h-12 w-12 text-destructive" aria-hidden /><h1 className="text-2xl font-extrabold">{t('bill.notPaid')}</h1><p className="text-muted-foreground">{t(failKey(failCode))}</p><Link href="/billing" className={buttonVariants({})}>{t('common.retry')}</Link></>}
     </Card>
   );
 }

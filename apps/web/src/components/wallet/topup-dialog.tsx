@@ -10,6 +10,7 @@ import { useOwnerCountry } from '@/lib/geo-context';
 import { currencyLabel, formatPhone } from '@surveyflow/shared';
 import { money, num } from '@/lib/format';
 import { failKey, watchPayment } from '@/lib/pay-poll';
+import { StillPending } from '@/components/billing/payment-states';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 import type { WalletData } from './use-wallet';
@@ -31,6 +32,7 @@ export function TopupDialog({ open, onClose, wallet, defaultPhone }: { open: boo
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [waiting, setWaiting] = useState<{ id: string; reference: string } | null>(null);
 
   const n = Number(amount);
   const valid = Number.isInteger(n) && n >= min && n <= max;
@@ -39,17 +41,25 @@ export function TopupDialog({ open, onClose, wallet, defaultPhone }: { open: boo
     setBusy(true);
     setError(null);
     try {
-      const tx = await api<{ id: string; checkoutUrl: string | null }>('/wallet/topup', { method: 'POST', body: { amount: n, method, phone: method === 'mobile_money' ? phone : undefined } });
+      const tx = await api<{ id: string; reference: string; checkoutUrl: string | null }>('/wallet/topup', { method: 'POST', body: { amount: n, method, phone: method === 'mobile_money' ? phone : undefined } });
       if (tx.checkoutUrl) { window.location.href = tx.checkoutUrl; return; }
       setPending(true);
-      watchPayment(tx.id, {
-        done: (s) => { if (s.status === 'success') { window.location.href = `/billing/return?ref=${tx.id}`; return; } setPending(false); setBusy(false); setError(t(failKey(s.failCode))); },
-        timeout: () => { setPending(false); setBusy(false); setError(t('bill.payFailed')); },
-      });
+      watch(tx.id, tx.reference);
     } catch (err) {
       setError(errorMessage(err, t));
       setBusy(false);
     }
+  }
+  function watch(id: string, reference: string) {
+    watchPayment(id, {
+      done: (s) => {
+        if (s.status === 'success') { window.location.href = `/billing/return?ref=${id}`; return; }
+        setPending(false); setWaiting(null); setBusy(false);
+        setError(s.status === 'review' ? t('bill.reviewHelp', { ref: reference }) : s.status === 'expired' ? t('bill.expiredHelp') : t(failKey(s.failCode)));
+      },
+      // Not decided yet is not "failed": the customer may approve in a minute, or already did.
+      timeout: () => { setPending(false); setWaiting({ id, reference }); setBusy(false); },
+    });
   }
 
   return (
@@ -59,7 +69,9 @@ export function TopupDialog({ open, onClose, wallet, defaultPhone }: { open: boo
           <DialogTitle>{t('w.dialogTitle')}</DialogTitle>
           <DialogDescription>{t('w.dialogSub', { currency: label })}</DialogDescription>
         </DialogHeader>
-        {pending ? (
+        {waiting ? (
+          <StillPending reference={waiting.reference} onClose={onClose} onCheckAgain={() => { const w = waiting; setWaiting(null); setPending(true); watch(w.id, w.reference); }} />
+        ) : pending ? (
           <div role="status" className="flex flex-col items-center gap-3 py-6 text-center">
             <Smartphone className="h-10 w-10 text-leaf" aria-hidden />
             <p className="font-display text-xl font-bold">{t('bill.approve')}</p>
