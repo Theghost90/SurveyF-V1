@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import useSWR from 'swr';
+import useSWR, { mutate as globalMutate } from 'swr';
 import { Check, CreditCard, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { PAID_PLAN_KEYS, PLANS, formatPhone, phoneExampleFor, type PaidPlanKey } from '@surveyflow/shared';
@@ -161,6 +161,7 @@ function CheckoutDialog({ plan, interval, data, onClose }: { plan: PaidPlanKey |
     } catch (err) {
       setError(errorMessage(err, t));
       setBusy(false);
+      void globalMutate('/payments'); // an unconfirmed start leaves a pending payment: show it under "Payments in progress" now
     }
   }
   function watch(id: string, reference: string) {

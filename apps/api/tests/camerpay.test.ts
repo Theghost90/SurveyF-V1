@@ -116,7 +116,7 @@ describe('CamerPay webhooks: HMAC-SHA256 over uuid|invoice_id|status|amount', ()
     const { o } = await pendingTx();
     expect((await post(completed('100.00'))).statusCode).toBe(200);
     expect((await o.get('/api/auth/me')).subscription.status).toBe('trial');
-    expect((await prisma.paymentTransaction.findFirstOrThrow()).status).toBe('failed');
+    expect((await prisma.paymentTransaction.findFirstOrThrow()).status).toBe('review'); // money received: a person decides, it is not a failure
   });
 
   it('a card payment that carries the buyer-side processing fee on top is accepted: the plan is credited at what we asked, not what was collected', async () => {

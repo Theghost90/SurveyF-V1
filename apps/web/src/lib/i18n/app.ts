@@ -61,6 +61,9 @@ export const en = {
   'err.no_eligible_contacts': 'No eligible contacts: they may be opted out or were already invited.',
   'err.not_active': 'Publish the survey first.',
   'err.psp_unavailable': 'No payment provider could be reached. Try again in a moment.',
+  'err.psp_unconfirmed': 'We could not confirm that your payment request went through. Do not pay again yet: check your phone for an approval request, and look at “Payments in progress” in a few minutes.',
+  'err.too_many_pending': 'You already have several payments in progress. Wait until they are confirmed before starting another, so you are never charged twice.',
+  'err.payment_busy': 'Another payment is being started. Wait a few seconds and try again.',
   'err.no_psp_available': 'No payment provider is available for this payment method.',
   'err.downgrade_not_supported': 'To move to a lower plan, cancel at period end and subscribe again afterwards.',
 
@@ -216,6 +219,9 @@ export const fr: Record<keyof typeof en, string> = {
   'err.no_eligible_contacts': 'Aucun contact éligible : ils se sont peut-être désinscrits ou ont déjà été invités.',
   'err.not_active': 'Publiez d’abord le sondage.',
   'err.psp_unavailable': 'Aucun prestataire de paiement joignable. Réessayez dans un instant.',
+  'err.psp_unconfirmed': 'Nous n’avons pas pu confirmer que votre demande de paiement est partie. Ne payez pas encore une seconde fois : vérifiez votre téléphone, puis consultez « Paiements en cours » dans quelques minutes.',
+  'err.too_many_pending': 'Vous avez déjà plusieurs paiements en cours. Attendez leur confirmation avant d’en lancer un autre, pour ne jamais être débité deux fois.',
+  'err.payment_busy': 'Un autre paiement est en cours de lancement. Patientez quelques secondes puis réessayez.',
   'err.no_psp_available': 'Aucun prestataire disponible pour ce moyen de paiement.',
   'err.downgrade_not_supported': 'Pour passer à un forfait inférieur, annulez à la fin de la période puis réabonnez-vous.',
 

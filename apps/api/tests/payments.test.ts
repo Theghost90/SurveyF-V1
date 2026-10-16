@@ -124,9 +124,9 @@ describe('payment security', () => {
   it('refuses to activate when the PSP says the paid amount or currency is lower than asked', async () => {
     const o = await registerOwner(app);
     const tx = await makeTx(o.userId);
-    expect(await settleTransaction(tx.id, { status: 'success', amount: 100, currency: 'XAF' }, { warn: () => undefined })).toBe('amount_mismatch');
+    expect(await settleTransaction(tx.id, { status: 'success', amount: 100, currency: 'XAF' }, { warn: () => undefined })).toBe('needs_review');
     const tx2 = await prisma.paymentTransaction.create({ data: { ...{ ...tx, id: undefined, createdAt: undefined }, reference: 'sftestref002', status: 'pending' } as never });
-    expect(await settleTransaction(tx2.id, { status: 'success', amount: 39000, currency: 'USD' }, { warn: () => undefined })).toBe('amount_mismatch');
+    expect(await settleTransaction(tx2.id, { status: 'success', amount: 39000, currency: 'USD' }, { warn: () => undefined })).toBe('needs_review');
     expect((await prisma.user.findUniqueOrThrow({ where: { id: o.userId } })).plan).toBe('trial');
   });
 });

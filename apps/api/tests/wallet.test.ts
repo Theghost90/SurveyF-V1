@@ -89,7 +89,7 @@ describe('wallet top-up (through the real payment settle path)', () => {
     expect((await o.post(`/api/payments/mock/${declined.reference}`, { outcome: 'failed' })).body.status).toBe('failed');
 
     const under = await prisma.paymentTransaction.create({ data: { ...(await txBase(o.userId)), amount: 8_000, reference: 'sfunder', purpose: 'gift_topup', plan: null } });
-    expect(await settleTransaction(under.id, { status: 'success', amount: 7_000, currency: 'XAF' }, { warn() {} })).toBe('amount_mismatch');
+    expect(await settleTransaction(under.id, { status: 'success', amount: 7_000, currency: 'XAF' }, { warn() {} })).toBe('needs_review');
 
     const over = await prisma.paymentTransaction.create({ data: { ...(await txBase(o.userId)), amount: 8_000, reference: 'sfover', purpose: 'gift_topup', plan: null } });
     expect(await settleTransaction(over.id, { status: 'success', amount: 9_999, currency: 'XAF' }, { warn() {} })).toBe('activated');

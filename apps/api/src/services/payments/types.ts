@@ -80,6 +80,10 @@ export class PspError extends Error {
   }
 }
 
+/** Errors that happen before a single byte of the request could have left (no connection, no name, a refused TLS handshake): the provider cannot have seen it. */
+const NEVER_SENT = /^(ECONNREFUSED|ENOTFOUND|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH|UND_ERR_CONNECT_TIMEOUT|ERR_TLS_|CERT_|DEPTH_ZERO|UNABLE_TO_)/;
+const errorCode = (err: unknown): string => String((err as { cause?: { code?: string } })?.cause?.code ?? (err as { code?: string })?.code ?? '');
+
 export async function pspFetch<T>(psp: PspName, url: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   let res: Response;
   try {
@@ -90,11 +94,16 @@ export async function pspFetch<T>(psp: PspName, url: string, init: RequestInit &
       signal: AbortSignal.timeout(20_000),
     });
   } catch (err) {
-    throw new PspError(`${psp} unreachable: ${(err as Error).message}`, psp, true);
+    // Not connected at all → certainly not created. A timeout after sending, a reset, anything else → the provider MAY have created it.
+    throw new PspError(`${psp} unreachable: ${(err as Error).message}`, psp, true, !NEVER_SENT.test(errorCode(err)));
   }
   const text = await res.text();
   let data: unknown = {};
   try { data = text ? JSON.parse(text) : {}; } catch { /* non-JSON error page */ }
-  if (!res.ok) throw new PspError(`${psp} HTTP ${res.status}: ${text.slice(0, 200)}`, psp, res.status >= 500 || res.status === 429);
+  if (!res.ok) {
+    // 4xx = rejected (nothing created); 429 and 503 = "come back later" (nothing created); 408, 500, 502, 504 = the request may have been processed.
+    const comeBackLater = res.status === 429 || res.status === 503;
+    throw new PspError(`${psp} HTTP ${res.status}: ${text.slice(0, 200)}`, psp, res.status >= 500 || res.status === 429 || res.status === 408, !comeBackLater && (res.status >= 500 || res.status === 408));
+  }
   return data as T;
 }

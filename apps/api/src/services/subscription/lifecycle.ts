@@ -13,7 +13,7 @@ import { addMonths } from '../payments/service';
  * TRIAL_EXPIRY_POLICY=suspend makes the account read-only until it pays. See docs/DECISIONS.md.
  */
 export async function runBillingLifecycle(now = new Date()) {
-  const summary = { trialsExpired: 0, pastDue: 0, suspended: 0, cancelled: 0, rolled: 0, txExpired: 0 };
+  const summary = { trialsExpired: 0, pastDue: 0, suspended: 0, cancelled: 0, rolled: 0 };
 
   // 1. Trials that ended without payment.
   const trials = await prisma.subscription.findMany({ where: { status: 'trial', currentPeriodEnd: { lt: now } } });
@@ -57,8 +57,7 @@ export async function runBillingLifecycle(now = new Date()) {
     summary.rolled++;
   }
 
-  // 5. Abandoned checkouts.
-  const expired = await prisma.paymentTransaction.updateMany({ where: { status: 'pending', createdAt: { lt: new Date(now.getTime() - 24 * 3_600_000) } }, data: { status: 'expired' } });
-  summary.txExpired = expired.count;
+  // Abandoned checkouts are NOT expired here any more: a blind "pending for a day = expired" also expired payments that were paid behind a lost webhook.
+  // services/payments/reconcile.ts asks the provider first and only then expires.
   return summary;
 }

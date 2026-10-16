@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { mutate as globalMutate } from 'swr';
 import { CreditCard, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -48,6 +49,7 @@ export function TopupDialog({ open, onClose, wallet, defaultPhone }: { open: boo
     } catch (err) {
       setError(errorMessage(err, t));
       setBusy(false);
+      void globalMutate('/payments'); // an unconfirmed start leaves a pending payment: show it under "Payments in progress" now
     }
   }
   function watch(id: string, reference: string) {

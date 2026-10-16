@@ -84,6 +84,9 @@ enum TransactionStatus {
   success
   failed
   expired
+  // Money was received (the provider confirmed it) but a person must decide: underpaid, wrong currency, a lower plan than the one active, or an
+  // activation that could not be applied. Never shown as a failure to the customer; resolved with scripts/payments-review.mts.
+  review
 }
 
 model User {
@@ -405,12 +408,17 @@ model PaymentTransaction {
   // ADDED (multi-currency): the plan / top-up value in CFA francs at initiation, and the live rate used (null for CFA payments).
   amountXAF Int?
   fxRate    Float?
+  // ADDED (reconciliation): when the provider was last asked about this payment, and every provider we tried to start it at
+  // ([{psp, at, ok, ambiguous?, error?}]) — the trail an operator needs when "did the customer pay?" is the question.
+  lastCheckedAt DateTime?
+  attempts      Json?
 
   subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([pspProvider, pspReference])
+  @@index([status, createdAt])
 }
 
 // ADDED: append-only ledger of the gift wallet (audit trail; the balance itself lives on User).

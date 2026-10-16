@@ -18,8 +18,9 @@ import { PspError, pspFetch, type InitiateParams, type PSPAdapter, type ParsedWe
  * What is NOT known and therefore not guessed:
  *  - a server-side "get transaction" endpoint. The settlement outcome therefore comes from the signed webhook itself: parseWebhook
  *    verifies the HMAC, stores the signed outcome, and verifyPayment hands it to the common settle path (which still checks the amount).
- *    If a webhook is lost the payment stays pending until it expires after 24 h: re-send it from the CamerPay dashboard (replays keep
- *    their Idempotency-Key, and our settlement is idempotent anyway);
+ *    If a webhook is lost the payment cannot be settled by polling (there is nothing to ask): re-send it from the CamerPay dashboard (replays keep
+ *    their Idempotency-Key, and our settlement is idempotent anyway). A payment that expired meanwhile is still credited when the webhook finally
+ *    arrives (late success), and the reconciliation job re-reads the stored outcome for seven days;
  *  - the exact `payment_method` value per mobile-money operator: it is left out so the hosted page lets the payer pick Orange or MTN;
  *    cards send `card`;
  *  - the currency is not part of the signed string: it is the currency we asked for, and the signed amount must cover what we asked.

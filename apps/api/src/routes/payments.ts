@@ -53,9 +53,15 @@ export default async function paymentRoutes(app: FastifyInstance) {
     const parsed = await adapter.parseWebhook({ rawBody: req.rawBody ?? Buffer.alloc(0), headers: req.headers, body: req.body, query: req.query as never });
     if (!parsed.signatureValid) return reply.code(401).send({ error: 'invalid_signature' });
 
-    const tx = await prisma.paymentTransaction.findFirst({
+    let tx = await prisma.paymentTransaction.findFirst({
       where: { pspProvider: psp, OR: [...(parsed.reference ? [{ reference: parsed.reference }] : []), ...(parsed.pspReference ? [{ pspReference: parsed.pspReference }] : [])] },
     });
+    if (tx && !tx.pspReference && parsed.pspReference) {
+      // A start we could not confirm (Campay answered after our timeout) has no provider reference yet: the signed webhook is the first time we learn it,
+      // and without it the provider cannot be asked about this payment.
+      await prisma.paymentTransaction.updateMany({ where: { id: tx.id, pspReference: null }, data: { pspReference: parsed.pspReference } });
+      tx = await prisma.paymentTransaction.findUniqueOrThrow({ where: { id: tx.id } });
+    }
     if (!tx) {
       req.log.warn({ psp, ref: parsed.reference }, 'webhook for unknown transaction');
       return reply.code(200).send({ ok: true });

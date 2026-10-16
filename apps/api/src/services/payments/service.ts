@@ -1,17 +1,19 @@
 import { customAlphabet } from 'nanoid';
 import type { PaymentTransaction, Plan, Prisma } from '@prisma/client';
-import { ANNUAL_MONTHS_CHARGED, PLANS, PSP_CHARGE_CURRENCIES, convertToXAF, currencyLabel, isCfa, normalizePhone, phoneExampleFor, planPriceIn, toWaId, walletLimits, type Currency, type FxQuote, type PaidPlanKey, type PaymentMethod } from '@surveyflow/shared';
+import { PLANS, PSP_CHARGE_CURRENCIES, convertToXAF, currencyLabel, isCfa, normalizePhone, phoneExampleFor, planPriceIn, toWaId, walletLimits, type Currency, type FxQuote, type PaidPlanKey, type PaymentMethod } from '@surveyflow/shared';
 import { env } from '../../config/env';
 import { AppError, badRequest, conflict, notFound } from '../../lib/errors';
 import { prisma } from '../../lib/prisma';
 import { redis, withLock } from '../../lib/redis';
-import { notifyOwner } from '../notify';
 import { billingQuote, methodsFor, walletCurrency, walletQuote } from '../billing-currency';
 import { fixedFeeConverter } from '../fx';
-import { creditWallet } from '../wallet';
 import { breakerFail, breakerOk, breakerOpen } from './breaker';
 import { pspRouter, type PSPRouter } from './router';
-import { PspError, type PSPAdapter, type VerifyResult } from './types';
+import { PLAN_RANK, settleTransaction, type SettleLog, type SettleOutcome } from './settlement';
+import { PspError, type PSPAdapter } from './types';
+
+// The settlement rules live in settlement.ts; these names stay importable from here.
+export { PLAN_RANK, addMonths, settleTransaction, type SettleOutcome } from './settlement';
 
 // Alphanumeric only: CinetPay rejects `_ # / $ &` in transaction ids.
 const refId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 22);
@@ -21,16 +23,6 @@ export interface InitiateInput {
   interval: 'monthly' | 'annual';
   method: PaymentMethod;
   phone?: string;
-}
-
-export function addMonths(d: Date, n: number): Date {
-  const r = new Date(d);
-  const day = r.getUTCDate();
-  r.setUTCDate(1);
-  r.setUTCMonth(r.getUTCMonth() + n);
-  const last = new Date(Date.UTC(r.getUTCFullYear(), r.getUTCMonth() + 1, 0)).getUTCDate();
-  r.setUTCDate(Math.min(day, last)); // Jan 31 + 1 month = Feb 28/29, not Mar 3
-  return r;
 }
 
 /**
@@ -71,9 +63,6 @@ function payerPhone(input: { phone?: string }, user: { phone: string; country: s
   return normalized ?? '';
 }
 
-/** Plan order for "is this a downgrade?" (trial = 0). */
-export const PLAN_RANK: Record<string, number> = { trial: 0, starter: 1, growth: 2, business: 3 };
-
 /**
  * How long an identical pending payment is handed back instead of starting a second one. A hosted card page stays valid for a while; a Mobile
  * Money prompt dies within about a minute at the operator, so a customer who retries after that needs a NEW prompt, not the dead one.
@@ -83,6 +72,17 @@ const REUSE_MS: Record<string, number> = { card: 10 * 60_000, bank_transfer: 10 
 const DISPATCH_GRACE_MS = 40_000;
 /** Payments one customer may have in flight at once: a runaway client must not be able to start twenty charges. */
 const MAX_PENDING = 4;
+/**
+ * After a push provider (Campay) failed in a way that may still have sent the prompt, a second prompt must not be started for this long: the
+ * first one lives about as long at the operator, and the customer must not be charged twice.
+ */
+const UNCONFIRMED_BLOCK_MS = 3 * 60_000;
+const UNCONFIRMED = 'unconfirmed';
+/** How long after we gave up on a payment (failed / expired) the provider is still asked about it: a payer may complete it much later. */
+export const LATE_WINDOW_MS = 7 * 24 * 3_600_000;
+export const isDispatched = (t: Pick<PaymentTransaction, 'pspReference' | 'checkoutUrl'>) => !!(t.pspReference || t.checkoutUrl);
+
+const unconfirmedError = () => new AppError(502, 'psp_unconfirmed', 'We could not confirm that your payment request went through. Do not pay again yet: check your phone for an approval request, and look at your payment status in a few minutes.');
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -99,11 +99,18 @@ async function reserveTransaction(
       const dup = await prisma.paymentTransaction.findFirst({
         where: {
           ...same, userId, status: 'pending', createdAt: { gt: new Date(now - (REUSE_MS[method] ?? 600_000)) },
-          OR: [{ checkoutUrl: { not: null } }, { pspReference: { not: null } }, { createdAt: { gt: new Date(now - DISPATCH_GRACE_MS) } }],
+          // (NOT LIKE on a NULL failReason is NULL in SQL, which would drop every normal row: say "no reason, or not an unconfirmed one".)
+          AND: [
+            { OR: [{ failReason: null }, { NOT: { failReason: { startsWith: UNCONFIRMED } } }] },
+            { OR: [{ checkoutUrl: { not: null } }, { pspReference: { not: null } }, { createdAt: { gt: new Date(now - DISPATCH_GRACE_MS) } }] },
+          ],
         },
         orderBy: { createdAt: 'desc' },
       });
       if (dup) return { tx: dup, fresh: false };
+      // A push prompt may be on its way to the customer's phone from an attempt we could not confirm: starting another could charge twice.
+      const unconfirmed = await prisma.paymentTransaction.findFirst({ where: { userId, status: 'pending', failReason: { startsWith: UNCONFIRMED }, createdAt: { gt: new Date(now - UNCONFIRMED_BLOCK_MS) } } });
+      if (unconfirmed) throw unconfirmedError();
       const open = await prisma.paymentTransaction.count({ where: { userId, status: 'pending', createdAt: { gt: new Date(now - 30 * 60_000) } } });
       if (open >= MAX_PENDING) throw new AppError(429, 'too_many_pending', 'You already have several payments in progress. Wait for them to be confirmed before starting another, so you are never charged twice.');
       return { tx: await prisma.paymentTransaction.create({ data }), fresh: true };
@@ -120,6 +127,7 @@ async function awaitDispatch(tx: PaymentTransaction): Promise<PaymentTransaction
   let cur = tx;
   for (;;) {
     if (cur.status === 'failed') throw new AppError(502, 'psp_unavailable', 'We could not reach any payment provider. Please try again in a moment.');
+    if (cur.failReason?.startsWith(UNCONFIRMED)) throw unconfirmedError();
     if (cur.status !== 'pending' || cur.checkoutUrl || cur.pspReference || Date.now() > deadline) return cur;
     await sleep(300);
     cur = await prisma.paymentTransaction.findUniqueOrThrow({ where: { id: tx.id } });
@@ -175,6 +183,8 @@ async function dispatchCheckout(
   const tripped = await Promise.all(chain.map((a) => breakerOpen(a.name)));
   const ordered = [...chain.filter((_, i) => !tripped[i]), ...chain.filter((_, i) => tripped[i])];
   let lastErr: Error | null = null;
+  let unconfirmed: PSPAdapter | null = null;
+  const attempts: Array<Record<string, unknown>> = [];
   for (const adapter of ordered) {
     let r: Awaited<ReturnType<PSPAdapter['initiatePayment']>>;
     try {
@@ -184,15 +194,29 @@ async function dispatchCheckout(
       });
     } catch (err) {
       lastErr = err as Error;
+      // "Did the provider create the payment?" An error that is not a plain refusal (a timeout after the request left, a reset, a 502, or a bug
+      // after the answer arrived) is treated as: maybe.
+      const ambiguous = !(err instanceof PspError) || err.ambiguous;
+      attempts.push({ psp: adapter.name, at: new Date().toISOString(), ok: false, ...(ambiguous ? { ambiguous: true } : {}), error: lastErr.message.slice(0, 200) });
       if (err instanceof PspError && err.retryable) await breakerFail(adapter.name);
+      // A hosted checkout of a provider we gave up on is never shown to the customer, so moving to the next provider is harmless. A PUSH provider
+      // may already have sent the prompt to the phone: asking another one would mean two prompts, two charges. Stop and let reconciliation decide.
+      if (adapter.push && ambiguous) { unconfirmed = adapter; break; }
       if (err instanceof PspError && !err.retryable) break;
       continue; // otherwise fail over to the next provider in the chain
     }
     await breakerOk(adapter.name);
+    attempts.push({ psp: adapter.name, at: new Date().toISOString(), ok: true });
     // Outside the try on purpose: a database hiccup AFTER the provider accepted the payment must not look like "the provider failed" and start a second one.
-    return prisma.paymentTransaction.update({ where: { id: tx.id }, data: { pspProvider: adapter.name, pspReference: r.pspReference ?? r.paymentToken ?? null, checkoutUrl: r.checkoutUrl ?? null } });
+    return prisma.paymentTransaction.update({ where: { id: tx.id }, data: { pspProvider: adapter.name, pspReference: r.pspReference ?? r.paymentToken ?? null, checkoutUrl: r.checkoutUrl ?? null, attempts: attempts as Prisma.InputJsonValue } });
   }
-  await prisma.paymentTransaction.update({ where: { id: tx.id }, data: { status: 'failed', failReason: `psp_unavailable: ${(lastErr?.message ?? 'no provider answered').slice(0, 270)}` } });
+  if (unconfirmed) {
+    // The payment stays PENDING and is tied to the provider that may have it: the status poll, the webhook and the reconciliation job settle it
+    // if the prompt did go out, and the customer is told not to pay again (see reserveTransaction).
+    await prisma.paymentTransaction.update({ where: { id: tx.id }, data: { pspProvider: unconfirmed.name, failReason: `${UNCONFIRMED}: ${(lastErr?.message ?? '').slice(0, 270)}`, attempts: attempts as Prisma.InputJsonValue } });
+    throw unconfirmedError();
+  }
+  await prisma.paymentTransaction.update({ where: { id: tx.id }, data: { status: 'failed', failReason: `psp_unavailable: ${(lastErr?.message ?? 'no provider answered').slice(0, 270)}`, attempts: attempts as Prisma.InputJsonValue } });
   throw new AppError(502, 'psp_unavailable', 'We could not reach any payment provider. Please try again in a moment.');
 }
 
@@ -244,92 +268,28 @@ export async function initiateGiftTopup(userId: string, input: TopupInput, route
   return dispatchCheckout(tx, chain, user, 'SurveyFlow gift wallet top-up', phone);
 }
 
-export type SettleOutcome = 'activated' | 'already_settled' | 'failed' | 'pending' | 'amount_mismatch';
-
 /**
- * Applies a PSP-VERIFIED result to a transaction. Idempotent: the compare-and-set on `status: 'pending'` means that
- * however many times a PSP retries its webhook (or the browser polls), the subscription is activated exactly once.
- */
-export async function settleTransaction(txId: string, v: VerifyResult, log: { warn: (o: unknown, m?: string) => void } = console as never): Promise<SettleOutcome> {
-  const tx = await prisma.paymentTransaction.findUnique({ where: { id: txId } });
-  if (!tx) return 'already_settled';
-  if (tx.status !== 'pending') return 'already_settled';
-  if (v.status === 'pending') return 'pending';
-
-  if (v.status === 'failed') {
-    const r = await prisma.paymentTransaction.updateMany({ where: { id: txId, status: 'pending' }, data: { status: 'failed', failReason: 'declined_by_provider' } });
-    return r.count ? 'failed' : 'already_settled';
-  }
-
-  // success: never trust a "paid" flag without checking the money matches what we asked for.
-  if (v.amount < tx.amount || v.currency.toUpperCase() !== tx.currency.toUpperCase()) {
-    log.warn({ txId, expected: `${tx.amount} ${tx.currency}`, got: `${v.amount} ${v.currency}` }, 'payment amount/currency mismatch — NOT activating');
-    await prisma.paymentTransaction.updateMany({ where: { id: txId, status: 'pending' }, data: { status: 'failed', failReason: `amount_mismatch: got ${v.amount} ${v.currency}` } });
-    return 'amount_mismatch';
-  }
-
-  if (v.amount > tx.amount * 1.15) {
-    // Credited at what we asked for (an overpayment never mints balance). A small excess is a buyer-side processing fee; a big one is worth a look.
-    log.warn({ txId, expected: `${tx.amount} ${tx.currency}`, got: `${v.amount} ${v.currency}` }, 'payment OVERPAID — credited the asked amount only, check with the provider');
-  }
-
-  const activated = await prisma.$transaction(async (db) => {
-    const claimed = await db.paymentTransaction.updateMany({
-      where: { id: txId, status: 'pending' }, data: { status: 'success', paidAt: new Date(), pspReference: v.pspReference ?? tx.pspReference },
-    });
-    if (claimed.count === 0) return false; // another delivery got here first
-    if (tx.purpose === 'gift_topup') {
-      // Credit what we ASKED for (tx.amount), not what the PSP says it collected: an overpayment must not mint wallet balance.
-      await creditWallet(db, tx.userId, tx.amount, 'topup', tx.id, `Top-up (${tx.method === 'card' ? 'card' : 'Mobile Money'} · ${tx.pspProvider})`, tx.currency as Currency);
-    } else {
-      await activateSubscription(db, tx, v.pspReference ?? tx.pspReference ?? undefined);
-    }
-    return true;
-  });
-  if (activated) {
-    const msg = tx.purpose === 'gift_topup' ? `✅ SurveyFlow: ${tx.amount.toLocaleString('en')} ${currencyLabel(tx.currency)} added to your gift wallet.` : `✅ SurveyFlow: payment received. Your ${tx.plan} plan is active.`;
-    void notifyOwner(tx.userId, msg).catch(() => undefined);
-    return 'activated';
-  }
-  return 'already_settled';
-}
-
-async function activateSubscription(db: Prisma.TransactionClient, tx: PaymentTransaction, pspTxId?: string) {
-  const sub = await db.subscription.findUniqueOrThrow({ where: { id: tx.subscriptionId } });
-  const now = new Date();
-  if (!tx.plan) throw new Error(`subscription payment ${tx.id} has no plan`);
-  const plan = tx.plan as PaidPlanKey;
-  // Renewing the same plan before it ends extends from the current end; an upgrade/new purchase starts now.
-  const renewing = sub.plan === plan && ['active', 'past_due'].includes(sub.status) && sub.currentPeriodEnd > now && sub.amountFCFA > 0;
-  const start = renewing ? sub.currentPeriodStart : now;
-  const base = renewing ? sub.currentPeriodEnd : now;
-  const end = addMonths(base, tx.interval === 'annual' ? 12 : 1);
-  await db.subscription.update({
-    where: { id: sub.id },
-    data: {
-      plan: tx.plan, status: 'active', currentPeriodStart: start, currentPeriodEnd: end, interval: tx.interval,
-      amountFCFA: PLANS[plan].priceFCFA * (tx.interval === 'annual' ? ANNUAL_MONTHS_CHARGED : 1),
-      paymentMethod: tx.method, pspProvider: tx.pspProvider, pspTransactionId: pspTxId ?? null,
-      cancelAtPeriodEnd: false, graceEndsAt: null, reminderSentAt: null, pastDueNoticeAt: null,
-    },
-  });
-  await db.user.update({ where: { id: tx.userId }, data: { plan: tx.plan } });
-}
-
-/**
- * Asks the PSP what really happened and settles accordingly. Used by webhooks, by the status poll and (later) by the reconciliation job.
+ * Asks the PSP what really happened and settles accordingly. Used by webhooks, by the status poll and by the reconciliation job.
  *
- * `force` is for callers that must not skip a verification (a PSP webhook: the PSP will not call again once it got an answer). Polls leave it off:
- * a browser asking every 3 s must not become 20 calls a minute to the provider, so a verification already done or running within the last
- * moment is reused. `verifyError` says the provider could not be asked (its verify endpoint is down), as opposed to "asked, still pending".
+ * What is asked: a pending payment always; a failed or expired one while a late success is still possible (7 days, and only if it ever reached a
+ * provider), and for a webhook ALWAYS (a provider telling us "paid" about a payment we gave up on is exactly the case that must not be dropped).
+ * A success and a payment in review are never asked again. This function never expires a payment: only the reconciliation job does, after a
+ * last look at the provider.
+ *
+ * `force` is for callers that must not skip a verification (a PSP webhook: the PSP will not call again once it got an answer; the reconciliation
+ * job). Polls leave it off: a browser asking every 3 s must not become 20 calls a minute to the provider, so a verification already done or
+ * running within the last moment is reused. `verifyError` says the provider could not be asked (its verify endpoint is down, or our database
+ * hiccuped), as opposed to "asked, still pending".
  */
 export async function refreshTransaction(
-  tx: PaymentTransaction, router: PSPRouter = pspRouter, log?: { warn: (o: unknown, m?: string) => void }, opts: { force?: boolean } = {},
+  tx: PaymentTransaction, router: PSPRouter = pspRouter, log?: SettleLog, opts: { force?: boolean } = {},
 ): Promise<{ tx: PaymentTransaction; outcome: SettleOutcome; verifyError: boolean }> {
-  if (tx.status !== 'pending') return { tx, outcome: 'already_settled', verifyError: false };
+  const late = tx.status === 'failed' || tx.status === 'expired';
+  const askable = tx.status === 'pending' || (late && (!!opts.force || (isDispatched(tx) && tx.createdAt.getTime() > Date.now() - LATE_WINDOW_MS)));
+  if (!askable) return { tx, outcome: 'already_settled', verifyError: false };
   const adapter = router.getAdapter(tx.pspProvider);
   if (!adapter) throw conflict('unknown_psp', `Unknown provider ${tx.pspProvider}`);
-  if (!opts.force && (await redis.set(`sf:pay:verify:${tx.id}`, '1', 'PX', 1_500, 'NX')) !== 'OK') {
+  if (!opts.force && (await redis.set(`sf:pay:verify:${tx.id}`, '1', 'PX', late ? 30_000 : 1_500, 'NX')) !== 'OK') {
     return { tx: await prisma.paymentTransaction.findUniqueOrThrow({ where: { id: tx.id } }), outcome: 'pending', verifyError: false };
   }
   let outcome: SettleOutcome = 'pending';
@@ -337,13 +297,10 @@ export async function refreshTransaction(
   try {
     outcome = await settleTransaction(tx.id, await adapter.verifyPayment({ reference: tx.reference, pspReference: tx.pspReference }), log);
   } catch (err) {
-    outcome = 'pending'; // PSP verify endpoint down: stay pending, a later poll/webhook will settle it
+    outcome = 'pending'; // PSP verify endpoint down (or our database): stay as is, a later poll/webhook/reconciliation run will settle it
     verifyError = true;
-    log?.warn({ txId: tx.id, psp: tx.pspProvider, err: (err as Error).message }, 'PSP verification failed; payment stays pending');
+    log?.warn({ txId: tx.id, psp: tx.pspProvider, err: (err as Error).message }, 'PSP verification failed; payment stays as it is');
   }
-  // Pending for a day = abandoned checkout.
-  if (outcome === 'pending' && tx.createdAt < new Date(Date.now() - 24 * 3_600_000)) {
-    await prisma.paymentTransaction.updateMany({ where: { id: tx.id, status: 'pending' }, data: { status: 'expired' } });
-  }
+  await prisma.paymentTransaction.updateMany({ where: { id: tx.id }, data: { lastCheckedAt: new Date() } }).catch(() => undefined);
   return { tx: await prisma.paymentTransaction.findUniqueOrThrow({ where: { id: tx.id } }), outcome, verifyError };
 }

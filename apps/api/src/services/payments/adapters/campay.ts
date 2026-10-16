@@ -11,6 +11,8 @@ const base = () => (env.CAMPAY_ENV === 'prod' ? 'https://campay.net/api' : 'http
 
 export class CampayAdapter implements PSPAdapter {
   readonly name = 'campay' as const;
+  /** `collect` makes Campay push the prompt to the phone by itself: an unconfirmed start must never be repeated at another provider. */
+  readonly push = true;
   isConfigured = () => !!env.CAMPAY_API_KEY;
   private headers = () => ({ Authorization: `Token ${env.CAMPAY_API_KEY}` });
 
@@ -20,13 +22,16 @@ export class CampayAdapter implements PSPAdapter {
       method: 'POST', headers: this.headers(),
       json: { amount: String(p.amount), currency: p.currency, from: p.customerPhone, description: p.description, external_reference: p.reference },
     });
-    if (!r.reference) throw new PspError('campay did not return a reference', this.name);
+    // Campay answered 2xx but we cannot track the payment: the prompt may well be on the phone (ambiguous), and only its signed webhook can tell us.
+    if (!r.reference) throw new PspError('campay did not return a reference', this.name, true, true);
     return { paymentToken: r.reference, pspReference: r.reference };
   }
 
-  async verifyPayment({ pspReference }: { reference: string; pspReference?: string | null }): Promise<VerifyResult> {
+  async verifyPayment({ reference, pspReference }: { reference: string; pspReference?: string | null }): Promise<VerifyResult> {
     if (!pspReference) return { status: 'pending', amount: 0, currency: '' };
-    const r = await pspFetch<{ status?: string; amount?: number | string; currency?: string }>(this.name, `${base()}/transaction/${encodeURIComponent(pspReference)}/`, { headers: this.headers() });
+    const r = await pspFetch<{ status?: string; amount?: number | string; currency?: string; external_reference?: string }>(this.name, `${base()}/transaction/${encodeURIComponent(pspReference)}/`, { headers: this.headers() });
+    // The reference we hold may have come from a webhook rather than from our own start of the payment: it must be THIS payment's.
+    if (r.external_reference && r.external_reference !== reference) throw new PspError(`campay transaction ${pspReference} belongs to another payment`, this.name, false);
     const s = (r.status ?? '').toUpperCase();
     return { status: s === 'SUCCESSFUL' ? 'success' : s === 'FAILED' ? 'failed' : 'pending', amount: Number(r.amount ?? 0), currency: r.currency ?? 'XAF', pspReference };
   }

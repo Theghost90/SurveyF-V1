@@ -1,6 +1,8 @@
 import { refreshRates } from '../services/fx';
 import { tryLeader } from '../lib/redis';
 import { processDueGifts } from '../services/gifts';
+import { pspRouter } from '../services/payments/router';
+import { reconcilePayments } from '../services/payments/reconcile';
 import { sweepAbandoned } from '../services/survey/abandon';
 import { runBillingLifecycle } from '../services/subscription/lifecycle';
 import { runRenewalNotices } from '../services/subscription/notices';
@@ -39,6 +41,8 @@ export function startJobs(log: Log): () => void {
   every('wallet-alerts', 10 * 60_000, () => notifyEmptyWallets(), { leader: true, initialDelay: 30_000 });
   every('fx-refresh', 3 * 3_600_000, async () => ({ refreshed: !!(await refreshRates()) }), { leader: true, initialDelay: 5_000 });
   every('billing-lifecycle', 15 * 60_000, () => runBillingLifecycle(), { leader: true, initialDelay: 10_000 });
+  // Asks the payment providers about payments whose webhook never came (and expires an abandoned one only after a last look). Leader-only: one replica asks.
+  every('payment-reconcile', 60_000, () => reconcilePayments(new Date(), pspRouter, { warn: (o, m) => log.info(o, m), error: (o, m) => log.error(o, m) }), { leader: true, initialDelay: 15_000 });
   every('renewal-notices', 6 * 3_600_000, () => runRenewalNotices(), { leader: true, initialDelay: 40_000 });
   return () => timers.forEach((t) => { clearTimeout(t); clearInterval(t); });
 }
