@@ -1,9 +1,10 @@
 import { customAlphabet } from 'nanoid';
 import type { PaymentTransaction, Plan, Prisma } from '@prisma/client';
-import { ANNUAL_MONTHS_CHARGED, PLANS, PSP_CHARGE_CURRENCIES, convertToXAF, currencyLabel, isCfa, planPriceIn, toWaId, walletLimits, type Currency, type FxQuote, type PaidPlanKey, type PaymentMethod } from '@surveyflow/shared';
+import { ANNUAL_MONTHS_CHARGED, PLANS, PSP_CHARGE_CURRENCIES, convertToXAF, currencyLabel, isCfa, normalizePhone, phoneExampleFor, planPriceIn, toWaId, walletLimits, type Currency, type FxQuote, type PaidPlanKey, type PaymentMethod } from '@surveyflow/shared';
 import { env } from '../../config/env';
 import { AppError, badRequest, conflict, notFound } from '../../lib/errors';
 import { prisma } from '../../lib/prisma';
+import { redis } from '../../lib/redis';
 import { notifyOwner } from '../notify';
 import { billingQuote, methodsFor, walletCurrency, walletQuote } from '../billing-currency';
 import { fixedFeeConverter } from '../fx';
@@ -31,10 +32,19 @@ export function addMonths(d: Date, n: number): Date {
   return r;
 }
 
+/**
+ * What the BROWSER may learn about a failure. `failReason` keeps the provider's own words for the operator (database and logs only):
+ * it can name an expired API key or carry a fragment of the provider's error page, which is nobody's business but ours.
+ */
+export type FailCode = 'declined' | 'unavailable' | 'other';
+export const failCodeOf = (reason: string | null): FailCode =>
+  !reason ? 'other' : reason === 'declined_by_provider' ? 'declined' : reason.startsWith('psp_unavailable') ? 'unavailable' : 'other';
+
 export const txDto = (t: PaymentTransaction) => ({
   id: t.id, reference: t.reference, purpose: t.purpose, plan: t.plan, interval: t.interval, method: t.method, psp: t.pspProvider,
   amount: t.amount, currency: t.currency, status: t.status, checkoutUrl: t.status === 'pending' ? t.checkoutUrl : null,
-  paymentToken: t.status === 'pending' && !t.checkoutUrl ? t.pspReference : null, createdAt: t.createdAt, paidAt: t.paidAt, failReason: t.failReason,
+  paymentToken: t.status === 'pending' && !t.checkoutUrl ? t.pspReference : null, createdAt: t.createdAt, paidAt: t.paidAt,
+  failCode: t.status === 'failed' ? failCodeOf(t.failReason) : null,
 });
 
 /** Mobile Money only exists in CFA francs: a payment in any other currency is by international card. */
@@ -45,6 +55,20 @@ function assertMethodForCurrency(method: PaymentMethod, currency: string) {
 }
 
 const fxRateOf = (q: FxQuote) => (isCfa(q.currency) ? null : q.rate);
+
+/**
+ * The number a Mobile Money prompt is pushed to, in E.164. It is parsed against the owner's country, so a typo or a number from nowhere is
+ * refused here with an example, instead of sending a prompt to a stranger (or nowhere) and leaving the owner staring at "approve on your phone".
+ * A card payment does not need one: the number on the account is used when it is valid, otherwise none.
+ */
+function payerPhone(input: { phone?: string }, user: { phone: string; country: string }, method: PaymentMethod): string {
+  const raw = (input.phone ?? '').trim() || (user.phone ?? '').trim();
+  const normalized = raw ? normalizePhone(raw, user.country) : null;
+  if (method === 'mobile_money' && !normalized) {
+    throw badRequest('invalid_phone', `Enter a valid Mobile Money phone number with its country code, for example ${phoneExampleFor(user.country)}`);
+  }
+  return normalized ?? '';
+}
 
 export async function initiatePayment(userId: string, input: InitiateInput, router: PSPRouter = pspRouter): Promise<PaymentTransaction> {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { subscription: true } });
@@ -69,10 +93,7 @@ export async function initiatePayment(userId: string, input: InitiateInput, rout
   const chain = router.chain({ country: user.country, currency: payCurrency, method: input.method, amountXAF }, undefined, await fixedFeeConverter());
   if (!chain.length) throw new AppError(503, 'no_psp_available', 'No payment provider is available for this country / payment method right now');
 
-  const phone = (input.phone ?? user.phone ?? '').trim();
-  if (input.method === 'mobile_money' && !/^\+?\d{8,15}$/.test(phone.replace(/[\s-]/g, ''))) {
-    throw badRequest('phone_required', 'Enter the Mobile Money phone number to charge');
-  }
+  const phone = payerPhone(input, user, input.method);
 
   const tx = await prisma.paymentTransaction.create({
     data: {
@@ -106,7 +127,7 @@ async function dispatchCheckout(
       // otherwise fail over to the next provider in the chain
     }
   }
-  await prisma.paymentTransaction.update({ where: { id: tx.id }, data: { status: 'failed', failReason: (lastErr?.message ?? 'psp_unavailable').slice(0, 300) } });
+  await prisma.paymentTransaction.update({ where: { id: tx.id }, data: { status: 'failed', failReason: `psp_unavailable: ${(lastErr?.message ?? 'no provider answered').slice(0, 270)}` } });
   throw new AppError(502, 'psp_unavailable', 'We could not reach any payment provider. Please try again in a moment.');
 }
 
@@ -152,10 +173,7 @@ export async function initiateGiftTopup(userId: string, input: TopupInput, route
   const chain = router.chain({ country: user.country, currency, method: input.method, amountXAF }, undefined, await fixedFeeConverter());
   if (!chain.length) throw new AppError(503, 'no_psp_available', 'No payment provider is available for this country / payment method right now');
 
-  const phone = (input.phone ?? user.phone ?? '').trim();
-  if (input.method === 'mobile_money' && !/^\+?\d{8,15}$/.test(phone.replace(/[\s-]/g, ''))) {
-    throw badRequest('phone_required', 'Enter the Mobile Money phone number to charge');
-  }
+  const phone = payerPhone(input, user, input.method);
   const tx = await prisma.paymentTransaction.create({
     data: {
       subscriptionId: user.subscription.id, userId, pspProvider: chain[0]!.name, amount, currency, amountXAF, fxRate: fxRateOf(quote), status: 'pending',
@@ -187,6 +205,11 @@ export async function settleTransaction(txId: string, v: VerifyResult, log: { wa
     log.warn({ txId, expected: `${tx.amount} ${tx.currency}`, got: `${v.amount} ${v.currency}` }, 'payment amount/currency mismatch — NOT activating');
     await prisma.paymentTransaction.updateMany({ where: { id: txId, status: 'pending' }, data: { status: 'failed', failReason: `amount_mismatch: got ${v.amount} ${v.currency}` } });
     return 'amount_mismatch';
+  }
+
+  if (v.amount > tx.amount * 1.15) {
+    // Credited at what we asked for (an overpayment never mints balance). A small excess is a buyer-side processing fee; a big one is worth a look.
+    log.warn({ txId, expected: `${tx.amount} ${tx.currency}`, got: `${v.amount} ${v.currency}` }, 'payment OVERPAID — credited the asked amount only, check with the provider');
   }
 
   const activated = await prisma.$transaction(async (db) => {
@@ -232,20 +255,34 @@ async function activateSubscription(db: Prisma.TransactionClient, tx: PaymentTra
   await db.user.update({ where: { id: tx.userId }, data: { plan: tx.plan } });
 }
 
-/** Asks the PSP what really happened and settles accordingly. Used by webhooks AND by the status poll. */
-export async function refreshTransaction(tx: PaymentTransaction, router: PSPRouter = pspRouter, log?: { warn: (o: unknown, m?: string) => void }): Promise<{ tx: PaymentTransaction; outcome: SettleOutcome }> {
-  if (tx.status !== 'pending') return { tx, outcome: 'already_settled' };
+/**
+ * Asks the PSP what really happened and settles accordingly. Used by webhooks, by the status poll and (later) by the reconciliation job.
+ *
+ * `force` is for callers that must not skip a verification (a PSP webhook: the PSP will not call again once it got an answer). Polls leave it off:
+ * a browser asking every 3 s must not become 20 calls a minute to the provider, so a verification already done or running within the last
+ * moment is reused. `verifyError` says the provider could not be asked (its verify endpoint is down), as opposed to "asked, still pending".
+ */
+export async function refreshTransaction(
+  tx: PaymentTransaction, router: PSPRouter = pspRouter, log?: { warn: (o: unknown, m?: string) => void }, opts: { force?: boolean } = {},
+): Promise<{ tx: PaymentTransaction; outcome: SettleOutcome; verifyError: boolean }> {
+  if (tx.status !== 'pending') return { tx, outcome: 'already_settled', verifyError: false };
   const adapter = router.getAdapter(tx.pspProvider);
   if (!adapter) throw conflict('unknown_psp', `Unknown provider ${tx.pspProvider}`);
+  if (!opts.force && (await redis.set(`sf:pay:verify:${tx.id}`, '1', 'PX', 1_500, 'NX')) !== 'OK') {
+    return { tx: await prisma.paymentTransaction.findUniqueOrThrow({ where: { id: tx.id } }), outcome: 'pending', verifyError: false };
+  }
   let outcome: SettleOutcome = 'pending';
+  let verifyError = false;
   try {
     outcome = await settleTransaction(tx.id, await adapter.verifyPayment({ reference: tx.reference, pspReference: tx.pspReference }), log);
-  } catch {
+  } catch (err) {
     outcome = 'pending'; // PSP verify endpoint down: stay pending, a later poll/webhook will settle it
+    verifyError = true;
+    log?.warn({ txId: tx.id, psp: tx.pspProvider, err: (err as Error).message }, 'PSP verification failed; payment stays pending');
   }
   // Pending for a day = abandoned checkout.
   if (outcome === 'pending' && tx.createdAt < new Date(Date.now() - 24 * 3_600_000)) {
     await prisma.paymentTransaction.updateMany({ where: { id: tx.id, status: 'pending' }, data: { status: 'expired' } });
   }
-  return { tx: await prisma.paymentTransaction.findUniqueOrThrow({ where: { id: tx.id } }), outcome };
+  return { tx: await prisma.paymentTransaction.findUniqueOrThrow({ where: { id: tx.id } }), outcome, verifyError };
 }

@@ -9,6 +9,7 @@ import { api, errorMessage } from '@/lib/api';
 import { useOwnerCountry } from '@/lib/geo-context';
 import { currencyLabel, formatPhone } from '@surveyflow/shared';
 import { money, num } from '@/lib/format';
+import { failKey, watchPayment } from '@/lib/pay-poll';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 import type { WalletData } from './use-wallet';
@@ -41,22 +42,14 @@ export function TopupDialog({ open, onClose, wallet, defaultPhone }: { open: boo
       const tx = await api<{ id: string; checkoutUrl: string | null }>('/wallet/topup', { method: 'POST', body: { amount: n, method, phone: method === 'mobile_money' ? phone : undefined } });
       if (tx.checkoutUrl) { window.location.href = tx.checkoutUrl; return; }
       setPending(true);
-      poll(tx.id);
+      watchPayment(tx.id, {
+        done: (s) => { if (s.status === 'success') { window.location.href = `/billing/return?ref=${tx.id}`; return; } setPending(false); setBusy(false); setError(t(failKey(s.failCode))); },
+        timeout: () => { setPending(false); setBusy(false); setError(t('bill.payFailed')); },
+      });
     } catch (err) {
       setError(errorMessage(err, t));
       setBusy(false);
     }
-  }
-  // Push-to-phone payments: the payer approves on their handset; we poll the verified status.
-  function poll(id: string, tries = 0) {
-    setTimeout(async () => {
-      try {
-        const s = await api<{ status: string }>(`/payments/${id}`);
-        if (s.status === 'success') { window.location.href = `/billing/return?ref=${id}`; return; }
-        if (s.status === 'failed' || s.status === 'expired' || tries > 60) { setPending(false); setBusy(false); setError(t('bill.payFailed')); return; }
-      } catch { /* keep polling */ }
-      poll(id, tries + 1);
-    }, 3000);
   }
 
   return (

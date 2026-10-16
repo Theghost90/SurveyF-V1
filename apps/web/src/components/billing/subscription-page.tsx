@@ -19,6 +19,7 @@ import { WalletCard } from '@/components/wallet/wallet-card';
 import type { Account } from '@/lib/account';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { dateShort, money, num } from '@/lib/format';
+import { failKey, watchPayment } from '@/lib/pay-poll';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 
@@ -153,22 +154,14 @@ function CheckoutDialog({ plan, interval, data, onClose }: { plan: PaidPlanKey |
       const tx = await api<{ id: string; reference: string; checkoutUrl: string | null; paymentToken: string | null }>('/subscription/upgrade', { method: 'PUT', body: { plan, interval, method, phone: method === 'mobile_money' ? phone : undefined } });
       if (tx.checkoutUrl) { window.location.href = tx.checkoutUrl; return; }
       setPending({ id: tx.id });
-      poll(tx.id);
+      watchPayment(tx.id, {
+        done: (s) => { if (s.status === 'success') { window.location.href = `/billing/return?ref=${tx.id}`; return; } setPending(null); setBusy(false); setError(t(failKey(s.failCode))); },
+        timeout: () => { setPending(null); setBusy(false); setError(t('bill.payFailed')); },
+      });
     } catch (err) {
       setError(errorMessage(err, t));
       setBusy(false);
     }
-  }
-  // Push-to-phone payments (Campay): the payer approves on their handset; we poll the verified status.
-  function poll(id: string, n = 0) {
-    setTimeout(async () => {
-      try {
-        const s = await api<{ status: string }>(`/payments/${id}`);
-        if (s.status === 'success') { window.location.href = `/billing/return?ref=${id}`; return; }
-        if (s.status === 'failed' || s.status === 'expired' || n > 60) { setPending(null); setBusy(false); setError(t('bill.payFailed')); return; }
-      } catch { /* keep polling */ }
-      poll(id, n + 1);
-    }, 3000);
   }
 
   return (
@@ -192,6 +185,9 @@ function CheckoutDialog({ plan, interval, data, onClose }: { plan: PaidPlanKey |
             </RadioGroup>
             {method === 'mobile_money' && <Field label={t('bill.momoPhone')} htmlFor="pay-phone" hint={t('bill.momoHint')}><Input id="pay-phone" type="tel" placeholder={example} value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" /></Field>}
             {error && <p role="alert" className="text-sm font-medium text-destructive">{error}</p>}
+            {data.subscription.amountFCFA > 0 && ['active', 'past_due'].includes(data.subscription.status) && data.subscription.plan !== plan && new Date(data.subscription.currentPeriodEnd) > new Date() && (
+              <p className="text-xs text-muted-foreground" data-testid="no-proration">{t('bill.noProration', { date: dateShort(data.subscription.currentPeriodEnd, locale) })}</p>
+            )}
             <DialogFooter><Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button><Button size="lg" variant="brand" loading={busy} onClick={pay}>{t('bill.pay', { amount: money(amount, price.currency, locale) })}</Button></DialogFooter>
             <p className="text-xs text-muted-foreground">{t('bill.secure')}</p>
             <FxNote data={data} compact />

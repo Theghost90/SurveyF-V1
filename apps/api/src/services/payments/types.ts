@@ -56,6 +56,8 @@ export interface WebhookInput {
  */
 export interface PSPAdapter {
   readonly name: PspName;
+  /** True when starting a payment makes the PROVIDER push a prompt to the payer's phone by itself (Campay): then an unconfirmed start must never be repeated elsewhere. */
+  push?: boolean;
   isConfigured(): boolean;
   initiatePayment(p: InitiateParams): Promise<InitiateResult>;
   verifyPayment(ref: { reference: string; pspReference?: string | null }): Promise<VerifyResult>;
@@ -63,7 +65,17 @@ export interface PSPAdapter {
 }
 
 export class PspError extends Error {
-  constructor(message: string, public psp: PspName, /** true = safe to try the next PSP in the chain */ public retryable = true) {
+  constructor(
+    message: string,
+    public psp: PspName,
+    /** true = safe to try the next PSP in the chain */
+    public retryable = true,
+    /**
+     * true = the provider MAY have created the payment although we got an error (a timeout after the request left, a connection reset, a
+     * gateway error). false = it certainly did not (connection refused, a 4xx rejection, a 429/503 "come back later").
+     */
+    public ambiguous = false,
+  ) {
     super(message);
   }
 }

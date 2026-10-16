@@ -60,7 +60,7 @@ export default async function paymentRoutes(app: FastifyInstance) {
       req.log.warn({ psp, ref: parsed.reference }, 'webhook for unknown transaction');
       return reply.code(200).send({ ok: true });
     }
-    await refreshTransaction(tx, pspRouter, req.log);
+    await refreshTransaction(tx, pspRouter, req.log, { force: true });
     return reply.code(200).send({ ok: true });
   };
   app.post('/api/payments/webhook/:psp', webhook);
@@ -73,7 +73,7 @@ export default async function paymentRoutes(app: FastifyInstance) {
       const tx = await prisma.paymentTransaction.findFirst({ where: { reference: (req.params as { reference: string }).reference, userId: req.userId, pspProvider: 'mock' } });
       if (!tx) throw notFound('Payment');
       await redis.set(mockOutcomeKey(tx.reference), outcome, 'EX', 3600);
-      const { tx: fresh } = await refreshTransaction(tx, pspRouter, req.log);
+      const { tx: fresh } = await refreshTransaction(tx, pspRouter, req.log, { force: true });
       return txDto(fresh);
     });
   }
