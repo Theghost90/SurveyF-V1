@@ -1,0 +1,27 @@
+{
+  "name": "surveyflow",
+  "private": true,
+  "version": "1.0.0",
+  "description": "SurveyFlow — WhatsApp-native survey SaaS for Cameroon",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @surveyflow/api\" \"npm run dev -w @surveyflow/web\"",
+    "build": "npm run build -w @surveyflow/shared && npm run build -w @surveyflow/api && npm run build -w @surveyflow/web",
+    "start": "concurrently -n api,web \"npm run start -w @surveyflow/api\" \"npm run start -w @surveyflow/web\"",
+    "db:push": "npm run db:push -w @surveyflow/api",
+    "db:seed": "npm run db:seed -w @surveyflow/api",
+    "test": "npm run test -w @surveyflow/shared && npm run test -w @surveyflow/api",
+    "typecheck": "npm run typecheck -w @surveyflow/shared && npm run typecheck -w @surveyflow/api && npm run typecheck -w @surveyflow/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "playwright-core": "^1.64.0",
+    "typescript": "^5.6.0"
+  }
+}
