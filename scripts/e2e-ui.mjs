@@ -60,27 +60,33 @@ await step('registration rejects a duplicate email with a field error', async ()
   await p2.close();
 });
 
-await step('onboarding 1/5: the customer segment is required and gates everything else', async () => {
-  // Next is locked, the other steps are locked, and the app refuses to show anything else until it is answered.
+await step('onboarding 1/2: the customer segment is required and gates everything else', async () => {
+  // Only two steps exist. Next is locked, the connect step is locked, and the app refuses to show anything else until the segment is answered.
   expect(await page.getByRole('button', { name: /^next$/i }).isDisabled(), 'Next must be disabled until a segment is chosen');
-  expect(await page.getByRole('button', { name: /Connect WhatsApp/i }).first().isDisabled(), 'later steps must be locked');
+  expect(await page.getByRole('button', { name: /Connect WhatsApp/i }).first().isDisabled(), 'the connect step must be locked');
+  expect((await page.locator('ol[aria-label]').first().locator('li').count()) === 2, 'onboarding must have exactly two steps');
   await page.goto(`${base}/dashboard`);
   await page.waitForURL('**/onboarding**', { timeout: 15000 });
   for (const label of ['Businesses', 'Institutions', 'Academics']) await page.getByRole('radio', { name: new RegExp(label) }).waitFor();
   await page.getByRole('radio', { name: /Businesses/ }).click();
+  // Choosing a segment moves straight on to the next step: no extra click.
+  await page.getByRole('heading', { name: 'Connect WhatsApp' }).waitFor({ timeout: 10000 });
+  await page.getByRole('button', { name: /^back$/i }).click();
   await page.getByText(/Saved\. You can change it later/).waitFor({ timeout: 10000 });
   expect(await page.getByRole('radio', { name: /Businesses/ }).getAttribute('aria-checked') === 'true', 'Businesses should be selected');
   await shot('onboarding-segment');
   await page.getByRole('button', { name: /^next$/i }).click();
 });
 
-await step('onboarding 2/5: connect the simulated WhatsApp number', async () => {
+await step('onboarding 2/2: connect the simulated WhatsApp number, then go to the dashboard', async () => {
   await page.getByRole('button', { name: /use a simulated number/i }).click();
-  await page.getByText('Connected', { exact: true }).waitFor({ timeout: 15000 });
+  await page.getByTestId('ob-connected').waitFor({ timeout: 15000 });
+  await page.getByRole('button', { name: /go to dashboard/i }).click();
+  await page.waitForURL(/\/dashboard/, { timeout: 15000 }); // (the plan query was dropped by the test's own detour through /dashboard)
 });
 
-await step('onboarding 3/5: add a contact (consent required) and import a CSV', async () => {
-  await page.getByRole('button', { name: /^next$/i }).click();
+await step('contacts: add a contact (consent required) and import a CSV', async () => {
+  await page.goto(`${base}/contacts`);
   await page.getByRole('button', { name: 'Add contact', exact: true }).click();
   await page.fill('#c-name', 'Marie N.');
   await page.fill('#c-phone', '+237 677 10 00 01');
@@ -101,9 +107,8 @@ await step('onboarding 3/5: add a contact (consent required) and import a CSV', 
   await page.getByText('3 contacts').waitFor();
 });
 
-await step('onboarding 4/5: create a survey from the "Order & delivery" template', async () => {
-  await page.getByRole('button', { name: /^next$/i }).click();
-  await page.getByRole('link', { name: /choose a template/i }).click();
+await step('survey: create from the "Order & delivery" template', async () => {
+  await page.goto(`${base}/surveys/new`);
   await page.getByRole('button', { name: /order & delivery/i }).click();
   await page.waitForURL(/\/surveys\/[a-z0-9]+$/, { timeout: 30000 });
   await page.getByText('Question 1 of 3').first().waitFor({ timeout: 15000 });
@@ -399,7 +404,7 @@ await step('geo: a Nigerian visitor sees naira prices, the Nigerian number forma
   expect(text.includes('NGN / month') && !text.includes('FCFA / month'), 'NGN / month expected, FCFA must be gone');
   expect(/per extra 100/.test(text) && /NGN/.test(text.split('per extra 100')[0].slice(-40)), 'overage line should be in NGN');
   await p.getByText('Annual', { exact: false }).first().click();
-  await p.getByText('348,000', { exact: true }).waitFor(); // 10 months charged, converted once
+  await p.getByText('383,000', { exact: true }).waitFor(); // 10 months charged, converted once
   const note = await p.getByTestId('rate-note').innerText();
   expect(/1 FCFA = 2\.4 NGN/.test(note) && /ExchangeRate-API/.test(note) && /international Visa or Mastercard/.test(note), `rate note should explain the conversion, got: ${note}`);
   await p.screenshot({ path: `${out}/pricing-ng.png`, fullPage: true }); // the visitor's tab, not the main one

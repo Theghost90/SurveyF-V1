@@ -35,12 +35,13 @@ export function dropSuggestion(q: { required: boolean; optionCount: number }): D
 
 // ---- commands ----------------------------------------------------------------------------------------------------------------
 
-export const BOT_COMMANDS = ['stats', 'drop', 'nonresp', 'started', 'completed', 'surveys', 'more', 'help', 'link', 'unlink'] as const;
+export const BOT_COMMANDS = ['stats', 'results', 'drop', 'nonresp', 'started', 'completed', 'surveys', 'more', 'help', 'link', 'unlink', 'mute', 'unmute'] as const;
 export type BotCommand = (typeof BOT_COMMANDS)[number];
 
 /** French and English words, case, accents and punctuation ignored. PERQ is kept as an alias of DROP (it said the same thing). */
 const ALIASES: Record<BotCommand, string[]> = {
   stats: ['stats', 'stat', 'statistiques', 'resume', 'bilan', 'summary'],
+  results: ['results', 'result', 'resultats', 'resultat'],
   drop: ['drop', 'perq', 'abandons', 'abandon', 'questions'],
   nonresp: ['nonresp', 'nonrep', 'norep', 'noreply', 'sansreponse', 'pasrepondu', 'nonrepondants'],
   started: ['started', 'commence', 'commences', 'encours', 'startedbutnotfinished'],
@@ -50,6 +51,9 @@ const ALIASES: Record<BotCommand, string[]> = {
   help: ['help', 'aide', 'menu', 'commands', 'commandes', '?'],
   link: ['link', 'lier'],
   unlink: ['unlink', 'delier', 'dissocier'],
+  // alerts: MUTE / SILENCE stop them, UNMUTE (or ALERTS ON / ALERTES OUI) bring them back
+  mute: ['mute', 'silence', 'alertsoff', 'alertesoff'],
+  unmute: ['unmute', 'alertson', 'alerteson'],
 };
 
 const squash = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9?\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -73,6 +77,11 @@ export function parseBotCommand(text: string): ParsedCommand | null {
   const all = words[0] === 'all' || words[0] === 'tous' || words[0] === 'tout';
   if (all) words = words.slice(1);
   // "no reply" / "sans reponse" / "pas repondu" are two words
+  // "ALERTS OFF" / "ALERTES NON" are two words: fold them into one keyword
+  if (/^alertes?$|^alerts?$/.test(words[0] ?? '') && words[1]) {
+    const on = ['on', 'oui', 'yes'].includes(words[1]), off = ['off', 'non', 'no'].includes(words[1]);
+    if (on || off) words = [`alerts${on ? 'on' : 'off'}`, ...words.slice(2)];
+  }
   const joined2 = words.slice(0, 2).join('');
   const head = ALIASES.nonresp.includes(joined2) ? joined2 : words[0];
   const rest = ALIASES.nonresp.includes(joined2) ? words.slice(2) : words.slice(1);
@@ -96,7 +105,12 @@ export function parseBotButtonId(id: string): BotCommand | null {
 
 // ---- the numbers a card is made of --------------------------------------------------------------------------------------------
 
-export interface BotQuestion { number: number; text: string; type: string; required: boolean; optionCount: number; /** answered + skipped: people who got past it */ passed: number; abandonedHere: number }
+export interface BotQuestion {
+  number: number; text: string; type: string; required: boolean; optionCount: number;
+  /** answered + skipped: people who got past it */ passed: number; abandonedHere: number;
+  /** RESULTS: people who ANSWERED it (percentages are of these), the most chosen option, the average of a rating, the count of comments. */
+  answered?: number; top?: { label: string; count: number; pct: number } | null; average?: number | null;
+}
 export interface BotStatsData {
   title: string;
   totals: { sent: number; started: number; completed: number; abandoned: number; inProgress: number; noReply: number; declined: number; optedOut: number; completionRate: number };
@@ -107,12 +121,16 @@ export interface BotStatsData {
 export interface AnalyticsLike {
   survey: { title: string };
   totals: { sent: number; started: number; completed: number; abandoned: number; inProgress: number; noReply: number; declined: number; optedOut: number; completionRate: number };
-  perQuestion: Array<{ number: number; text: string; type: string; required: boolean; optionCount: number; answered: number; skipped: number; abandonedHere: number }>;
+  perQuestion: Array<{ number: number; text: string; type: string; required: boolean; optionCount: number; answered: number; skipped: number; abandonedHere: number; distribution?: Array<{ label: string; count: number; pct: number }>; average?: number | null }>;
 }
 export const toBotStats = (a: AnalyticsLike): BotStatsData => ({
   title: a.survey.title,
   totals: { ...a.totals },
-  questions: a.perQuestion.map((q) => ({ number: q.number, text: q.text, type: q.type, required: q.required, optionCount: q.optionCount, passed: q.answered + q.skipped, abandonedHere: q.abandonedHere })),
+  questions: a.perQuestion.map((q) => ({
+    number: q.number, text: q.text, type: q.type, required: q.required, optionCount: q.optionCount, passed: q.answered + q.skipped, abandonedHere: q.abandonedHere,
+    answered: q.answered, average: q.average ?? null,
+    top: [...(q.distribution ?? [])].sort((x, y) => y.count - x.count)[0] ?? null,
+  })),
 });
 
 /**
@@ -133,7 +151,13 @@ export function exampleBotStats(title: string, questions: Array<{ text: string; 
     const after = ab.slice(i + 1).reduce((a, b) => a + b, 0);
     // people still in progress are assumed to be at the last question: they have got past all the others
     const passed = totals.completed + after + (i < n - 1 ? totals.inProgress : 0);
-    return { number: i + 1, text: q.text || '…', type: q.type, required: q.required, optionCount: q.options?.length ?? 0, passed, abandonedHere: ab[i]! };
+    const answered = passed; // an example survey: everybody who got past a question answered it
+    const label = (q.options as Array<{ label?: string }> | null | undefined)?.[0]?.label ?? '…';
+    return {
+      number: i + 1, text: q.text || '…', type: q.type, required: q.required, optionCount: q.options?.length ?? 0, passed, abandonedHere: ab[i]!,
+      answered, average: q.type === 'rating' ? 4.2 : null,
+      top: q.type === 'single' || q.type === 'multi' ? { label: label || '…', count: Math.round(answered * 0.62), pct: 62 } : null,
+    };
   });
   return { title: title || '…', totals, questions: qs };
 }
@@ -166,7 +190,7 @@ const S = {
     surveysTitle: 'Your surveys', pickHint: 'Send STATS 2 (or DROP 2…) to pick one. With no number I use survey 1, your most recent active survey.',
     status: { active: 'active', paused: 'paused', closed: 'closed', draft: 'draft' } as Record<string, string>,
     helpTitle: 'SurveyFlow Analytics', helpBody: 'Ask for your numbers any time. Tap a command or type it, in English or French.', helpBtn: 'Commands',
-    cmd: { stats: 'Summary', drop: 'Where people stop', nonresp: "Who hasn't replied", started: 'Started, not finished', completed: 'Who finished', surveys: 'Your surveys', more: 'Next 10 of the list', help: 'This list', unlink: 'Remove this phone' } as Record<string, string>,
+    cmd: { stats: 'Summary', results: 'Answers per question', mute: 'Stop alerts', unmute: 'Turn alerts on', drop: 'Where people stop', nonresp: "Who hasn't replied", started: 'Started, not finished', completed: 'Who finished', surveys: 'Your surveys', more: 'Next 10 of the list', help: 'This list', unlink: 'Remove this phone' } as Record<string, string>,
     linkedOk: (b: string) => `✅ This phone is now linked to ${b}. Send STATS for your numbers, or HELP for all commands.`,
     linkBad: 'That code is not valid any more. Open SurveyFlow → Settings → Analytics on WhatsApp and create a new one (it lasts 15 minutes).',
     linkLimit: 'You already linked 3 phones. Remove one in SurveyFlow (or send UNLINK from it), then try again.',
@@ -180,6 +204,10 @@ const S = {
     noList: 'There is no list to continue. Ask for NONRESP, STARTED or COMPLETED first.',
     unknown: 'I did not understand that. Send HELP to see what I can do.',
     allMoved: 'The complete list, with every number and a CSV export, is in SurveyFlow:',
+    results: 'Results', resultsNote: 'Percentages are of the people who answered that question.', top: 'Top', average: 'Average', answersOf: (a: number) => `${a} answer${a === 1 ? '' : 's'}`, comments: (n: number) => `${n} comment${n === 1 ? '' : 's'}`, noAnswersYet: 'no answers yet',
+    mutedOk: '🔕 Alerts are off for this phone. Send ALERTS ON to turn them back on. STATS and the other commands still work.', unmutedOk: '🔔 Alerts are on: I will message you at milestones (100, 500, 1,000 responses…) and when answers slow down. Send MUTE to stop them.',
+    alertMilestone: (n: number, title: string, rate: string) => `🎉 *${n} responses reached*\n${title}\nCompletion rate so far: ${rate}%`, alertSlow: (h: number, title: string) => `⚠️ *Responses are slowing down*\nNo new answers for ${h} hours on “${title}”. Reply NONRESP to see who has not started.`,
+    alertFoot: 'Reply STATS for the full summary. MUTE to stop alerts.',
   },
   fr: {
     asOf: (t: string) => `à ${t}`,
@@ -198,7 +226,7 @@ const S = {
     surveysTitle: 'Vos sondages', pickHint: 'Envoyez STATS 2 (ou ABANDONS 2…) pour en choisir un. Sans numéro, j’utilise le sondage 1, votre sondage actif le plus récent.',
     status: { active: 'actif', paused: 'en pause', closed: 'clos', draft: 'brouillon' } as Record<string, string>,
     helpTitle: 'SurveyFlow Analytics', helpBody: 'Demandez vos chiffres à tout moment. Touchez une commande ou tapez-la, en français ou en anglais.', helpBtn: 'Commandes',
-    cmd: { stats: 'Résumé', drop: 'Où les gens s’arrêtent', nonresp: 'Qui n’a pas répondu', started: 'Commencé, pas terminé', completed: 'Qui a terminé', surveys: 'Vos sondages', more: '10 suivants de la liste', help: 'Cette liste', unlink: 'Retirer ce téléphone' } as Record<string, string>,
+    cmd: { stats: 'Résumé', results: 'Réponses par question', mute: 'Arrêter les alertes', unmute: 'Activer les alertes', drop: 'Où les gens s’arrêtent', nonresp: 'Qui n’a pas répondu', started: 'Commencé, pas terminé', completed: 'Qui a terminé', surveys: 'Vos sondages', more: '10 suivants de la liste', help: 'Cette liste', unlink: 'Retirer ce téléphone' } as Record<string, string>,
     linkedOk: (b: string) => `✅ Ce téléphone est maintenant lié à ${b}. Envoyez STATS pour vos chiffres, ou AIDE pour toutes les commandes.`,
     linkBad: 'Ce code n’est plus valable. Ouvrez SurveyFlow → Paramètres → Analytics sur WhatsApp et créez-en un nouveau (il dure 15 minutes).',
     linkLimit: 'Vous avez déjà lié 3 téléphones. Retirez-en un dans SurveyFlow (ou envoyez DELIER depuis celui-ci), puis réessayez.',
@@ -212,6 +240,10 @@ const S = {
     noList: 'Il n’y a pas de liste à continuer. Demandez d’abord SANSREPONSE, COMMENCE ou TERMINES.',
     unknown: 'Je n’ai pas compris. Envoyez AIDE pour voir ce que je sais faire.',
     allMoved: 'La liste complète, avec tous les numéros et un export CSV, est dans SurveyFlow :',
+    results: 'Résultats', resultsNote: 'Les pourcentages sont calculés sur les personnes qui ont répondu à cette question.', top: 'Premier choix', average: 'Moyenne', answersOf: (a: number) => `${a} réponse${a === 1 ? '' : 's'}`, comments: (n: number) => `${n} commentaire${n === 1 ? '' : 's'}`, noAnswersYet: 'pas encore de réponse',
+    mutedOk: '🔕 Les alertes sont coupées pour ce téléphone. Envoyez ALERTES OUI pour les remettre. STATS et les autres commandes fonctionnent toujours.', unmutedOk: '🔔 Alertes activées : je vous écris aux paliers (100, 500, 1 000 réponses…) et quand les réponses ralentissent. Envoyez SILENCE pour les arrêter.',
+    alertMilestone: (n: number, title: string, rate: string) => `🎉 *${n} réponses atteintes*\n${title}\nTaux de complétion à ce jour : ${rate}%`, alertSlow: (h: number, title: string) => `⚠️ *Les réponses ralentissent*\nAucune nouvelle réponse depuis ${h} heures sur « ${title} ». Répondez SANSREPONSE pour voir qui n’a pas commencé.`,
+    alertFoot: 'Répondez STATS pour le résumé complet. SILENCE pour arrêter les alertes.',
   },
 } as const;
 
@@ -221,7 +253,7 @@ export const botNotice = (kind: BotNotice, locale: BotLocale): OutboundMessage =
 export const botBadIndex = (n: number, locale: BotLocale): OutboundMessage => ({ kind: 'text', body: S[locale].badIndex(n) });
 export const botLinked = (business: string, locale: BotLocale): OutboundMessage => ({ kind: 'text', body: S[locale].linkedOk(business) });
 
-const chip = (c: BotCommand, locale: BotLocale) => ({ id: botButtonId(c), title: ({ en: { stats: 'STATS', drop: 'DROP', nonresp: 'NONRESP', started: 'STARTED', completed: 'COMPLETED', more: 'MORE', help: 'HELP', surveys: 'SURVEYS' }, fr: { stats: 'STATS', drop: 'ABANDONS', nonresp: 'SANSREPONSE', started: 'COMMENCE', completed: 'TERMINES', more: 'PLUS', help: 'AIDE', surveys: 'SONDAGES' } } as Record<BotLocale, Record<string, string>>)[locale][c]! });
+const chip = (c: BotCommand, locale: BotLocale) => ({ id: botButtonId(c), title: ({ en: { stats: 'STATS', results: 'RESULTS', mute: 'MUTE', unmute: 'ALERTS ON', drop: 'DROP', nonresp: 'NONRESP', started: 'STARTED', completed: 'COMPLETED', more: 'MORE', help: 'HELP', surveys: 'SURVEYS' }, fr: { stats: 'STATS', results: 'RESULTATS', mute: 'SILENCE', unmute: 'ALERTES OUI', drop: 'ABANDONS', nonresp: 'SANSREPONSE', started: 'COMMENCE', completed: 'TERMINES', more: 'PLUS', help: 'AIDE', surveys: 'SONDAGES' } } as Record<BotLocale, Record<string, string>>)[locale][c]! });
 
 /** Interactive messages (buttons) hold at most 1,024 characters of body; a longer card goes out as plain text, without the chips. */
 const withChips = (body: string, buttons: Array<{ id: string; title: string }>): OutboundMessage => (body.length > 1000 ? { kind: 'text', body } : { kind: 'buttons', body, buttons });
@@ -295,8 +327,59 @@ export function botSurveysMessage(rows: BotSurveyRow[], locale: BotLocale, asOf:
 /** HELP: a list of the commands (WhatsApp shows it as a menu; each row is one tap). */
 export function botHelpMessage(locale: BotLocale): OutboundMessage {
   const s = S[locale];
-  const rows = (['stats', 'drop', 'nonresp', 'started', 'completed', 'surveys', 'more', 'help', 'unlink'] as const).map((c) => ({
+  const rows = (['stats', 'results', 'drop', 'nonresp', 'started', 'completed', 'surveys', 'mute', 'unmute', 'unlink'] as const).map((c) => ({
     id: botButtonId(c), title: c === 'unlink' ? (locale === 'fr' ? 'DELIER' : 'UNLINK') : chip(c as BotCommand, locale).title, description: s.cmd[c],
   }));
   return { kind: 'list', body: `🤖 *${s.helpTitle}*\n${s.helpBody}`, buttonLabel: s.helpBtn, rows };
 }
+
+
+// ---- RESULTS: one line per question ------------------------------------------------------------------------------------------------
+
+/**
+ * RESULTS. The share and the count come with the top choice ("Top: Satisfied · 62% (81 of 130)"), never the name alone: 51% and 49% must not
+ * read like a landslide. Percentages are of the people who answered THAT question; the dashboard has the full distribution.
+ */
+export function botResultsMessages(d: BotStatsData, locale: BotLocale, asOf: string, openUrl: string | null): OutboundMessage[] {
+  const s = S[locale];
+  const lines = [head('📋', d.title, `${s.results} · ${d.totals.completed} ${s.completed.toLowerCase()}`, asOf, locale), ''];
+  for (const q of d.questions.slice(0, 15)) {
+    const n = q.answered ?? q.passed;
+    lines.push(`Q${q.number} ${shortQ(q.text, 34)} (${questionTypeLabel(q.type, locale)})`);
+    if (n === 0) lines.push(`→ ${s.noAnswersYet}`);
+    else if (q.type === 'text') lines.push(`→ ${s.comments(n)}`);
+    else if (q.type === 'rating') lines.push(`→ ${s.average} ${q.average === null || q.average === undefined ? '—' : fmtRate(q.average, locale)} (${s.answersOf(n)})`);
+    else lines.push(q.top ? `→ ${s.top}: ${shortQ(q.top.label, 28)} · ${Math.round(q.top.pct)}% (${q.top.count}/${n})` : `→ ${s.answersOf(n)}`);
+    lines.push('');
+  }
+  lines.push(`_${s.resultsNote}_`);
+  const first = withChips(lines.join('\n'), [chip('stats', locale), chip('drop', locale), chip('help', locale)]);
+  return openUrl ? [first, { kind: 'link', body: locale === 'fr' ? 'Graphiques complets et filtres :' : 'Full charts and filters:', buttonLabel: s.openBtn, url: openUrl }] : [first];
+}
+
+// ---- push alerts ---------------------------------------------------------------------------------------------------------------------
+
+export const ALERT_MILESTONES = [100, 500, 1000, 5000, 10000] as const;
+export type AlertKind = 'milestone' | 'slowdown';
+
+/** The text of an alert, as a message inside an open 24 h window (free) … */
+export function botAlertMessage(kind: AlertKind, p: { title: string; n?: number; rate?: number; hours?: number }, locale: BotLocale): OutboundMessage {
+  const s = S[locale];
+  const body = kind === 'milestone' ? s.alertMilestone(p.n ?? 0, p.title, fmtRate(p.rate ?? 0, locale)) : s.alertSlow(p.hours ?? 48, p.title);
+  return { kind: 'buttons', body: `${body}\n\n${s.alertFoot}`, buttons: [chip(kind === 'slowdown' ? 'nonresp' : 'stats', locale), { id: botButtonId('mute'), title: chip('mute', locale).title }] };
+}
+/** … and the same words as the single {{1}} of the approved template (a template variable cannot hold line breaks). */
+export function botAlertTemplateText(kind: AlertKind, p: { title: string; n?: number; rate?: number; hours?: number }, locale: BotLocale): string {
+  const s = S[locale];
+  const body = kind === 'milestone' ? s.alertMilestone(p.n ?? 0, p.title, fmtRate(p.rate ?? 0, locale)) : s.alertSlow(p.hours ?? 48, p.title);
+  return body.replace(/\*/g, '').replace(/\s*\n\s*/g, ' · ').slice(0, 240);
+}
+export const botMuted = (on: boolean, locale: BotLocale): OutboundMessage => ({ kind: 'text', body: on ? S[locale].unmutedOk : S[locale].mutedOk });
+
+/** The template the platform number uses to reach an owner OUTSIDE the 24 h window (utility; quick replies reopen the window for free answers). */
+export const OWNER_ALERT_TEMPLATE = 'owner_alert';
+export const OWNER_ALERT_DEFS = [
+  { name: OWNER_ALERT_TEMPLATE, language: 'en' as const, category: 'UTILITY' as const, body: 'SurveyFlow alert: {{1}} Tap STATS for the full summary.', examples: ['100 responses reached on Customer Satisfaction. Completion rate so far: 68.8%.'], buttons: ['STATS', 'Mute alerts'] },
+  { name: OWNER_ALERT_TEMPLATE, language: 'fr' as const, category: 'UTILITY' as const, body: 'Alerte SurveyFlow : {{1}} Touchez STATS pour le résumé complet.', examples: ['100 réponses atteintes sur Satisfaction client. Taux de complétion à ce jour : 68,8%.'], buttons: ['STATS', 'Couper les alertes'] },
+];
+export const OWNER_ALERT_PAYLOADS = [botButtonId('stats'), botButtonId('mute')];

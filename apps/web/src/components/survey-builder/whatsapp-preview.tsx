@@ -2,7 +2,9 @@
 import { Fragment, useMemo } from 'react';
 import { Gift, List } from 'lucide-react';
 import { TEMPLATE_DEFS, TEMPLATE_NAMES, buildQuestionMessage, buildThankYouMessage, estimateMinutes, type OutboundMessage } from '@surveyflow/shared';
+import { useState } from 'react';
 import { useT } from '@/lib/i18n/client';
+import { OwnerChat } from './bot-preview';
 import { cn } from '@/lib/utils';
 import type { SurveyDraft } from './types';
 
@@ -50,8 +52,9 @@ export function Bubble({ message }: { message: OutboundMessage }) {
  * Live preview. It renders the SAME OutboundMessage objects the sender converts to Cloud API payloads
  * (shared/buildQuestionMessage), so what the owner sees is what participants receive.
  */
-export function WhatsAppPreview({ draft, businessName, step, onStep }: { draft: SurveyDraft; businessName: string; step: number; onStep: (n: number) => void }) {
+export function WhatsAppPreview({ draft, businessName, step, onStep, surveyId }: { draft: SurveyDraft; businessName: string; step: number; onStep: (n: number) => void; surveyId?: string }) {
   const t = useT();
+  const [who, setWho] = useState<'participant' | 'owner'>('participant');
   const lang = draft.language;
   const total = draft.questions.length;
   const tpl = TEMPLATE_DEFS.find((d) => d.name === TEMPLATE_NAMES.invitation && d.language === lang)!;
@@ -77,8 +80,18 @@ export function WhatsAppPreview({ draft, businessName, step, onStep }: { draft: 
   };
   const chips = [{ n: 0, label: t('b.pv.invite') }, ...draft.questions.map((_, i) => ({ n: i + 1, label: `Q${i + 1}` })), { n: lastStep, label: t('b.pv.thanks') }];
 
+  const switcher = (
+    <div className="grid grid-cols-2 gap-1 rounded-xl bg-canvas p-1" role="tablist" aria-label={t('b.pv.title')}>
+      {(['participant', 'owner'] as const).map((k) => (
+        <button key={k} type="button" role="tab" aria-selected={who === k} onClick={() => setWho(k)} className={cn('min-h-[36px] rounded-lg px-2 text-xs font-bold leading-tight', who === k ? 'bg-white text-ink shadow-sm' : 'text-muted-foreground hover:text-ink')}>{t(k === 'participant' ? 'ab.pv.tabParticipant' : 'ab.pv.tabOwner')}</button>
+      ))}
+    </div>
+  );
+  if (who === 'owner') return <div className="flex flex-col gap-3">{switcher}<OwnerChat title={draft.title} questions={draft.questions} surveyId={surveyId} /></div>;
+
   return (
     <div className="flex flex-col gap-3">
+      {switcher}
       <div className="flex flex-wrap gap-1.5" role="tablist" aria-label={t('b.pv.title')}>
         {chips.map((c) => (
           <button key={c.n} type="button" role="tab" aria-selected={step === c.n} onClick={() => onStep(c.n)} className={cn('min-h-[32px] rounded-full px-3 text-xs font-bold', step === c.n ? 'bg-ink text-white' : 'bg-white text-body ring-1 ring-line-2 hover:bg-mint/60')}>{c.label}</button>

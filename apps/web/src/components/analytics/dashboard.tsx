@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import { AlertTriangle, ArrowLeft, Download, Gift, Lightbulb, RefreshCw, Send, Trophy } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { toast } from 'sonner';
+import { questionTypeLabel } from '@surveyflow/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { SurveyStatusBadge } from '@/components/status-badge';
 import { useWallet } from '@/components/wallet/use-wallet';
-import { ApiError, api, errorMessage } from '@/lib/api';
+import { ApiError, api, download, errorMessage } from '@/lib/api';
 import { dateTime, money, num } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
@@ -20,7 +21,7 @@ import { cn } from '@/lib/utils';
 interface Dist { label: string; count: number; pct: number }
 interface Analytics {
   survey: { id: string; title: string; status: string; giftType: string };
-  totals: { sent: number; started: number; completed: number; abandoned: number; declined: number; noReply: number; inProgress: number; failed: number; queued: number; completionRate: number; responseRate: number; avgCompletionSeconds: number | null };
+  totals: { sent: number; started: number; completed: number; abandoned: number; declined: number; noReply: number; optedOut: number; inProgress: number; failed: number; queued: number; completionRate: number; responseRate: number; avgCompletionSeconds: number | null };
   funnel: Array<{ key: string; label: string; count: number }>;
   perQuestion: Array<{ id: string; number: number; text: string; type: string; answered: number; skipped: number; abandonedHere: number; distribution: Dist[]; average: number | null; texts: Array<{ answer: string; name: string; phone: string; answeredAt: string }> }>;
   dropOff: { questionNumber: number; questionText: string; count: number; suggestion: string } | null;
@@ -36,6 +37,7 @@ interface GiftMoney {
   currency: string;
   money: { sent: { count: number; amount: number }; inFlight: { count: number; amount: number }; unfunded: { count: number; amount: number }; failedRefunded: number; needsCheck: { count: number; amount: number } };
 }
+interface NotStartedPage { total: number; page: number; pageSize: number; items: Array<{ recipientId: string; name: string; phone: string; status: string; sentAt: string | null }> }
 interface ResponsesPage { total: number; page: number; pageSize: number; questions: Array<{ id: string; number: number; text: string }>; items: Array<{ contactId: string; name: string; phone: string; status: string; completedAt: string | null; abandonedAtQuestion: number | null; answers: Record<string, string> }> }
 
 const COLORS = ['#0F7A40', '#2BD46E', '#E9A23B', '#4CC584', '#0B2B22', '#9FD9B4', '#6B4A10', '#7BE0A0', '#12392E', '#C9D3CC'];
@@ -55,6 +57,8 @@ export function AnalyticsDashboard({ id }: { id: string }) {
   const { data, error, mutate, isValidating } = useSWR<Analytics>(`/surveys/${id}/analytics`, { refreshInterval: 10_000 });
   const [page, setPage] = useState(1);
   const { data: rows } = useSWR<ResponsesPage>(`/surveys/${id}/responses?page=${page}&pageSize=10`, { keepPreviousData: true, refreshInterval: 10_000 });
+  const [nsPage, setNsPage] = useState(1);
+  const { data: ns } = useSWR<NotStartedPage>(`/surveys/${id}/not-started?page=${nsPage}&pageSize=10`, { keepPreviousData: true, refreshInterval: 10_000 });
   const [busy, setBusy] = useState<string | null>(null);
   const paidGift = data?.survey.giftType === 'airtime' || data?.survey.giftType === 'momo';
   const { data: giftData, mutate: mutateGifts } = useSWR<GiftMoney>(paidGift ? `/surveys/${id}/gifts` : null, { refreshInterval: 10_000 });
@@ -142,7 +146,7 @@ export function AnalyticsDashboard({ id }: { id: string }) {
         <Metric value={tt.noReply} label={t('a.noReply')} />
       </section>
       <p className="mt-3 text-xs text-muted-foreground">
-        {t('a.footnote', { completed: tt.completed, declined: tt.declined, progress: tt.inProgress, failed: tt.failed, time: fmtDur(tt.avgCompletionSeconds) })}
+        {t('a.footnote', { completed: tt.completed, declined: tt.declined, optedOut: tt.optedOut, abandoned: tt.abandoned, progress: tt.inProgress, failed: tt.failed, time: fmtDur(tt.avgCompletionSeconds) })}
       </p>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
@@ -173,7 +177,7 @@ export function AnalyticsDashboard({ id }: { id: string }) {
         </Card>
 
         <div className="flex flex-col gap-6">
-          <Card>
+          <Card id="not-started" className="scroll-mt-24">
             <CardHeader className="flex-row flex-wrap items-start justify-between gap-3">
               <div><CardTitle>{t('a.didntStart', { n: tt.noReply })}</CardTitle><CardDescription>{t('a.didntStartSub')}</CardDescription></div>
               <div className="flex flex-wrap gap-2">
@@ -189,10 +193,26 @@ export function AnalyticsDashboard({ id }: { id: string }) {
                   {data.remind[k].nextAt ? t(key, { n: data.remind[k].waiting, date: dateTime(data.remind[k].nextAt!, locale) }) : t('a.waitNever', { n: data.remind[k].waiting })}
                 </p>
               ))}
-              {data.nonStarters.length === 0 ? <p className="text-sm text-muted-foreground">{t('a.everyoneReplied')}</p> : (
-                <ul className="flex max-h-44 flex-wrap gap-2 overflow-y-auto scrollbar-thin">
-                  {data.nonStarters.map((n) => <li key={n.recipientId} className="rounded-full bg-canvas px-3 py-1.5 text-sm"><span className="font-semibold">{n.name}</span> <span className="text-muted-foreground">{n.phone}</span></li>)}
-                </ul>
+              {!ns ? <Skeleton className="h-24" /> : ns.total === 0 ? <p className="text-sm text-muted-foreground">{t('a.everyoneReplied')}</p> : (
+                <>
+                  {/* The one place with the COMPLETE numbers; the WhatsApp bot shows names with masked numbers and links here. */}
+                  <ul className="divide-y divide-line rounded-xl border border-line" data-testid="not-started-list">
+                    {ns.items.map((n) => (
+                      <li key={n.recipientId} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-0.5 px-3.5 py-2.5 text-sm">
+                        <span className="font-semibold">{n.name}</span>
+                        <span className="tabular-nums text-muted-foreground">{n.phone}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <span className="text-muted-foreground">{t('a.nsShowing', { from: (ns.page - 1) * ns.pageSize + 1, to: Math.min(ns.total, ns.page * ns.pageSize), total: ns.total })}</span>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" disabled={nsPage <= 1} onClick={() => setNsPage(nsPage - 1)}>{t('common.prev')}</Button>
+                      <Button size="sm" variant="outline" disabled={nsPage * ns.pageSize >= ns.total} onClick={() => setNsPage(nsPage + 1)}>{t('common.next')}</Button>
+                      <Button size="sm" variant="outline" onClick={() => download(`/surveys/${id}/not-started.csv`, 'not-started.csv').catch((err) => toast.error(errorMessage(err, t)))}><Download className="h-4 w-4" aria-hidden />{t('a.nsDownload')}</Button>
+                    </div>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -251,7 +271,7 @@ export function AnalyticsDashboard({ id }: { id: string }) {
         {data.perQuestion.map((q) => (
           <Card key={q.id} className="lg:[&:nth-child(odd):last-child]:col-span-2">
             <CardHeader>
-              <CardTitle className="text-lg">Q{q.number}. {q.text}</CardTitle>
+              <CardTitle className="text-lg">Q{q.number}. {q.text} <span className="whitespace-nowrap text-sm font-medium text-muted-foreground" data-testid="q-type">({questionTypeLabel(q.type, locale)})</span></CardTitle>
               <CardDescription>
                 {t('a.answered', { n: q.answered })}{q.skipped > 0 && ` · ${t('a.skipped', { n: q.skipped })}`}{q.abandonedHere > 0 && ` · ${t('a.leftHere', { n: q.abandonedHere })}`}{q.average !== null && ` · ${t('a.average', { n: q.average })}`}
               </CardDescription>

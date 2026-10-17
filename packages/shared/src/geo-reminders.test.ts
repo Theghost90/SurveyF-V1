@@ -45,8 +45,8 @@ describe('the euro', () => {
     expect(PSP_CHARGE_CURRENCIES).toContain('EUR');
     for (const [psp, cap] of Object.entries(PSP_CAPABILITIES)) expect(cap.currencies.includes('EUR'), psp).toBe(psp !== 'campay');
   });
-  it('is priced at the CFA franc\'s fixed peg (655.957 per euro), whole euros, annual = 10 months converted once', () => {
-    expect(planPrices(eurQuote())).toEqual({ starter: { monthly: 22, annual: 221 }, growth: { monthly: 59, annual: 595 }, business: { monthly: 145, annual: 1450 } });
+  it('is priced at the CFA franc\'s fixed peg (655.957 per euro), whole euros, annual = 11 months converted once', () => {
+    expect(planPrices(eurQuote())).toEqual({ starter: { monthly: 22, annual: 243 }, growth: { monthly: 59, annual: 654 }, business: { monthly: 145, annual: 1590 } });
     expect(convertToXAF(22, eurQuote())).toBe(14_431);
     expect(overagePerBlock(eurQuote())).toBe(0.76);
   });
@@ -70,13 +70,13 @@ describe('prices in the visitor currency (live conversion of the FCFA prices)', 
   });
 
   it('CFA francs never change: XAF and XOF are 1:1, so the FCFA prices are exactly the owner\'s', () => {
-    expect(planPrices(identityQuote('XAF'))).toEqual({ starter: { monthly: 14_500, annual: 145_000 }, growth: { monthly: 39_000, annual: 390_000 }, business: { monthly: 95_000, annual: 950_000 } });
+    expect(planPrices(identityQuote('XAF'))).toEqual({ starter: { monthly: 14_500, annual: 159_500 }, growth: { monthly: 39_000, annual: 429_000 }, business: { monthly: 95_000, annual: 1_045_000 } });
     expect(planPriceIn('growth', 'monthly', identityQuote('XOF'))).toBe(39_000);
   });
 
   it('other currencies are the rate times the FCFA price, rounded to 3 significant digits; annual is 10 months converted once', () => {
     expect(planPriceIn('starter', 'monthly', NGN)).toBe(34_800); // 14,500 × 2.4
-    expect(planPriceIn('starter', 'annual', NGN)).toBe(348_000);
+    expect(planPriceIn('starter', 'annual', NGN)).toBe(383_000); // 11 × 34,800
     expect(planPriceIn('business', 'monthly', NGN)).toBe(228_000);
     expect(planPriceIn('starter', 'monthly', USD)).toBe(25); // 14,500 / 580
     expect(planPriceIn('growth', 'monthly', USD)).toBe(67); // charged amounts are whole units

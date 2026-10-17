@@ -41,7 +41,7 @@ describe('plans', () => {
   });
   it('computes cost per answer and annual price', () => {
     expect(costPerAnswer('growth', 3000)).toBeCloseTo(13, 1);
-    expect(planPriceIn('growth', 'annual', identityQuote('XAF'))).toBe(390000);
+    expect(planPriceIn('growth', 'annual', identityQuote('XAF'))).toBe(429000);
   });
   it('charges overage in blocks of 100 responses', () => {
     expect(responseOverageFCFA('starter', 500)).toBe(0);

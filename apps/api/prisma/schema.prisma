@@ -122,6 +122,7 @@ model User {
   sheetSyncs       SheetSync[]
   walletEntries    WalletEntry[]
   funnelEvents     FunnelEvent[]
+  botAlerts BotAlert[]
   ownerPhones      OwnerPhone[]
 }
 
@@ -524,9 +525,34 @@ model OwnerPhone {
   id        String   @id @default(cuid())
   userId    String
   phone     String   @unique
+  /** Milestone and slowdown alerts to this phone (MUTE / ALERTS ON, or the switch in Settings). */
+  alerts    Boolean  @default(true)
+  /** Last message this phone sent to SurveyFlow's number: an alert inside the following 24 h is a free reply, outside it needs a template. */
+  lastInboundAt DateTime?
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+/**
+ * One row per alert decided for an owner: the unique key makes a milestone / weekly slowdown fire ONCE however many completions race,
+ * and the rows are what the template caps (per day / per month) count.
+ */
+model BotAlert {
+  id          String   @id @default(cuid())
+  userId      String
+  surveyId    String
+  kind        String
+  /** "100" for a milestone, "2026-W42" for a slowdown. */
+  key         String
+  /** 'window' (free reply), 'template' (billed to SurveyFlow), 'skipped' (muted / capped / no phone). */
+  channel     String
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([surveyId, kind, key])
+  @@index([userId, createdAt])
 }

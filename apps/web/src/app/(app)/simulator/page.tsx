@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/page-header';
+import { OwnerSimulator } from '@/components/simulator-owner';
 import { WaText } from '@/components/survey-builder/whatsapp-preview';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { useT } from '@/lib/i18n/client';
@@ -23,6 +24,7 @@ interface Snapshot { contact: { id: string; name: string; phone: string; optedOu
 export default function SimulatorPage() {
   const t = useT();
   const { data: contacts } = useSWR<{ items: Array<{ id: string; name: string; phone: string }> }>('/contacts?pageSize=100');
+  const [who, setWho] = useState<'participant' | 'owner'>('participant');
   const [contactId, setContactId] = useState<string>('');
   const [text, setText] = useState('');
   const [listOpen, setListOpen] = useState<string | null>(null);
@@ -30,6 +32,7 @@ export default function SimulatorPage() {
   const bottom = useRef<HTMLDivElement>(null);
   const { data: snap, error, mutate } = useSWR<Snapshot>(contactId ? `/dev/simulator/${contactId}` : null, { refreshInterval: 2500 });
 
+  useEffect(() => { if (new URLSearchParams(window.location.search).get('mode') === 'owner') setWho('owner'); }, []);
   useEffect(() => { if (!contactId && contacts?.items[0]) setContactId(contacts.items[0].id); }, [contacts, contactId]);
   useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }); }, [snap?.chat.length]);
 
@@ -59,7 +62,13 @@ export default function SimulatorPage() {
   return (
     <>
       <PageHeader title={t('sim.title')} sub={t('sim.sub')} actions={<Badge variant="amber">{t('common.demoOnly')}</Badge>} />
-      {!contacts ? <Skeleton className="h-96" /> : contacts.items.length === 0 ? <Card className="p-8 text-center text-muted-foreground">{t('sim.noContacts')}</Card> : (
+      <div className="mb-5 grid max-w-md grid-cols-2 gap-1 rounded-xl bg-canvas p-1" role="tablist" aria-label={t('sim.title')}>
+        {(['participant', 'owner'] as const).map((k) => (
+          <button key={k} type="button" role="tab" aria-selected={who === k} onClick={() => setWho(k)} className={cn('min-h-[40px] rounded-lg px-3 text-sm font-bold', who === k ? 'bg-white text-ink shadow-sm' : 'text-muted-foreground hover:text-ink')}>{t(k === 'participant' ? 'sim.tabParticipant' : 'sim.tabOwner')}</button>
+        ))}
+      </div>
+      {who === 'owner' ? <OwnerSimulator /> : null}
+      {who === 'owner' ? null : !contacts ? <Skeleton className="h-96" /> : contacts.items.length === 0 ? <Card className="p-8 text-center text-muted-foreground">{t('sim.noContacts')}</Card> : (
         <div className="grid items-start gap-6 lg:grid-cols-[360px_1fr]">
           <div className="mx-auto w-full max-w-[360px] rounded-[34px] bg-ink p-2.5 shadow-phone">
             <div className="overflow-hidden rounded-[26px] bg-wa-bg">

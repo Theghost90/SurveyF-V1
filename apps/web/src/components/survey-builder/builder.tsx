@@ -222,7 +222,7 @@ export function SurveyBuilder({ id }: { id: string }) {
         <aside className="lg:sticky lg:top-24" aria-label={t('b.pv.title')}>
           <Card className="p-5">
             <h2 className="mb-3 font-display text-lg font-bold">{t('b.pv.title')}</h2>
-            <WhatsAppPreview draft={draft} businessName={account?.user.businessName ?? ''} step={Math.min(step, draft.questions.length + 1)} onStep={(n) => { setStep(n); if (n >= 1 && draft.questions[n - 1]) setActiveKey(draft.questions[n - 1]!.key); }} />
+            <WhatsAppPreview surveyId={survey.status === 'draft' ? undefined : id} draft={draft} businessName={account?.user.businessName ?? ''} step={Math.min(step, draft.questions.length + 1)} onStep={(n) => { setStep(n); if (n >= 1 && draft.questions[n - 1]) setActiveKey(draft.questions[n - 1]!.key); }} />
           </Card>
         </aside>
       </div>

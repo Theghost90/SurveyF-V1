@@ -8,6 +8,7 @@ import { sendInConversation, applyDeliveryStatus } from '../whatsapp/sender';
 import { step, type Inbound, type RuntimeSurvey, type SessionState } from './engine';
 import { deleteSession, getSession, saveSession } from './sessions';
 import { handleOwnerMessage, isPlatformNumber } from '../analytics-bot';
+import { checkMilestone } from '../analytics-alerts';
 
 /** Subset of Meta's webhook message object that we read. */
 export interface WaInboundMessage {
@@ -250,6 +251,7 @@ async function turn(phoneNumberId: string, msg: WaInboundMessage, log: Logger) {
   if (messages.length) await sendInConversation(account, msg.from, messages, log);
   if (completed && completedRecipientId) {
     autoSyncCompleted(survey.id, contact.id).catch((err) => log.warn({ err: (err as Error).message }, 'sheets auto-sync failed'));
+    checkMilestone(survey.id, log).catch((err) => log.warn({ err: (err as Error).message }, 'milestone alert failed'));
   }
 }
 

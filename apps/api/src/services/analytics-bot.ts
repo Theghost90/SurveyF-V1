@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import {
-  COUNTRY_CONFIG, asOfLabel, botBadIndex, botDropMessage, botHelpMessage, botLinked, botListMessages, botNotice, botOpenSaasMessage, botStartedNote, botStatsMessage,
+  COUNTRY_CONFIG, asOfLabel, botBadIndex, botDropMessage, botMuted, botResultsMessages, botHelpMessage, botLinked, botListMessages, botNotice, botOpenSaasMessage, botStartedNote, botStatsMessage,
   botSurveysMessage, getPlan, maskPhone, parseBotButtonId, parseBotCommand, toBotStats, type BotCommand, type BotListKind, type BotLocale, type OutboundMessage, type ParsedCommand,
 } from '@surveyflow/shared';
 import { env } from '../config/env';
@@ -52,7 +52,7 @@ export async function createLinkCode(userId: string): Promise<{ code: string; ex
 
 export async function linkedPhones(userId: string) {
   const rows = await prisma.ownerPhone.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } });
-  return rows.map((r) => ({ id: r.id, phone: maskPhone(`+${r.phone}`), createdAt: r.createdAt }));
+  return rows.map((r) => ({ id: r.id, phone: maskPhone(`+${r.phone}`), alerts: r.alerts, createdAt: r.createdAt }));
 }
 
 export async function unlinkPhoneById(userId: string, id: string): Promise<boolean> {
@@ -73,7 +73,8 @@ async function send(to: string, messages: OutboundMessage[], log: { warn: (o: un
 const once = async (key: string, ttlS: number) => (await redis.set(key, '1', 'EX', ttlS, 'NX')) === 'OK';
 
 function readInput(msg: WaInboundMessage): { cmd?: BotCommand; text: string } {
-  const id = msg.interactive?.button_reply?.id ?? msg.interactive?.list_reply?.id;
+  // a tapped quick reply of the alert template arrives as a `button` message whose payload is the same id
+  const id = msg.interactive?.button_reply?.id ?? msg.interactive?.list_reply?.id ?? (msg.type === 'button' ? msg.button?.payload : undefined);
   if (id) { const c = parseBotButtonId(id); if (c) return { cmd: c, text: '' }; }
   return { text: msg.type === 'text' ? (msg.text?.body ?? '') : '' };
 }
@@ -94,11 +95,16 @@ export async function handleOwnerMessage(msg: WaInboundMessage, log: { info: (o:
     return;
   }
   const { user } = link;
+  await prisma.ownerPhone.update({ where: { id: link.id }, data: { lastInboundAt: new Date() } }); // opens the 24 h window in which alerts are free
   const locale: BotLocale = user.locale === 'en' ? 'en' : 'fr';
 
   if (parsed?.command === 'unlink') {
     await prisma.ownerPhone.delete({ where: { id: link.id } });
     return send(from, [botNotice('unlinked', locale)], log);
+  }
+  if (parsed?.command === 'mute' || parsed?.command === 'unmute') {
+    await prisma.ownerPhone.update({ where: { id: link.id }, data: { alerts: parsed.command === 'unmute' } });
+    return send(from, [botMuted(parsed.command === 'unmute', locale)], log);
   }
   if (!getPlan(user.plan).features.analyticsBot) return send(from, [botNotice('locked', locale)], log);
 
@@ -137,6 +143,7 @@ export async function handleOwnerMessage(msg: WaInboundMessage, log: { info: (o:
 
   switch (parsed.command) {
     case 'stats': return send(from, [botStatsMessage(toBotStats(await computeAnalytics(survey.id, user.id)), locale, asOf)], log);
+    case 'results': return send(from, botResultsMessages(toBotStats(await computeAnalytics(survey.id, user.id)), locale, asOf, web ? `${web}/surveys/${survey.id}/analytics` : null), log);
     case 'drop': return send(from, [botDropMessage(toBotStats(await computeAnalytics(survey.id, user.id)), locale, asOf)], log);
     case 'nonresp':
       // "ALL NONRESP" (the design's export) lives in SurveyFlow now: the full list, with every number, and a CSV
