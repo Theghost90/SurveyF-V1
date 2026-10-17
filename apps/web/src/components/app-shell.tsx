@@ -5,6 +5,7 @@ import { signOut } from 'next-auth/react';
 import { AlertTriangle, ChevronDown, CreditCard, LogOut, Settings, Sparkles, Wallet } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import { LanguageToggle } from '@/components/language-toggle';
+import { MobileNav } from '@/components/mobile-nav';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -55,9 +56,9 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
     <div className="min-h-screen">
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-white focus:px-3 focus:py-2">{t('app.skipToContent')}</a>
       <header className="sticky top-0 z-40 border-b border-line bg-canvas/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1344px] flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3 sm:px-8">
-          <Logo href="/dashboard" className="[&_span]:text-xl" />
-          <nav aria-label={t('nav.main')} className="order-last flex w-full gap-1 overflow-x-auto sm:order-none sm:w-auto sm:flex-1">
+        <div className="mx-auto flex max-w-[1344px] items-center gap-x-3 px-4 py-3 sm:flex-wrap sm:gap-x-6 sm:gap-y-2 sm:px-8">
+          <Logo href="/dashboard" className="[&_span]:text-lg sm:[&_span]:text-xl" />
+          <nav aria-label={t('nav.main')} className="hidden sm:flex sm:flex-1 sm:gap-1">
             {nav.map((n) => {
               const active = pathname === n.href || pathname.startsWith(n.href + '/');
               return (
@@ -67,7 +68,7 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
               );
             })}
           </nav>
-          <div className="ml-auto flex items-center gap-3 sm:ml-0">
+          <div className="ml-auto flex items-center gap-2 sm:ml-0 sm:gap-3">
             {account && <Link href="/billing" className="hidden sm:inline"><Badge variant={account.plan.key === 'trial' ? 'amber' : 'default'}>{t(`plan.${account.plan.key as 'trial'}`)}</Badge></Link>}
             {account?.plan.features.giftAutomation && wallet && (
               <Link href="/billing#wallet" className="hidden sm:inline" aria-label={`${t('w.title')}: ${money(wallet.balance, wallet.currency, locale)}`}>
@@ -76,10 +77,10 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
             )}
             <LanguageToggle />
             <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-2 rounded-xl border border-line-2 bg-white py-1.5 pl-1.5 pr-3 text-sm font-semibold" aria-label={t('app.account')}>
+              <DropdownMenuTrigger className="flex items-center gap-2 rounded-xl border border-line-2 bg-white py-1.5 pl-1.5 pr-1.5 text-sm font-semibold sm:pr-3" aria-label={t('app.account')}>
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-sm font-bold text-ink">{(account?.user.name ?? '?').slice(0, 1).toUpperCase()}</span>
                 <span className="hidden max-w-[120px] truncate sm:inline">{account?.user.businessName ?? <Skeleton className="h-4 w-20" />}</span>
-                <ChevronDown className="h-4 w-4 opacity-60" aria-hidden />
+                <ChevronDown className="hidden h-4 w-4 opacity-60 sm:block" aria-hidden />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>{account?.user.email}</DropdownMenuLabel>
@@ -103,7 +104,8 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
         </div>
       )}
 
-      <main id="main" className="mx-auto max-w-[1344px] px-5 pb-20 pt-8 sm:px-8">{needsSegment ? <Skeleton className="h-64" /> : children}</main>
+      <main id="main" className="mx-auto max-w-[1344px] px-5 pb-28 pt-8 sm:px-8 sm:pb-20">{needsSegment ? <Skeleton className="h-64" /> : children}</main>
+      <MobileNav showSimulator={showSimulator} />
       <WhatsAppRequiredDialog />
     </div>
   );

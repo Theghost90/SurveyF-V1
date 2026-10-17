@@ -47,6 +47,22 @@ for (const w of widths) {
   }
   console.log(`${w}px: ${routes.length} screens checked`);
 }
+// phone navigation: a fixed tab bar and a More sheet (below 640 px); the text menu only from 640 px
+await page.setViewportSize({ width: 390, height: 800 });
+await page.goto(`${base}/dashboard`);
+const bar = page.locator('nav[aria-label]').filter({ has: page.getByRole('button', { name: 'More' }) });
+await bar.waitFor({ timeout: 15000 });
+const tabs = (await bar.locator('a, button').allInnerTexts()).map((x) => x.trim());
+if (tabs.join('|') !== 'Home|Surveys|Contacts|Simulator|More') { console.log(`✗ tab bar is ${tabs.join('|')}`); bad++; }
+await bar.getByRole('button', { name: 'More' }).click();
+for (const name of ['Billing & wallet', 'Settings', 'Analytics on WhatsApp', 'Sign out']) {
+  if (!(await page.getByRole('dialog').getByText(name).count())) { console.log(`✗ More sheet lacks ${name}`); bad++; }
+}
+await page.keyboard.press('Escape');
+await page.setViewportSize({ width: 1280, height: 800 });
+await page.waitForTimeout(300);
+if (await bar.isVisible()) { console.log('✗ the phone tab bar must be hidden from 640 px'); bad++; }
+console.log('phone navigation checked');
 await browser.close();
 if (bad) { console.log(`\n${bad} problem(s)`); process.exit(1); }
 console.log('\nNo horizontal overflow on any screen at any width.');

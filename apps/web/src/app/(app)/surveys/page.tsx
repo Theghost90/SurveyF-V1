@@ -60,6 +60,37 @@ export default function SurveysPage() {
           <Link href="/surveys/new" className={buttonVariants({})}>{t('surveys.new')}</Link>
         </Card>
       ) : (
+        <>
+        <ul className="flex flex-col gap-3 sm:hidden" data-testid="survey-cards">
+          {data.items.map((s) => (
+            <li key={s.id}>
+              <Card className="relative p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <SurveyStatusBadge status={s.status} />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className="relative z-10 -m-2 rounded-lg p-2 hover:bg-mint/60" aria-label={`${t('common.actions')}: ${s.title}`}><MoreHorizontal className="h-5 w-5" aria-hidden /></DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem asChild><Link href={`/surveys/${s.id}`}><Pencil className="h-4 w-4" aria-hidden />{t('surveys.open')}</Link></DropdownMenuItem>
+                      {s.status !== 'draft' && <DropdownMenuItem asChild><Link href={`/surveys/${s.id}/analytics`}><BarChart3 className="h-4 w-4" aria-hidden />{t('surveys.analytics')}</Link></DropdownMenuItem>}
+                      <DropdownMenuItem onSelect={() => void duplicate(s.id)}><Copy className="h-4 w-4" aria-hidden />{t('surveys.duplicate')}</DropdownMenuItem>
+                      <DropdownMenuItem className="text-destructive" onSelect={() => setToDelete(s)}><Trash2 className="h-4 w-4" aria-hidden />{t('common.delete')}</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <Link href={s.status === 'draft' ? `/surveys/${s.id}` : `/surveys/${s.id}/analytics`} className="mt-2 block text-ink no-underline after:absolute after:inset-0 after:content-['']">
+                  <span className="block font-display text-[17px] font-bold leading-snug">{s.title}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">{t('surveys.questionsN', { n: s.questionCount })} · {s.language.toUpperCase()} · {dateShort(s.createdAt, locale)}</span>
+                  <span className="mt-3 flex border-t border-line-3 pt-3">
+                    <span className="flex-1"><b className="block font-display text-xl font-extrabold tabular-nums">{s.sent}</b><small className="text-xs text-muted-foreground">{t('surveys.col.sent')}</small></span>
+                    <span className="flex-1"><b className="block font-display text-xl font-extrabold tabular-nums">{s.completed}</b><small className="text-xs text-muted-foreground">{t('surveys.col.completed')}</small></span>
+                    <span className="flex-1"><b className="block font-display text-xl font-extrabold tabular-nums">{s.sent > 0 ? `${Math.round((s.completed / s.sent) * 100)}%` : '—'}</b><small className="text-xs text-muted-foreground">{t('surveys.col.rate')}</small></span>
+                  </span>
+                </Link>
+              </Card>
+            </li>
+          ))}
+        </ul>
+        <div className="hidden sm:block">
         <Table>
           <THead><tr><TH>{t('surveys.col.title')}</TH><TH>{t('common.status')}</TH><TH className="text-right">{t('surveys.col.sent')}</TH><TH className="text-right">{t('surveys.col.completed')}</TH><TH>{t('common.created')}</TH><TH><span className="sr-only">{t('common.actions')}</span></TH></tr></THead>
           <TBody>
@@ -88,6 +119,8 @@ export default function SurveysPage() {
             ))}
           </TBody>
         </Table>
+        </div>
+        </>
       )}
 
       <Dialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>

@@ -75,7 +75,7 @@ Bars use, in order: `#0F7A40, #2BD46E, #E9A23B, #4CC584, #0B2B22, #9FD9B4, #6B4A
 
 ## 5. Layout and navigation
 - **App shell:** sticky white header with logo, main nav (Dashboard, Surveys, Contacts, Settings, Simulator), plan badge, wallet badge (when gifts are available), FR/EN toggle, account menu (Billing, Settings, Sign out).
-- **Nav on phones:** wraps below the logo as a horizontally scrolling row (known limitation: no visual cue that more items sit off-screen).
+- **Nav on phones (below 640 px):** a fixed bottom tab bar with five tabs (Home, Surveys, Contacts, Simulator, More; Settings takes the Simulator slot where there is no simulator). The current tab has a mint pill behind its icon. "More" opens a bottom sheet: Billing & wallet (plan badge), Settings, Analytics on WhatsApp, Language, Sign out. The header keeps only logo, language toggle and account button on one row. Hidden during onboarding. From 640 px the text menu returns to the header.
 - **Banners** under the header: info (mint) for Explore usage, warn (amber) for renewal, danger (red) for suspension; each has one action button on the right.
 - **Page header:** title, optional one-line subtitle, actions on the right (wraps below on phones).
 - **Breakpoints:** Tailwind defaults (`sm` 640, `md` 768, `lg` 1024); verified widths 360, 390, 768, 1280.
@@ -152,17 +152,16 @@ Dark bezel phone (max width 330 to 360 px), green header with avatar and name, w
 - WCAG AA contrast on the palette (ink on canvas and white; ink on brand green). Amber-ink on amber-soft for warnings. Do not put white text on `brand`.
 - Visible focus ring everywhere; every icon button, switch, tab and radio has an accessible name; status and error regions use `role="status"` / `role="alert"`; live chat regions are `aria-live="polite"`.
 - Keyboard: drag-and-drop reordering has a keyboard path (focus handle, Space, arrows, Space); dialogs trap and restore focus.
-- Targets: 44 px primary buttons, at least 32 px for chips and small controls.
+- Targets: 48 px tab bar and More-sheet rows, 44 px primary buttons, at least 32 px for chips and small controls.
 - Meaning never by colour alone (badges carry text).
 
 ## 11. Responsive rules
 - 360 px is the minimum; no horizontal page scroll (checked on 16 screens at 360, 390, 768, 1280).
 - Rows that mix a long title with metadata stack on phones (title on its own line, details below).
-- The surveys list is a scrolling table on phones (a card list is a recommended improvement).
+- Below 640 px the surveys list is a list of cards (status, title, date, sent, completed, completion); the table returns from 640 px.
 - Dialogs and the phone preview scale down; preview max width 330 px.
 
 ## 12. Known gaps
 - No dark theme, though the config enables the class strategy.
-- The phone navigation row hides items without a cue.
 - No documented spacing scale beyond Tailwind defaults; no icon size tokens.
 - Tokens are defined in `tailwind.config.ts` and `globals.css` only; there is no design-token export (JSON) or Storybook.
