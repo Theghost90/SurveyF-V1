@@ -5,6 +5,7 @@ import { Plus, Tag, Trash2, Upload, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatPhone } from '@surveyflow/shared';
 import { Badge } from '@/components/ui/badge';
+import { useWhatsAppGate } from '@/components/whatsapp-gate';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -31,6 +32,7 @@ export function ContactManager({ embedded = false }: { embedded?: boolean }) {
   const [tag, setTag] = useState(ALL);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const gate = useWhatsAppGate();
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [tagOpen, setTagOpen] = useState(false);
@@ -63,8 +65,8 @@ export function ContactManager({ embedded = false }: { embedded?: boolean }) {
 
   const actions = (
     <>
-      <Button variant="outline" onClick={() => setImportOpen(true)}><Upload className="h-4 w-4" aria-hidden />{t('c.import')}</Button>
-      <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" aria-hidden />{t('c.add')}</Button>
+      <Button variant="outline" onClick={() => gate.require() && setImportOpen(true)}><Upload className="h-4 w-4" aria-hidden />{t('c.import')}</Button>
+      <Button onClick={() => gate.require() && setAddOpen(true)}><Plus className="h-4 w-4" aria-hidden />{t('c.add')}</Button>
     </>
   );
 

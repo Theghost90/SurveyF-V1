@@ -17,6 +17,8 @@ export interface UsageSnapshot {
   activeSurveys: number;
   responses: number;
   messages: number;
+  /** Different people ever sent a survey. Only counted for a plan that caps it (Explore); 0 otherwise. */
+  recipients: number;
   periodStart: Date;
   periodEnd: Date;
 }
@@ -35,13 +37,21 @@ export function nextPlan(plan: PlanKey): PlanKey | null {
   return null;
 }
 
-export async function computeUsage(userId: string, periodStart: Date, periodEnd: Date): Promise<UsageSnapshot> {
-  const [activeSurveys, responses, messages] = await Promise.all([
+/** Different people this owner has ever invited, across all surveys. */
+export async function countRecipients(userId: string): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ n: bigint }>>`
+    SELECT COUNT(DISTINCT r."contactId")::bigint AS n FROM "SurveyRecipient" r JOIN "Survey" s ON s."id" = r."surveyId" WHERE s."userId" = ${userId}`;
+  return Number(rows[0]?.n ?? 0);
+}
+
+export async function computeUsage(userId: string, periodStart: Date, periodEnd: Date, capsRecipients = false): Promise<UsageSnapshot> {
+  const [activeSurveys, responses, messages, recipients] = await Promise.all([
     prisma.survey.count({ where: { userId, status: 'active' } }),
     prisma.surveyRecipient.count({ where: { status: 'completed', completedAt: { gte: periodStart, lt: periodEnd }, survey: { userId } } }),
     prisma.messageLog.count({ where: { userId, createdAt: { gte: periodStart, lt: periodEnd } } }),
+    capsRecipients ? countRecipients(userId) : Promise.resolve(0),
   ]);
-  return { activeSurveys, responses, messages, periodStart, periodEnd };
+  return { activeSurveys, responses, messages, recipients, periodStart, periodEnd };
 }
 
 export async function loadAccount(userId: string): Promise<AccountContext> {
@@ -52,7 +62,7 @@ export async function loadAccount(userId: string): Promise<AccountContext> {
     user: rest as User,
     subscription,
     plan: getPlan(user.plan),
-    usage: await computeUsage(userId, subscription.currentPeriodStart, subscription.currentPeriodEnd),
+    usage: await computeUsage(userId, subscription.currentPeriodStart, subscription.currentPeriodEnd, getPlan(user.plan).limits.recipients !== null),
   };
 }
 
@@ -92,6 +102,33 @@ export function assertCanSendMessages(ctx: AccountContext, count: number) {
     });
   }
 }
+
+/**
+ * Explore reaches a fixed number of different people, for the life of the account. `contactIds` are the people this send would invite;
+ * those already invited before (in any survey) cost nothing new. Over the cap → 402 with the plan to activate.
+ */
+export async function freshRecipientCount(userId: string, contactIds: string[]): Promise<number> {
+  if (!contactIds.length) return 0;
+  const known = new Set((await prisma.surveyRecipient.findMany({ where: { survey: { userId }, contactId: { in: contactIds } }, select: { contactId: true }, distinct: ['contactId'] })).map((r) => r.contactId));
+  return contactIds.filter((id) => !known.has(id)).length;
+}
+
+export async function assertCanAddRecipients(ctx: AccountContext, contactIds: string[]) {
+  const cap = ctx.plan.limits.recipients;
+  if (cap === null || !contactIds.length) return;
+  const fresh = await freshRecipientCount(ctx.user.id, contactIds);
+  const remaining = Math.max(0, cap - ctx.usage.recipients);
+  if (fresh > remaining) {
+    throw paymentRequired('plan_limit', remaining
+      ? `Explore lets you reach ${cap} people for free and ${remaining} are left. Activate a plan to send to everyone.`
+      : `You have reached the ${cap} people Explore includes. Activate a plan to send to everyone.`, {
+      limit: 'recipients', max: cap, current: ctx.usage.recipients, remaining, requested: fresh, upgrade: upgradeHint(ctx.plan.key),
+    });
+  }
+}
+
+/** People Explore can still reach (null = the plan has no such cap). */
+export const recipientsRemaining = (ctx: AccountContext): number | null => (ctx.plan.limits.recipients === null ? null : Math.max(0, ctx.plan.limits.recipients - ctx.usage.recipients));
 
 export function assertFeature(ctx: AccountContext, feature: keyof PlanFeatures, label: string) {
   if (!ctx.plan.features[feature]) {

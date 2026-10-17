@@ -6,6 +6,7 @@ import { prisma } from '../src/lib/prisma';
 import { redis } from '../src/lib/redis';
 import { runSendWorkerOnce } from '../src/services/whatsapp/sender';
 import { creditWallet } from '../src/services/wallet';
+import { encryptSecret } from '../src/lib/crypto';
 
 export const APP_SECRET = 'test-app-secret';
 let counter = 0;
@@ -46,7 +47,14 @@ export function client(app: FastifyInstance, token: string, userId: string): Cli
   return { token, userId, raw, get: call('GET'), post: call('POST'), put: call('PUT'), del: call('DELETE') };
 }
 
-export async function registerOwner(app: FastifyInstance, over: Partial<{ email: string; plan: 'trial' | 'starter' | 'growth' | 'business' }> = {}): Promise<Client> {
+/** A simulated WhatsApp number, attached directly (what POST /api/whatsapp/accounts/mock does, without the HTTP round trip). */
+export async function connectMockWhatsApp(userId: string) {
+  const n = ++counter;
+  return prisma.whatsAppAccount.create({ data: { userId, wabaId: `mock-waba-t${n}`, phoneNumberId: `mock-t${n}-${Date.now().toString(36)}`, displayPhone: '+237600000000', accessToken: encryptSecret('mock-token'), status: 'active' } });
+}
+
+/** `whatsapp: false` = a brand-new owner who has not connected their number yet (most of the product refuses to work then). */
+export async function registerOwner(app: FastifyInstance, over: Partial<{ email: string; plan: 'trial' | 'starter' | 'growth' | 'business'; whatsapp: boolean }> = {}): Promise<Client> {
   counter++;
   const res = await app.inject({
     method: 'POST', url: '/api/auth/register', headers: { 'content-type': 'application/json' },
@@ -55,6 +63,7 @@ export async function registerOwner(app: FastifyInstance, over: Partial<{ email:
   const body = JSON.parse(res.body);
   if (res.statusCode !== 201) throw new Error(`register failed: ${res.body}`);
   if (over.plan && over.plan !== 'trial') await setPlan(body.user.id, over.plan);
+  if (over.whatsapp !== false) await connectMockWhatsApp(body.user.id);
   return client(app, body.token, body.user.id);
 }
 
@@ -103,8 +112,7 @@ export async function buildWorld(app: FastifyInstance, opts: { country?: string;
   const currency = currencyForCountry(opts.country ?? 'CM');
   if (opts.country) await prisma.user.update({ where: { id: owner.userId }, data: { country: opts.country, preferredCurrency: currency } });
   if (opts.wallet) await fundWallet(owner.userId, opts.wallet, currency);
-  const acct = await owner.post('/api/whatsapp/accounts/mock');
-  if (acct.status !== 201) throw new Error('mock account: ' + JSON.stringify(acct));
+  const acct = await owner.get('/api/whatsapp/accounts');
   const phoneNumberId = acct.items[0].phoneNumberId as string;
 
   const contactIds: string[] = [];

@@ -5,6 +5,7 @@ import { env } from '../config/env';
 import { encryptSecret } from '../lib/crypto';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { prisma } from '../lib/prisma';
+import { track } from '../services/funnel';
 import { ensureTemplates } from '../services/whatsapp/accounts';
 import { exchangeEmbeddedSignupCode } from '../services/whatsapp/cloud';
 import { getGateway, WaError } from '../services/whatsapp/gateway';
@@ -51,6 +52,7 @@ export default async function whatsappRoutes(app: FastifyInstance) {
     // Surveys drafted before connecting get attached to the new number.
     await prisma.survey.updateMany({ where: { userId, whatsappAccountId: null }, data: { whatsappAccountId: account.id } });
     await ensureTemplates(account);
+    await track(userId, 'whatsapp_connected');
     return account;
   }
 

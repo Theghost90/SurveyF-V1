@@ -2,74 +2,73 @@
 import Link from 'next/link';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import useSWR from 'swr';
-import { Briefcase, Building2, Check, GraduationCap, Plus, Upload } from 'lucide-react';
-import { CUSTOMER_SEGMENTS, PAID_PLAN_KEYS, formatPrice, type CustomerSegment, type Currency, type PaidPlanKey } from '@surveyflow/shared';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Briefcase, Building2, Check, CheckCircle2, GraduationCap } from 'lucide-react';
+import { CUSTOMER_SEGMENTS, type CustomerSegment } from '@surveyflow/shared';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { AddContactDialog, ImportDialog } from '@/components/contacts/contact-dialogs';
 import { WhatsAppConnect } from '@/components/settings/whatsapp-connect';
 import { useAccount } from '@/lib/account';
 import { api, errorMessage } from '@/lib/api';
-import { useLocale, useT } from '@/lib/i18n/client';
+import { useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 const SEGMENT_ICONS = { business: Briefcase, institution: Building2, academic: GraduationCap } as const;
 
 /**
- * Spec §5.1 post-signup onboarding: connect WhatsApp → import contacts → create survey → choose plan, preceded by ONE required
- * question: which customer segment the owner belongs to (it decides which extra tools we offer). Everything after it can be skipped.
+ * Setup is two steps, both required: who the owner surveys for, and their WhatsApp Business number (every survey, contact and send needs it).
+ * Contacts, the first survey and the plan are not here: they wait in "Getting started" on the dashboard, with no pressure.
+ * Someone who arrived from a pricing button ("Activate Growth") goes straight to that plan's checkout when setup is done.
  */
 function Wizard() {
   const t = useT();
-  const locale = useLocale();
   const router = useRouter();
   const params = useSearchParams();
   const { account, mutate } = useAccount();
-  const { data: contacts, mutate: refreshContacts } = useSWR<{ total: number }>('/contacts?pageSize=1');
-  // Prices come from the API: the FCFA prices converted at the live rate into the owner's currency (FCFA when no fresh rate exists).
-  const { data: sub } = useSWR<{ currency: string; prices: Record<PaidPlanKey, { monthly: number }> }>('/subscription');
   const [step, setStep] = useState(1);
   const [savingSeg, setSavingSeg] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const positioned = useRef(false);
-  const [addOpen, setAddOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
-  const wanted = params.get('plan');
 
   const ob = account?.onboarding;
   const segment = account?.user.segment ?? null;
   const segmentChosen = !!ob?.segmentChosen;
-  const labels = [t('ob.s0'), t('ob.s1'), t('ob.s2'), t('ob.s3'), t('ob.s4')];
-  const done = [segmentChosen, !!ob?.whatsappConnected, (contacts?.total ?? 0) > 0, !!ob?.hasSurvey, !!ob?.paidPlan];
+  const connected = !!ob?.whatsappConnected;
+  const labels = [t('ob.s0'), t('ob.s1')];
+  const done = [segmentChosen, connected];
+  const wantedPlan = params.get('plan');
 
-  // Someone coming back to finish setup has already answered the first question: start where they left off.
+  // Someone coming back has already answered the first question: start where they left off.
   useEffect(() => {
     if (account && !positioned.current) { positioned.current = true; setStep(account.onboarding.segmentChosen ? 2 : 1); }
   }, [account]);
 
   async function chooseSegment(k: CustomerSegment) {
     setSavingSeg(true);
-    try { await api('/auth/me', { method: 'PATCH', body: { segment: k } }); await mutate(); }
+    try { await api('/auth/me', { method: 'PATCH', body: { segment: k } }); await mutate(); setStep(2); }
     catch (err) { toast.error(errorMessage(err, t)); }
     finally { setSavingSeg(false); }
   }
 
   async function finish() {
-    try { await api('/auth/me', { method: 'PATCH', body: { onboardingDone: true } }); await mutate(); router.push('/dashboard'); }
-    catch (err) { toast.error(errorMessage(err, t)); }
+    setFinishing(true);
+    try {
+      await api('/auth/me', { method: 'PATCH', body: { onboardingDone: true } });
+      await mutate();
+      router.push(wantedPlan ? `/billing?plan=${encodeURIComponent(wantedPlan)}&interval=${params.get('interval') ?? 'monthly'}` : '/dashboard');
+    } catch (err) { toast.error(errorMessage(err, t)); setFinishing(false); }
   }
 
   return (
     <div className="mx-auto max-w-3xl">
       <h1 className="text-[clamp(28px,3.4vw,42px)] font-extrabold tracking-[-0.03em]">{t('ob.title')}</h1>
       <p className="mb-7 mt-1 text-muted-foreground">{t('ob.sub')}</p>
-      <ol className="mb-8 grid grid-cols-5 gap-2" aria-label={t('ob.title')}>
+      <ol className="mb-8 grid grid-cols-2 gap-2" aria-label={t('ob.title')}>
         {labels.map((l, i) => (
           <li key={l}>
             <button type="button" disabled={i > 0 && !segmentChosen} onClick={() => setStep(i + 1)} aria-current={step === i + 1 ? 'step' : undefined} className={cn('flex w-full flex-col gap-1.5 rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50', step === i + 1 ? 'border-ink bg-ink text-white' : 'border-line bg-white hover:bg-canvas')}>
               <span className={cn('flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold', done[i] ? 'bg-brand text-ink' : step === i + 1 ? 'bg-white/20' : 'bg-muted')}>{done[i] ? <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden /> : i + 1}</span>
-              <span className="text-xs font-semibold leading-tight sm:text-sm">{l}</span>
+              <span className="text-sm font-semibold leading-tight">{l}</span>
             </button>
           </li>
         ))}
@@ -95,34 +94,26 @@ function Wizard() {
             {segmentChosen && <p role="status" className="mt-4 text-sm text-muted-foreground">{t('ob.segSaved')}</p>}
           </>
         )}
-        {step === 2 && (<><h2 className="mb-1 text-2xl font-bold">{t('ob.s1')}</h2><p className="mb-5 text-muted-foreground">{t('ob.s1Text')}</p><WhatsAppConnect compact onConnected={() => void mutate()} /></>)}
-        {step === 3 && (
+        {step === 2 && (
           <>
-            <h2 className="mb-1 text-2xl font-bold">{t('ob.s2')}</h2><p className="mb-5 text-muted-foreground">{t('ob.s2Text')}</p>
-            <p className="mb-4 rounded-xl bg-mint/50 p-3 text-sm font-semibold">{t('c.total', { n: contacts?.total ?? 0 })}</p>
-            <div className="flex flex-wrap gap-3"><Button onClick={() => setImportOpen(true)}><Upload className="h-4 w-4" aria-hidden />{t('c.import')}</Button><Button variant="outline" onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" aria-hidden />{t('c.add')}</Button></div>
-            <AddContactDialog open={addOpen} onOpenChange={setAddOpen} onDone={() => void refreshContacts().then(() => mutate())} />
-            <ImportDialog open={importOpen} onOpenChange={setImportOpen} onDone={() => void refreshContacts().then(() => mutate())} />
+            <h2 className="mb-1 text-2xl font-bold">{t('ob.s1')}</h2>
+            <p className="mb-5 text-muted-foreground">{t('ob.s1Text')}</p>
+            <WhatsAppConnect compact onConnected={() => void mutate()} />
+            {connected && (
+              <p role="status" data-testid="ob-connected" className="mt-5 flex items-start gap-3 rounded-xl bg-mint/50 p-4 text-sm">
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-leaf" aria-hidden />
+                <span><b>{t('ob.connectedTitle')}.</b> {t('ob.connectedText')}</span>
+              </p>
+            )}
+            {!connected && <p className="mt-5 text-sm text-muted-foreground">{t('ob.pending')}</p>}
           </>
         )}
-        {step === 4 && (<><h2 className="mb-1 text-2xl font-bold">{t('ob.s3')}</h2><p className="mb-5 text-muted-foreground">{t('ob.s3Text')}</p><Link href="/surveys/new" className={buttonVariants({})}>{ob?.hasSurvey ? t('ob.newAnother') : t('ob.pickTemplate')}</Link></>)}
-        {step === 5 && (
-          <>
-            <h2 className="mb-1 text-2xl font-bold">{t('ob.s4')}</h2><p className="mb-5 text-muted-foreground">{t('ob.s4Text')}</p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {PAID_PLAN_KEYS.map((k) => (
-                <Link key={k} href={`/billing?plan=${k}&interval=${params.get('interval') ?? 'monthly'}`} className={cn('flex flex-col gap-1 rounded-2xl border-2 p-4 no-underline', wanted === k ? 'border-brand bg-mint/40' : 'border-line hover:bg-canvas')}>
-                  <span className="font-display text-xl font-bold text-ink">{t(`plan.${k}`)}</span>
-                  <span className="text-sm text-body">{sub ? formatPrice(sub.prices[k].monthly, sub.currency as Currency, locale) : '…'} / {t('bill.month')}</span>
-                </Link>
-              ))}
-            </div>
-            <p className="mt-4 text-sm text-muted-foreground">{t('ob.trialNote')}</p>
-          </>
-        )}
-        <div className="mt-8 flex items-center justify-between border-t border-line pt-5">
-          <Button variant="ghost" disabled={step === 1} onClick={() => setStep(step - 1)}>{t('common.back')}</Button>
-          {step < 5 ? <Button disabled={step === 1 && !segmentChosen} onClick={() => setStep(step + 1)}>{step === 1 || done[step - 1] ? t('common.next') : t('common.skip')}</Button> : <Button variant="brand" disabled={!segmentChosen} onClick={finish}>{t('ob.finish')}</Button>}
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">
+          <Button variant="ghost" disabled={step === 1} onClick={() => setStep(1)}>{t('common.back')}</Button>
+          <div className="flex flex-wrap items-center gap-3">
+            {step === 2 && !connected && <Link href="/dashboard" className="text-sm font-semibold text-muted-foreground underline">{t('ob.later')}</Link>}
+            {step === 1 ? <Button disabled={!segmentChosen} onClick={() => setStep(2)}>{t('common.next')}</Button> : <Button variant="brand" disabled={!segmentChosen || !connected} loading={finishing} onClick={finish}>{t('ob.finish')}</Button>}
+          </div>
         </div>
       </Card>
     </div>

@@ -8,6 +8,7 @@ import { redis, withLock } from '../../lib/redis';
 import { billingQuote, methodsFor, walletCurrency, walletQuote } from '../billing-currency';
 import { fixedFeeConverter } from '../fx';
 import { breakerFail, breakerOk, breakerOpen } from './breaker';
+import { track } from '../funnel';
 import { pspRouter, type PSPRouter } from './router';
 import { PLAN_RANK, settleTransaction, type SettleLog, type SettleOutcome } from './settlement';
 import { PspError, type PSPAdapter } from './types';
@@ -167,6 +168,7 @@ export async function initiatePayment(userId: string, input: InitiateInput, rout
     },
   );
   if (!fresh) return awaitDispatch(tx);
+  await track(userId, 'checkout_start', { plan: input.plan, interval: input.interval, method: input.method });
   return dispatchCheckout(tx, chain, user, `SurveyFlow ${PLANS[input.plan].key} (${input.interval})`, phone);
 }
 

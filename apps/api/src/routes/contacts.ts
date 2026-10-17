@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { assertWhatsAppConnected } from '../services/whatsapp/require';
 import type { Prisma } from '@prisma/client';
 import { parse } from 'csv-parse/sync';
 import { z } from 'zod';
@@ -60,6 +61,7 @@ export default async function contactRoutes(app: FastifyInstance) {
   });
 
   app.post('/api/contacts', auth, async (req, reply) => {
+    await assertWhatsAppConnected(req.userId);
     const body = createSchema.parse(req.body);
     const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId }, select: { country: true } });
     const phone = normalizePhone(body.phone, COUNTRY_CONFIG[user.country] ? user.country : DEFAULT_COUNTRY);
@@ -110,6 +112,7 @@ export default async function contactRoutes(app: FastifyInstance) {
    * messages (WhatsApp Business Policy) — stored with a timestamp as proof.
    */
   app.post('/api/contacts/import', auth, async (req) => {
+    await assertWhatsAppConnected(req.userId);
     const file = await req.file();
     if (!file) throw badRequest('no_file', 'Upload a CSV file');
     const fields = file.fields as Record<string, { value?: string } | undefined>;

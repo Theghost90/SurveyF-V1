@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { AlertTriangle, Lock, Plus, Wallet } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { useWhatsAppGate } from '@/components/whatsapp-gate';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,6 +20,7 @@ export function WalletCard({ canUse, phone }: { canUse: boolean; phone: string }
   const t = useT();
   const locale = useLocale();
   const { wallet } = useWallet();
+  const gate = useWhatsAppGate();
   const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
 
@@ -29,7 +31,7 @@ export function WalletCard({ canUse, phone }: { canUse: boolean; phone: string }
           <CardTitle className="flex items-center gap-2"><Wallet className="h-5 w-5 text-leaf" aria-hidden />{t('w.title')}</CardTitle>
           <CardDescription className="max-w-2xl">{t('w.sub')}</CardDescription>
         </div>
-        {canUse && wallet && <Button variant="brand" disabled={wallet.fxUnavailable} onClick={() => setOpen(true)}><Plus className="h-4 w-4" aria-hidden />{t('w.topup')}</Button>}
+        {canUse && wallet && <Button variant="brand" disabled={wallet.fxUnavailable} onClick={() => gate.require() && setOpen(true)}><Plus className="h-4 w-4" aria-hidden />{t('w.topup')}</Button>}
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         {!wallet ? <Skeleton className="h-24" /> : (

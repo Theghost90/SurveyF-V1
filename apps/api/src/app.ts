@@ -16,6 +16,7 @@ import authRoutes from './routes/auth';
 import surveyRoutes from './routes/surveys';
 import contactRoutes from './routes/contacts';
 import analyticsRoutes from './routes/analytics';
+import analyticsBotRoutes from './routes/analytics-bot';
 import exportRoutes from './routes/exports';
 import webhookRoutes from './routes/webhook-whatsapp';
 import whatsappRoutes from './routes/whatsapp';
@@ -108,6 +109,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(surveyRoutes);
   await app.register(contactRoutes);
   await app.register(analyticsRoutes);
+  await app.register(analyticsBotRoutes);
   await app.register(exportRoutes);
   await app.register(webhookRoutes);
   await app.register(whatsappRoutes);

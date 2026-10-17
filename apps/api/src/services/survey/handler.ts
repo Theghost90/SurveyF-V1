@@ -7,6 +7,7 @@ import { planGift, thankYouText } from '../gifts';
 import { sendInConversation, applyDeliveryStatus } from '../whatsapp/sender';
 import { step, type Inbound, type RuntimeSurvey, type SessionState } from './engine';
 import { deleteSession, getSession, saveSession } from './sessions';
+import { handleOwnerMessage, isPlatformNumber } from '../analytics-bot';
 
 /** Subset of Meta's webhook message object that we read. */
 export interface WaInboundMessage {
@@ -127,6 +128,8 @@ async function findRecipient(where: Prisma.SurveyRecipientWhereInput, orderBy?: 
 }
 
 async function turn(phoneNumberId: string, msg: WaInboundMessage, log: Logger) {
+  // Messages to SurveyFlow's OWN number come from owners asking the Analytics Bot, never from survey participants.
+  if (isPlatformNumber(phoneNumberId)) return handleOwnerMessage(msg, log);
   const account = await prisma.whatsAppAccount.findUnique({ where: { phoneNumberId }, include: { user: { select: { locale: true } } } });
   if (!account) {
     log.warn({ phoneNumberId }, 'webhook for unknown phone_number_id');

@@ -1,4 +1,4 @@
-import { maskPhone } from '@surveyflow/shared';
+import { dropSuggestion, maskPhone } from '@surveyflow/shared';
 import { prisma } from '../lib/prisma';
 import { notFound } from '../lib/errors';
 import { manualReminderState } from './reminders';
@@ -14,6 +14,10 @@ import { manualReminderState } from './reminders';
  *     participants who tapped "Not now" as non-responders).
  *  3. Percentages of a question's answers are relative to the answers to THAT question
  *     (the spec's mockup percentages do not add up).
+ *  4. A contact who replied STOP is never "no reply": they are counted apart (`optedOut`) and left out of every list, so the owner
+ *     is not shown (or reminded about) someone who asked not to be contacted. Every row adds up:
+ *       started = completed + in progress + abandoned      sent = started + no reply + declined + opted out
+ *  5. The advice at the worst drop-off question follows one rule (shared/dropSuggestion), here and in the Analytics Bot.
  */
 
 const SENT = ['sent', 'delivered', 'started', 'completed', 'abandoned', 'declined'] as const;
@@ -54,7 +58,9 @@ export async function computeAnalytics(surveyId: string, userId: string) {
   const totalCompleted = byStatus.completed ?? 0;
   const totalAbandoned = byStatus.abandoned ?? 0;
   const totalDeclined = byStatus.declined ?? 0;
-  const noReply = (byStatus.sent ?? 0) + (byStatus.delivered ?? 0);
+  const waiting = (byStatus.sent ?? 0) + (byStatus.delivered ?? 0);
+  const optedOut = waiting === 0 ? 0 : await prisma.surveyRecipient.count({ where: { surveyId, status: { in: ['sent', 'delivered'] }, contact: { optedOutAt: { not: null } } } });
+  const noReply = waiting - optedOut;
   const inProgress = byStatus.started ?? 0;
 
   // ---- per question -------------------------------------------------------------------------
@@ -123,12 +129,12 @@ export async function computeAnalytics(surveyId: string, userId: string) {
     worst && worst.abandonedHere > 0
       ? {
           questionNumber: worst.number, questionText: worst.text, count: worst.abandonedHere,
-          suggestion: worst.type === 'text' ? 'make_optional' : worst.optionCount > 6 ? 'simplify_options' : worst.required ? 'make_optional' : 'shorten',
+          suggestion: dropSuggestion(worst),
         }
       : null;
 
   const nonStarters = await prisma.surveyRecipient.findMany({
-    where: { surveyId, status: { in: ['sent', 'delivered'] } },
+    where: { surveyId, status: { in: ['sent', 'delivered'] }, contact: { optedOutAt: null } },
     include: { contact: { select: { name: true, phone: true } } },
     orderBy: { sentAt: 'desc' }, take: 50,
   });
@@ -147,7 +153,7 @@ export async function computeAnalytics(surveyId: string, userId: string) {
     survey: { id: survey.id, title: survey.title, status: survey.status, giftType: survey.giftType, language: survey.language },
     totals: {
       sent: totalSent, started: totalStarted, completed: totalCompleted, abandoned: totalAbandoned, declined: totalDeclined,
-      noReply, inProgress, failed: byStatus.failed ?? 0, queued: byStatus.queued ?? 0,
+      noReply, optedOut, inProgress, failed: byStatus.failed ?? 0, queued: byStatus.queued ?? 0,
       completionRate: pct(totalCompleted, totalStarted), // spec: completed / started × 100
       responseRate: pct(totalStarted, totalSent),
       avgCompletionSeconds: avgRow[0]?.avg ? Math.round(avgRow[0].avg) : null,
@@ -205,4 +211,43 @@ export function displayAnswer(type: string, answer: string | undefined): string 
     try { return (JSON.parse(answer) as string[]).join(', '); } catch { return answer; }
   }
   return answer;
+}
+
+
+// ---- who is in each group (the Analytics Bot's lists and the SaaS "haven't started" list) -------------------------------------------
+
+export type RecipientListKind = 'nonresp' | 'started' | 'completed';
+export interface RecipientListRow { recipientId: string; name: string; phone: string; status: string; sentAt: Date | null; completedAt: Date | null; /** started/abandoned: the question they are at or stopped at */ atQuestion: number | null }
+
+/**
+ * The people behind a number on the card, newest first. `nonresp` = invited, never replied, not opted out (the same people as the
+ * dashboard's "No reply"); `started` = started but not finished; `completed` = finished. Opted-out contacts are never listed.
+ * Phones are returned in full: whoever shows them to a participant-facing channel (WhatsApp) must mask them (maskPhone).
+ */
+export async function listRecipientsByKind(surveyId: string, userId: string, kind: RecipientListKind, opts: { skip?: number; take?: number } = {}) {
+  const survey = await prisma.survey.findFirst({ where: { id: surveyId, userId }, include: { questions: { select: { id: true } } } });
+  if (!survey) throw notFound('Survey');
+  const where = {
+    surveyId,
+    ...(kind === 'nonresp' ? { status: { in: ['sent', 'delivered'] as never[] }, contact: { optedOutAt: null } }
+      : kind === 'started' ? { status: { in: ['started', 'abandoned'] as never[] } }
+      : { status: 'completed' as never }),
+  };
+  const orderBy = kind === 'nonresp' ? [{ sentAt: { sort: 'desc' as const, nulls: 'last' as const } }, { createdAt: 'desc' as const }]
+    : kind === 'started' ? [{ startedAt: { sort: 'desc' as const, nulls: 'last' as const } }]
+    : [{ completedAt: { sort: 'desc' as const, nulls: 'last' as const } }];
+  const [total, recipients] = await Promise.all([
+    prisma.surveyRecipient.count({ where }),
+    prisma.surveyRecipient.findMany({ where, include: { contact: { select: { name: true, phone: true } } }, orderBy, skip: opts.skip, take: opts.take }),
+  ]);
+  let answered = new Map<string, number>();
+  if (kind === 'started' && recipients.length) {
+    const counts = await prisma.response.groupBy({ by: ['contactId'], where: { surveyId, contactId: { in: recipients.map((r) => r.contactId) } }, _count: { _all: true } });
+    answered = new Map(counts.map((c) => [c.contactId, c._count._all]));
+  }
+  const rows: RecipientListRow[] = recipients.map((r) => ({
+    recipientId: r.id, name: r.contact.name, phone: r.contact.phone, status: r.status, sentAt: r.sentAt, completedAt: r.completedAt,
+    atQuestion: kind !== 'started' ? null : r.status === 'abandoned' ? r.abandonedAtQuestion : Math.min(survey.questions.length, (answered.get(r.contactId) ?? 0) + 1),
+  }));
+  return { survey, total, rows };
 }

@@ -48,7 +48,7 @@ describe('payment flow (mock PSP through the real settle path)', () => {
 
     const sub = await o.get('/api/subscription');
     expect(sub.invoices).toHaveLength(1);
-    expect(sub.prices.growth).toMatchObject({ monthly: 39000, annual: 390000, currency: 'XAF' });
+    expect(sub.prices.growth).toMatchObject({ monthly: 39000, annual: 429000, currency: 'XAF' });
   });
 
   it('a declined payment leaves the plan untouched', async () => {
@@ -58,10 +58,10 @@ describe('payment flow (mock PSP through the real settle path)', () => {
     expect((await o.get('/api/auth/me')).plan.key).toBe('trial');
   });
 
-  it('annual billing charges 10 months ("2 months free") and runs 12 months', async () => {
+  it('annual billing charges 11 months ("1 month free") and runs 12 months', async () => {
     const o = await registerOwner(app);
     const init = await o.post('/api/payments/initiate', { ...momo, plan: 'starter', interval: 'annual' });
-    expect(init.amount).toBe(145000); // 10 × 14,500
+    expect(init.amount).toBe(159500); // 11 × 14,500
     await o.post(`/api/payments/mock/${init.reference}`, { outcome: 'success' });
     const s = (await o.get('/api/auth/me')).subscription;
     const months = (new Date(s.currentPeriodEnd).getTime() - new Date(s.currentPeriodStart).getTime()) / 86_400_000;
@@ -217,14 +217,27 @@ describe('PSP failover', () => {
 });
 
 describe('subscription lifecycle', () => {
-  it('trial ending unpaid downgrades to Starter limits (spec) with no charge', async () => {
+  it('Explore has no clock: nothing expires, and no trial ever turns into a free Starter', async () => {
     const o = await registerOwner(app);
-    await prisma.subscription.update({ where: { userId: o.userId }, data: { currentPeriodEnd: new Date(Date.now() - 1000) } });
-    expect((await runBillingLifecycle()).trialsExpired).toBe(1);
+    const sub = await prisma.subscription.findUniqueOrThrow({ where: { userId: o.userId } });
+    expect(sub.currentPeriodEnd.getTime() - Date.now()).toBeGreaterThan(50 * 365 * 86_400_000);
+    await prisma.subscription.update({ where: { userId: o.userId }, data: { currentPeriodStart: new Date(Date.now() - 400 * 86_400_000) } });
+    expect(await runBillingLifecycle()).toEqual({ pastDue: 0, suspended: 0, cancelled: 0 });
     const me = await o.get('/api/auth/me');
-    expect(me.plan.key).toBe('starter');
-    expect(me.subscription).toMatchObject({ status: 'active', amountFCFA: 0 });
-    expect(me.plan.limits.activeSurveys).toBe(3);
+    expect(me.plan.key).toBe('trial');
+    expect(me.plan.limits).toMatchObject({ activeSurveys: 1, recipients: 5 });
+    expect(me.subscription).toMatchObject({ status: 'trial', amountFCFA: 0 });
+  });
+
+  it('a paid plan that is cancelled and ends goes back to Explore, never to a free Starter; its data stays', async () => {
+    const o = await registerOwner(app, { plan: 'growth' });
+    const s = await o.post('/api/surveys', { title: 'Keep me', questions: [{ text: 'q', type: 'text', required: true }] });
+    await prisma.subscription.update({ where: { userId: o.userId }, data: { cancelAtPeriodEnd: true, currentPeriodEnd: new Date(Date.now() - 1000) } });
+    expect((await runBillingLifecycle()).cancelled).toBe(1);
+    const me = await o.get('/api/auth/me');
+    expect(me.plan.key).toBe('trial');
+    expect(me.subscription).toMatchObject({ status: 'trial', amountFCFA: 0, cancelAtPeriodEnd: false });
+    expect((await o.get(`/api/surveys/${s.id}`)).title).toBe('Keep me');
   });
 
   it('paid plan: active → past_due (3-day grace, full access) → suspended (read-only, 402 on publish)', async () => {
@@ -262,12 +275,12 @@ describe('subscription lifecycle', () => {
     expect(sub.currentPeriodEnd.getTime()).toBeGreaterThan(Date.now() + 27 * 86_400_000);
   });
 
-  it('cancel-at-period-end downgrades instead of renewing', async () => {
+  it('cancel-at-period-end returns to Explore instead of renewing', async () => {
     const o = await registerOwner(app);
     await setPlan(o.userId, 'business');
     await o.post('/api/subscription/cancel');
     await prisma.subscription.update({ where: { userId: o.userId }, data: { currentPeriodEnd: new Date(Date.now() - 1000) } });
     expect((await runBillingLifecycle()).cancelled).toBe(1);
-    expect((await o.get('/api/auth/me')).plan.key).toBe('starter');
+    expect((await o.get('/api/auth/me')).plan.key).toBe('trial');
   });
 });

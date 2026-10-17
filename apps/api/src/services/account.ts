@@ -1,6 +1,6 @@
 import { billingQuote } from './billing-currency';
 import type { Subscription, User } from '@prisma/client';
-import { OVERAGE, PLANS, TRIAL_DAYS, convertFromXAF, responseOverageFCFA } from '@surveyflow/shared';
+import { PLANS, convertFromXAF, responseOverageFCFA } from '@surveyflow/shared';
 import { prisma } from '../lib/prisma';
 import { loadAccount } from './subscription/limits';
 
@@ -50,6 +50,8 @@ export async function accountSummary(userId: string) {
   ]);
   const { plan, usage } = ctx;
   const { quote } = await billingQuote(ctx.user);
+  // Responses beyond a plan are billed as overage only on a PAID plan: Explore (or a lapsed plan) has nothing to bill.
+  const overageFCFA = ctx.subscription.amountFCFA > 0 ? responseOverageFCFA(plan.key, usage.responses) : 0;
   return {
     user: userDto(ctx.user),
     subscription: subscriptionDto(ctx.subscription),
@@ -58,11 +60,13 @@ export async function accountSummary(userId: string) {
       activeSurveys: usage.activeSurveys,
       responses: usage.responses,
       messages: usage.messages,
+      /** Different people ever invited (counted for Explore only). */
+      recipients: usage.recipients,
       periodStart: usage.periodStart,
       periodEnd: usage.periodEnd,
-      responseOverageFCFA: responseOverageFCFA(plan.key, usage.responses),
+      responseOverageFCFA: overageFCFA,
       /** The same overage in the owner's billing currency (live rate). `overageCurrency` says which. */
-      responseOverage: convertFromXAF(responseOverageFCFA(plan.key, usage.responses), quote),
+      responseOverage: convertFromXAF(overageFCFA, quote),
       overageCurrency: quote.currency,
     },
     onboarding: {
@@ -73,7 +77,6 @@ export async function accountSummary(userId: string) {
       segmentChosen: !!ctx.user.segment,
       done: !!ctx.user.onboardingDoneAt,
     },
-    trialDays: TRIAL_DAYS,
     plans: PLANS,
   };
 }

@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { Check } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { PAID_PLAN_KEYS, PLANS, currencyLabel, formatFCFA, isCfa, recommendPlan, type PaidPlanKey } from '@surveyflow/shared';
 import type { PricingData } from '@/lib/pricing';
 import { useLocale, useT } from '@/lib/i18n/client';
@@ -100,7 +100,18 @@ export function PricingClient({ pricing, initial = 1200 }: { pricing: PricingDat
       </section>
 
       <section aria-label={t('pricing.plans')} className="mx-auto max-w-[1344px] px-5 pb-8 sm:px-8">
-        <div className="grid items-stretch gap-5 [grid-template-columns:repeat(auto-fit,minmax(300px,1fr))]">
+        <div className="grid items-stretch gap-5 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
+          <div className="flex flex-col gap-[18px] rounded-3xl border-2 border-dashed border-mint-2 bg-mint/40 p-7 text-ink" data-testid="explore-card">
+            <div className="flex min-h-[30px] items-center justify-between"><h3 className="font-display text-[26px] font-bold">{t('plan.trial')}</h3></div>
+            <p className="text-[15px] leading-[1.45] text-body">{t('pricing.exploreWho')}</p>
+            <div className="flex flex-col"><span className="font-display text-[44px] font-extrabold leading-none tracking-[-0.03em]">{t('pricing.exploreFree')}</span><span className="mt-1.5 text-[15px] text-body">{t('pricing.exploreNote')}</span></div>
+            <Link href="/register" className="rounded-xl bg-ink px-[18px] py-[15px] text-center text-base font-bold text-white no-underline hover:bg-ink-2">{t('pricing.exploreCta')}</Link>
+            <ul className="flex list-none flex-col gap-2.5 p-0 text-[15px]">
+              {(['pricing.exploreF1', 'pricing.exploreF2', 'pricing.exploreF3', 'pricing.exploreF4'] as const).map((k) => (
+                <li key={k} className="flex items-start gap-2.5"><Check className="mt-0.5 h-[18px] w-[18px] shrink-0 text-leaf" strokeWidth={2.6} aria-hidden /><span>{t(k)}</span></li>
+              ))}
+            </ul>
+          </div>
           {PAID_PLAN_KEYS.map((key) => {
             const plan = PLANS[key];
             const active = key === fit;
@@ -119,11 +130,12 @@ export function PricingClient({ pricing, initial = 1200 }: { pricing: PricingDat
                   <span className="font-display text-[44px] font-extrabold tracking-[-0.03em]">{formatFCFA(price, locale)}</span>
                   <span className={cn('text-[15px]', active ? 'text-[#B5C9BD]' : 'text-muted-foreground')}>{annual ? t('pricing.perYear', { currency: label }) : t('pricing.perMonth', { currency: label })}</span>
                 </div>
+                {!annual && <p className={cn('-mt-3 text-[13px]', active ? 'text-[#B5C9BD]' : 'text-muted-foreground')}>{t('pricing.orYear', { price: `${formatFCFA(pricing.plans[key].annual, locale)} ${label}` })}</p>}
                 <Link
                   href={`/register?plan=${key}${annual ? '&interval=annual' : ''}`}
                   className={cn('rounded-xl px-[18px] py-[15px] text-center text-base font-bold no-underline', active ? 'bg-brand text-ink hover:bg-brand-2' : 'border border-line-2 bg-canvas text-ink hover:bg-mint/60')}
                 >
-                  {t('pricing.cta')}
+                  {t('pricing.activate', { plan: t(`plan.${key}`) })}
                 </Link>
                 <ul className="flex list-none flex-col gap-2.5 p-0 text-[15px]">
                   {planFeatures(key, t, locale).map((f) => (
@@ -139,6 +151,26 @@ export function PricingClient({ pricing, initial = 1200 }: { pricing: PricingDat
         </div>
         <p className="mt-4 text-center text-[13px] text-muted-foreground">{t('pricing.overage', { amount: `${new Intl.NumberFormat(locale === 'fr' ? 'fr-FR' : 'en-US', { maximumFractionDigits: pricing.overagePer100 < 10 ? 2 : 0 }).format(pricing.overagePer100)} ${label}` })}</p>
         <RateNote pricing={pricing} />
+      </section>
+
+      <section aria-label={t('pricing.t1')} className="mx-auto max-w-[1344px] px-5 pb-8 sm:px-8">
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
+          {([['pricing.t1', 'pricing.t1b'], ['pricing.t2', 'pricing.t2b'], ['pricing.t3', 'pricing.t3b']] as const).map(([h, b]) => (
+            <div key={h} className="rounded-2xl border border-line-3 bg-white p-5"><p className="font-display text-lg font-bold">{t(h)}</p><p className="mt-1 text-[15px] leading-relaxed text-body">{t(b)}</p></div>
+          ))}
+        </div>
+      </section>
+
+      <section aria-label={t('faq.title')} className="mx-auto max-w-[900px] px-5 pb-14 sm:px-8">
+        <h2 className="mb-4 text-center text-[clamp(26px,3vw,36px)] font-extrabold tracking-[-0.02em]">{t('faq.title')}</h2>
+        <div className="flex flex-col gap-3">
+          {([['faq.q1', 'faq.a1'], ['faq.q2', 'faq.a2'], ['faq.q3', 'faq.a3'], ['faq.q4', 'faq.a4']] as const).map(([q, a]) => (
+            <details key={q} className="group rounded-2xl border border-line-3 bg-white px-5 py-4 open:shadow-card">
+              <summary className="flex min-h-[32px] cursor-pointer list-none items-center justify-between gap-4 text-[17px] font-semibold [&::-webkit-details-marker]:hidden">{t(q)}<ChevronDown className="h-5 w-5 shrink-0 transition-transform group-open:rotate-180" aria-hidden /></summary>
+              <p className="mt-3 text-[16px] leading-relaxed text-body">{t(a)}</p>
+            </details>
+          ))}
+        </div>
       </section>
     </>
   );

@@ -4,8 +4,8 @@ import { useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { AlertTriangle, CalendarClock, Send } from 'lucide-react';
 import { toast } from 'sonner';
-import { TEMPLATE_NAMES } from '@surveyflow/shared';
-import { Button } from '@/components/ui/button';
+import { PAID_PLAN_KEYS, PLANS, TEMPLATE_NAMES } from '@surveyflow/shared';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -47,9 +47,13 @@ export function SendPanel({ surveyId, status, language, onPublish, publishing, d
   const selection = useMemo(() => (mode === 'all' ? { all: true } : mode === 'select' ? { contactIds: [...selected] } : { tags: [...tags] }), [mode, selected, tags]);
   const empty = mode === 'select' ? selected.size === 0 : mode === 'tags' ? tags.size === 0 : false;
   // Exact count from the server: it knows who is already invited, opted out, or without consent.
-  const { data: audience } = useSWR<{ eligible: number; messagesRemaining: number; gift?: GiftReadiness | null }>(status === 'active' && !empty ? [`/surveys/${surveyId}/audience`, JSON.stringify(selection), result?.queued ?? 0] : null, ([url]: [string]) => api(url, { body: selection }));
+  const { data: audience } = useSWR<{ eligible: number; messagesRemaining: number; recipientsRemaining: number | null; newPeople: number; gift?: GiftReadiness | null }>(status === 'active' && !empty ? [`/surveys/${surveyId}/audience`, JSON.stringify(selection), result?.queued ?? 0] : null, ([url]: [string]) => api(url, { body: selection }));
   const remaining = audience?.messagesRemaining ?? (account ? Math.max(0, account.plan.limits.messagesPerMonth - account.usage.messages) : null);
   const target = empty ? 0 : (audience?.eligible ?? 0);
+  // Explore reaches a fixed number of different people. When this audience has more new people than are left, the button becomes the plan.
+  const capLeft = audience?.recipientsRemaining ?? null;
+  const overCap = capLeft !== null && !!audience && audience.newPeople > capLeft;
+  const suggested = PAID_PLAN_KEYS.find((k) => PLANS[k].limits.messagesPerMonth >= Math.max(target, 1)) ?? 'business';
 
   async function send() {
     setBusy(true);
@@ -59,7 +63,8 @@ export function SendPanel({ surveyId, status, language, onPublish, publishing, d
       toast.success(t('b.send.queued', { n: res.queued }));
       void refreshAccount();
     } catch (err) {
-      if (err instanceof ApiError && err.code === 'plan_limit') toast.error(t('b.send.overQuota', { requested: err.details?.requested ?? '', remaining: err.details?.remaining ?? 0 }));
+      if (err instanceof ApiError && err.code === 'plan_limit' && err.details?.limit === 'recipients') toast.error(t('b.send.exploreLimit', { max: err.details.max ?? '', left: err.details.remaining ?? 0, n: err.details.requested ?? '' }));
+      else if (err instanceof ApiError && err.code === 'plan_limit') toast.error(t('b.send.overQuota', { requested: err.details?.requested ?? '', remaining: err.details?.remaining ?? 0 }));
       else toast.error(errorMessage(err, t));
     } finally {
       setBusy(false);
@@ -132,10 +137,19 @@ export function SendPanel({ surveyId, status, language, onPublish, publishing, d
               <p className="text-sm text-muted-foreground">
                 {target === 0 && !empty && audience ? t('b.send.nobody') : remaining !== null && t('b.send.quota', { n: target, remaining: num(remaining, locale) })}
               </p>
-              <Button size="lg" onClick={send} loading={busy} disabled={!!waProblem || dirty || target === 0 || (schedule && !when)} className="h-12">
-                <Send className="h-4 w-4" aria-hidden />{t('b.send.cta')}
-              </Button>
+              {overCap ? (
+                <Link href={`/billing?plan=${suggested}`} data-testid="send-activate" className={buttonVariants({ variant: 'brand', size: 'lg', className: 'h-12' })}>{t('b.send.exploreCta')}</Link>
+              ) : (
+                <Button size="lg" onClick={send} loading={busy} disabled={!!waProblem || dirty || target === 0 || (schedule && !when)} className="h-12">
+                  <Send className="h-4 w-4" aria-hidden />{t('b.send.cta')}
+                </Button>
+              )}
             </div>
+            {capLeft !== null && account && (
+              <p role={overCap ? 'alert' : undefined} data-testid="send-explore" className={cn('rounded-xl px-4 py-3 text-sm', overCap ? 'bg-amber-soft text-amber-ink' : 'bg-canvas text-body')}>
+                {overCap && audience ? t('b.send.exploreLimit', { max: account.plan.limits.recipients ?? 0, left: capLeft, n: audience.newPeople }) : t('b.send.exploreInfo', { left: capLeft, max: account.plan.limits.recipients ?? 0 })}
+              </p>
+            )}
             {audience?.gift && target > 0 && (
               <p role={audience.gift.sufficient ? undefined : 'alert'} className={cn('rounded-xl px-4 py-3 text-sm', audience.gift.sufficient ? 'bg-canvas text-body' : 'bg-amber-soft text-amber-ink')}>
                 {audience.gift.empty ? t('w.send.giftEmpty') : audience.gift.sufficient

@@ -6,7 +6,7 @@ import { redis } from '../src/lib/redis';
 import { GiftError, setGiftProvider, type GiftProvider } from '../src/services/gifts/providers';
 import { processDueGifts } from '../src/services/gifts';
 import { buildReceiptHtml, loadReceipt } from '../src/services/receipts';
-import { buildWorld, client, makeApp, resetAll, say, setPlan, answerIdFor, replyMsg, templateBtn, textMsg, type World } from './helpers';
+import { buildWorld, client, makeApp, resetAll, say, setPlan, answerIdFor, replyMsg, templateBtn, textMsg, type World, connectMockWhatsApp } from './helpers';
 
 let app: FastifyInstance;
 beforeAll(async () => { app = await makeApp(); });
@@ -25,6 +25,7 @@ async function registerFrom(country: string, plan?: 'growth') {
     payload: JSON.stringify({ businessName: 'Lagos Shop', name: 'Ngozi', email: `mc${Math.random().toString(36).slice(2)}@example.com`, phone: ({ NG: '0803 123 4567', KE: '0712 345 678', CM: '677 12 34 56' } as Record<string, string>)[country]!, password: 'correct-horse-battery' }),
   });
   const body = JSON.parse(res.body);
+  await connectMockWhatsApp(body.user.id);
   if (plan) await setPlan(body.user.id, plan);
   return client(app, body.token, body.user.id);
 }
@@ -43,11 +44,11 @@ describe('a plan paid in the owner\'s currency', () => {
     expect((await c.get('/api/auth/me')).subscription).toMatchObject({ status: 'active', plan: 'starter', amountFCFA: 14_500 }); // canonical FCFA, not the naira figure
   });
 
-  it('annual is ten months converted once', async () => {
+  it('annual is eleven months converted once', async () => {
     fxUp();
     const c = await registerFrom('NG');
     const init = await c.post('/api/payments/initiate', { plan: 'growth', interval: 'annual', method: 'card' });
-    expect(init.body).toMatchObject({ currency: 'NGN', amount: 936_000 }); // 390,000 FCFA × 2.4
+    expect(init.body).toMatchObject({ currency: 'NGN', amount: 1_030_000 }); // 429,000 FCFA (11 months) × 2.4
   });
 
   it('Mobile Money does not exist in naira: refused, with the reason', async () => {
@@ -94,7 +95,7 @@ describe('the euro: chargeable at the CFA franc\'s fixed peg, no live rate invol
     const c = await euroOwner();
     const sub = await c.get('/api/subscription');
     expect(sub).toMatchObject({ currency: 'EUR', requestedCurrency: 'EUR', fallback: false, quote: { source: 'peg' }, methods: ['card'] });
-    expect(sub.prices).toMatchObject({ starter: { monthly: 22, annual: 221, currency: 'EUR' }, growth: { monthly: 59 }, business: { monthly: 145 } }); // 14,500 / 655.957 = 22.1 …
+    expect(sub.prices).toMatchObject({ starter: { monthly: 22, annual: 243, currency: 'EUR' }, growth: { monthly: 59 }, business: { monthly: 145 } }); // 14,500 / 655.957 = 22.1 …
     const init = await c.post('/api/payments/initiate', { plan: 'starter', interval: 'monthly', method: 'card' });
     expect(init.status).toBe(201);
     expect(init.body).toMatchObject({ currency: 'EUR', amount: 22, method: 'card' });

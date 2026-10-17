@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { WhatsAppRequiredDialog } from '@/components/whatsapp-gate';
 import { useWallet } from '@/components/wallet/use-wallet';
 import { useAccount } from '@/lib/account';
 import { dateShort, money, num } from '@/lib/format';
@@ -43,7 +44,11 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
     : sub.status === 'suspended' ? { tone: 'danger' as const, text: t('app.suspended'), cta: t('app.renew') }
     : sub.status === 'past_due' ? { tone: 'warn' as const, text: t('app.pastDue', { date: sub.graceEndsAt ? dateShort(sub.graceEndsAt, locale) : '' }), cta: t('app.renew') }
     : sub.status === 'active' && sub.amountFCFA > 0 && sub.daysLeft <= 5 ? { tone: 'warn' as const, text: t(sub.cancelAtPeriodEnd ? 'app.endsSoon' : 'app.renewsSoon', { n: sub.daysLeft }), cta: sub.cancelAtPeriodEnd ? t('common.upgrade') : t('app.renew') }
-    : sub.status === 'trial' ? { tone: 'info' as const, text: sub.daysLeft === 1 ? t('app.trialLeftOne') : t('app.trialLeft', { n: sub.daysLeft }), cta: t('common.upgrade') }
+    : account && account.plan.key === 'trial' && account.plan.limits.recipients !== null ? (() => {
+        // Explore: no countdown, a number of people. Say how many are left, and offer the plan without nagging while plenty remain.
+        const max = account.plan.limits.recipients, left = Math.max(0, max - account.usage.recipients);
+        return { tone: left === 0 ? 'warn' as const : 'info' as const, text: left === 0 ? t('app.exploreFull', { max }) : t('app.exploreLeft', { left, max }), cta: t('app.activate') };
+      })()
     : null;
 
   return (
@@ -99,6 +104,7 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
       )}
 
       <main id="main" className="mx-auto max-w-[1344px] px-5 pb-20 pt-8 sm:px-8">{needsSegment ? <Skeleton className="h-64" /> : children}</main>
+      <WhatsAppRequiredDialog />
     </div>
   );
 }

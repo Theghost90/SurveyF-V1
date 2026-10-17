@@ -51,6 +51,8 @@ const schema = z.object({
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_VERIFY_TOKEN: z.string().optional(),
   WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().optional(),
+  /** SurveyFlow's own WhatsApp number as people dial it (digits with country code, e.g. 2376XXXXXXXX): where owners link their phone and ask the Analytics Bot. */
+  WHATSAPP_PLATFORM_PHONE: z.string().regex(/^\d{8,15}$/, 'digits only, with country code').optional(),
   META_APP_SECRET: z.string().optional(), // REQUIRED to verify webhook signatures
   META_APP_ID: z.string().optional(),
   META_EMBEDDED_SIGNUP_CONFIG_ID: z.string().optional(),
@@ -99,10 +101,6 @@ const schema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   /** Where Google redirects after consent (a page of the web app). */
   GOOGLE_REDIRECT_URI: z.string().optional(),
-
-  // --- billing policy ---
-  /** What happens when a trial ends without payment: the spec says downgrade to Starter. */
-  TRIAL_EXPIRY_POLICY: z.enum(['starter', 'suspend']).default('starter'),
 
   // --- puppeteer ---
   PUPPETEER_EXECUTABLE_PATH: z.string().optional(),

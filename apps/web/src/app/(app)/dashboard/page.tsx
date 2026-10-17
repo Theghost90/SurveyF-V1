@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import useSWR from 'swr';
-import { ArrowRight, Check, Circle, Plus } from 'lucide-react';
+import { ArrowRight, Check, Circle, Plus, Smartphone } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -23,13 +23,20 @@ export default function DashboardPage() {
   if (!account) return <div className="grid gap-4"><Skeleton className="h-10 w-64" /><Skeleton className="h-40" /><Skeleton className="h-64" /></div>;
 
   const { usage, plan, onboarding } = account;
-  const meters = [
-    { label: t('dash.activeSurveys'), used: usage.activeSurveys, max: plan.limits.activeSurveys },
-    { label: t('dash.responses'), used: usage.responses, max: plan.limits.responsesPerMonth },
-    { label: t('dash.messages'), used: usage.messages, max: plan.limits.messagesPerMonth },
-  ];
+  const explore = plan.limits.recipients !== null;
+  const meters = explore
+    ? [
+      { label: t('dash.activeSurveys'), used: usage.activeSurveys, max: plan.limits.activeSurveys },
+      { label: t('dash.recipients'), used: usage.recipients, max: plan.limits.recipients },
+      { label: t('dash.messages'), used: usage.messages, max: plan.limits.messagesPerMonth },
+    ]
+    : [
+      { label: t('dash.activeSurveys'), used: usage.activeSurveys, max: plan.limits.activeSurveys },
+      { label: t('dash.responses'), used: usage.responses, max: plan.limits.responsesPerMonth },
+      { label: t('dash.messages'), used: usage.messages, max: plan.limits.messagesPerMonth },
+    ];
   const steps = [
-    { done: onboarding.whatsappConnected, label: t('dash.stepWhatsapp'), href: '/settings?tab=whatsapp' },
+    { done: onboarding.whatsappConnected, label: t('dash.stepWhatsapp'), href: '/onboarding' },
     { done: onboarding.hasContacts, label: t('dash.stepContacts'), href: '/contacts' },
     { done: onboarding.hasSurvey, label: t('dash.stepSurvey'), href: '/surveys/new' },
     { done: onboarding.paidPlan, label: t('dash.stepPlan'), href: '/billing' },
@@ -45,12 +52,22 @@ export default function DashboardPage() {
         actions={<Link href="/surveys/new" className={buttonVariants({})}><Plus className="h-4 w-4" aria-hidden />{t('surveys.new')}</Link>}
       />
 
+      {!onboarding.whatsappConnected && (
+        <Card className="mb-6 border-2 border-brand bg-mint/40" data-testid="dash-wa-needed">
+          <CardContent className="flex flex-wrap items-center gap-4 p-5">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand text-ink"><Smartphone className="h-6 w-6" aria-hidden /></span>
+            <div className="min-w-0 flex-1 basis-64"><p className="font-display text-lg font-bold">{t('dash.waTitle')}</p><p className="text-sm text-body">{t('dash.waText')}</p></div>
+            <Link href="/onboarding" className={buttonVariants({ variant: 'brand', size: 'lg' })}>{t('dash.waCta')}</Link>
+          </CardContent>
+        </Card>
+      )}
+
       <div className={incomplete ? 'grid gap-6 lg:grid-cols-[1.6fr_1fr]' : 'grid gap-6'}>
         <div className="flex flex-col gap-6">
           <Card>
             <CardHeader className="flex-row items-baseline justify-between gap-3">
               <CardTitle>{t('dash.usage')}</CardTitle>
-              <span className="text-sm text-muted-foreground">{t('dash.usageUntil', { date: dateShort(usage.periodEnd, locale) })}</span>
+              <span className="text-sm text-muted-foreground">{explore ? t('dash.explore') : t('dash.usageUntil', { date: dateShort(usage.periodEnd, locale) })}</span>
             </CardHeader>
             <CardContent className="grid gap-5 sm:grid-cols-3">
               {meters.map((m) => (

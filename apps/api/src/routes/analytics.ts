@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { rl } from '../lib/ratelimit';
 import { maskPhone } from '@surveyflow/shared';
-import { computeAnalytics, displayAnswer, getParticipantRows } from '../services/analytics';
+import { computeAnalytics, displayAnswer, getParticipantRows, listRecipientsByKind } from '../services/analytics';
 
 export default async function analyticsRoutes(app: FastifyInstance) {
   const auth = { preHandler: app.authenticate };
@@ -21,4 +22,28 @@ export default async function analyticsRoutes(app: FastifyInstance) {
       })),
     };
   });
+
+  /**
+   * "Haven't started": the people invited who never replied (STOP excluded), with their COMPLETE numbers. This is the one place the full
+   * list exists: the Analytics Bot shows names with masked numbers and sends the owner here for the rest.
+   */
+  app.get('/api/surveys/:id/not-started', auth, async (req) => {
+    const q = z.object({ page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(25) }).parse(req.query);
+    const { total, rows } = await listRecipientsByKind((req.params as { id: string }).id, req.userId, 'nonresp', { skip: (q.page - 1) * q.pageSize, take: q.pageSize });
+    return { total, page: q.page, pageSize: q.pageSize, items: rows.map((r) => ({ recipientId: r.recipientId, name: r.name, phone: r.phone, status: r.status, sentAt: r.sentAt })) };
+  });
+
+  app.get('/api/surveys/:id/not-started.csv', { ...auth, ...rl(20) }, async (req, reply) => {
+    const { survey, rows } = await listRecipientsByKind((req.params as { id: string }).id, req.userId, 'nonresp', { take: 50_000 });
+    const lines = [['name', 'phone', 'invited_at', 'status'].join(','), ...rows.map((r) => [csvCell(r.name), csvCell(r.phone), r.sentAt ? r.sentAt.toISOString() : '', r.status].join(','))];
+    const file = `not-started-${survey.title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'survey'}.csv`;
+    return reply.header('content-type', 'text/csv; charset=utf-8').header('content-disposition', `attachment; filename="${file}"`).send(`\uFEFF${lines.join('\r\n')}\r\n`);
+  });
+}
+
+/** A CSV cell the owner will open in Excel: quoted, and a leading = + - @ (a formula) is defused so a contact named "=HYPERLINK(…)" stays text. */
+export function csvCell(v: string): string {
+  // A plain international number ("+237677…") starts with + but is not a formula; everything else that starts like one is defused.
+  const safe = /^[=+\-@\t\r]/.test(v) && !/^\+\d[\d ]*$/.test(v) ? `'${v}` : v;
+  return `"${safe.replace(/"/g, '""')}"`;
 }

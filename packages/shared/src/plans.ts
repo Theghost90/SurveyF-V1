@@ -27,6 +27,11 @@ export interface PlanLimits {
    */
   messagesPerMonth: number;
   teamMembers: number;
+  /**
+   * How many different people the plan may ever send a survey to. Only Explore has this cap (null = no cap): it is what turns "try it" into
+   * "activate to reach everyone", without a countdown. It is counted over the account's whole life, not per month.
+   */
+  recipients: number | null;
 }
 
 export interface PlanFeatures {
@@ -37,6 +42,8 @@ export interface PlanFeatures {
   apiAccess: boolean;
   prioritySupport: boolean;
   whiteLabel: boolean;
+  /** Analytics on WhatsApp: the owner asks the SurveyFlow number for STATS, DROP, NONRESP… Paid plans only (Explore sees it in the simulator). */
+  analyticsBot: boolean;
 }
 
 export interface PlanDef {
@@ -48,42 +55,42 @@ export interface PlanDef {
 }
 
 export const PLANS: Record<PlanKey, PlanDef> = {
+  // Explore (internal key `trial`): free, no clock, capped by USAGE. One live survey and 5 people reached for real, for the whole life of the
+  // account (so a plan that lapses lands here too, never on a free Starter). Responses cannot be refused mid-survey, so the cap that really
+  // bounds them is `recipients`; the numbers below only describe what 5 recipients can produce.
   trial: {
     key: 'trial',
     priceFCFA: 0,
-    // Spec §5.1: 14 days, 1 survey, 50 responses. Message cap is our addition.
-    limits: { activeSurveys: 1, responsesPerMonth: 50, messagesPerMonth: 100, teamMembers: 1 },
-    // No gift automation in trial: airtime/MoMo gifts are real money, and a free
-    // trial that can pay out is a farming vector.
-    features: { exports: true, googleSheets: false, giftAutomation: false, apiAccess: false, prioritySupport: false, whiteLabel: false },
+    limits: { activeSurveys: 1, responsesPerMonth: 5, messagesPerMonth: 25, teamMembers: 1, recipients: 5 },
+    // No gift automation: airtime/MoMo gifts are real money, and a free tier that can pay out is a farming vector.
+    features: { exports: true, googleSheets: false, giftAutomation: false, apiAccess: false, prioritySupport: false, whiteLabel: false, analyticsBot: false },
   },
   starter: {
     key: 'starter',
     priceFCFA: 14_500,
-    limits: { activeSurveys: 3, responsesPerMonth: 500, messagesPerMonth: 1_000, teamMembers: 1 },
-    features: { exports: true, googleSheets: false, giftAutomation: false, apiAccess: false, prioritySupport: false, whiteLabel: false },
+    limits: { activeSurveys: 3, responsesPerMonth: 500, messagesPerMonth: 1_000, teamMembers: 1, recipients: null },
+    features: { exports: true, googleSheets: false, giftAutomation: false, apiAccess: false, prioritySupport: false, whiteLabel: false, analyticsBot: true },
   },
   growth: {
     key: 'growth',
     priceFCFA: 39_000,
-    limits: { activeSurveys: 15, responsesPerMonth: 3_000, messagesPerMonth: 7_000, teamMembers: 3 },
-    features: { exports: true, googleSheets: true, giftAutomation: true, apiAccess: false, prioritySupport: true, whiteLabel: false },
+    limits: { activeSurveys: 15, responsesPerMonth: 3_000, messagesPerMonth: 7_000, teamMembers: 3, recipients: null },
+    features: { exports: true, googleSheets: true, giftAutomation: true, apiAccess: false, prioritySupport: true, whiteLabel: false, analyticsBot: true },
   },
   business: {
     key: 'business',
     priceFCFA: 95_000,
-    limits: { activeSurveys: null, responsesPerMonth: 15_000, messagesPerMonth: 30_000, teamMembers: 10 },
-    features: { exports: true, googleSheets: true, giftAutomation: true, apiAccess: true, prioritySupport: true, whiteLabel: true },
+    limits: { activeSurveys: null, responsesPerMonth: 15_000, messagesPerMonth: 30_000, teamMembers: 10, recipients: null },
+    features: { exports: true, googleSheets: true, giftAutomation: true, apiAccess: true, prioritySupport: true, whiteLabel: true, analyticsBot: true },
   },
 };
 
 /** Entitlements that are sold on the plan table but not built in V1. Shown as "Coming soon". */
 export const COMING_SOON: Array<keyof PlanFeatures | 'teamMembers'> = ['teamMembers', 'apiAccess', 'whiteLabel'];
 
-export const TRIAL_DAYS = 14;
 export const PAST_DUE_GRACE_DAYS = 3;
-/** Annual billing = 10 × monthly ("2 months free"). */
-export const ANNUAL_MONTHS_CHARGED = 10;
+/** Annual billing = 11 × monthly ("1 month free"). */
+export const ANNUAL_MONTHS_CHARGED = 11;
 /** Overage: 500 FCFA per 100 extra responses. */
 export const OVERAGE = { responsesBlockSize: 100, responsesBlockFCFA: 500 } as const;
 
@@ -92,7 +99,7 @@ export function planPriceXAF(plan: PaidPlanKey, interval: 'monthly' | 'annual' =
   return PLANS[plan].priceFCFA * (interval === 'annual' ? ANNUAL_MONTHS_CHARGED : 1);
 }
 
-/** Price of a plan in the quote's currency: the live conversion of the FCFA price, rounded once (annual = 10 × the exact monthly). */
+/** Price of a plan in the quote's currency: the live conversion of the FCFA price, rounded once (annual = 11 × the exact monthly). */
 export function planPriceIn(plan: PaidPlanKey, interval: 'monthly' | 'annual', quote: FxQuote): number {
   return convertFromXAF(planPriceXAF(plan, interval), quote);
 }

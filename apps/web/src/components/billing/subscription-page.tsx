@@ -56,11 +56,18 @@ export function SubscriptionPage({ initialPlan, initialInterval }: { initialPlan
     catch (err) { toast.error(errorMessage(err, t)); }
     finally { setBusy(false); }
   }
-  const meters = [
-    { label: t('dash.activeSurveys'), used: usage.activeSurveys, max: plan.limits.activeSurveys },
-    { label: t('dash.responses'), used: usage.responses, max: plan.limits.responsesPerMonth },
-    { label: t('dash.messages'), used: usage.messages, max: plan.limits.messagesPerMonth },
-  ];
+  const explore = plan.limits.recipients !== null;
+  const meters = explore
+    ? [
+      { label: t('dash.activeSurveys'), used: usage.activeSurveys, max: plan.limits.activeSurveys },
+      { label: t('dash.recipients'), used: usage.recipients, max: plan.limits.recipients },
+      { label: t('dash.messages'), used: usage.messages, max: plan.limits.messagesPerMonth },
+    ]
+    : [
+      { label: t('dash.activeSurveys'), used: usage.activeSurveys, max: plan.limits.activeSurveys },
+      { label: t('dash.responses'), used: usage.responses, max: plan.limits.responsesPerMonth },
+      { label: t('dash.messages'), used: usage.messages, max: plan.limits.messagesPerMonth },
+    ];
 
   return (
     <>
@@ -72,7 +79,7 @@ export function SubscriptionPage({ initialPlan, initialInterval }: { initialPlan
           <div>
             <CardTitle className="flex items-center gap-3">{t(`plan.${plan.key as 'trial'}`)} <Badge variant={sub.status === 'active' ? 'brand' : sub.status === 'trial' ? 'amber' : sub.status === 'past_due' ? 'warn' : 'danger'}>{t(`bill.st.${sub.status}` as 'bill.st.active')}</Badge></CardTitle>
             <CardDescription>
-              {sub.status === 'trial' ? t('bill.trialUntil', { date: dateShort(sub.currentPeriodEnd, locale) })
+              {explore ? t('bill.exploreInfo', { max: plan.limits.recipients ?? 0 })
                 : paid ? t(sub.cancelAtPeriodEnd ? 'bill.endsOn' : 'bill.renewsOn', { date: dateShort(sub.currentPeriodEnd, locale) })
                 : sub.amountFCFA === 0 ? t('bill.freeTier') : t('bill.endedOn', { date: dateShort(sub.currentPeriodEnd, locale) })}
             </CardDescription>
@@ -113,6 +120,7 @@ export function SubscriptionPage({ initialPlan, initialInterval }: { initialPlan
               <div className="flex items-center justify-between"><h3 className="font-display text-2xl font-bold">{t(`plan.${key}`)}</h3>{current && <Badge variant="brand">{t('bill.current')}</Badge>}</div>
               <p className="text-sm text-muted-foreground">{t(`plan.${key}Who`)}</p>
               <div className="flex items-baseline gap-1.5"><span className="font-display text-4xl font-extrabold tracking-tight">{num(interval === 'annual' ? price.annual : price.monthly, locale)}</span><span className="text-sm text-muted-foreground">{price.currency === 'XAF' || price.currency === 'XOF' ? 'FCFA' : price.currency} / {interval === 'annual' ? t('bill.year') : t('bill.month')}</span></div>
+              {interval === 'monthly' && <p className="-mt-2 text-sm text-muted-foreground">{t('pricing.orYear', { price: `${num(price.annual, locale)} ${price.currency === 'XAF' || price.currency === 'XOF' ? 'FCFA' : price.currency}` })}</p>}
               <Button size="lg" variant={featured ? 'brand' : 'default'} disabled={lower} onClick={() => setCheckout(key)}>{current ? t('bill.renew') : lower ? t('bill.lower') : t('bill.select')}</Button>
               <ul className="flex flex-col gap-2 text-sm">
                 {planFeatures(key, t, locale).map((f) => <li key={f.text} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-leaf" strokeWidth={2.6} aria-hidden /><span>{f.text}{f.soon && <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">{t('pricing.soon')}</span>}</span></li>)}

@@ -110,7 +110,7 @@ describe('GET /api/pricing: public prices in the visitor\'s currency', () => {
     const f = stub(feed());
     for (const country of [undefined, 'CM', 'US']) {
       const p = await pricing(country);
-      expect(p).toMatchObject({ currency: 'XAF', fallback: false, plans: { starter: { monthly: 14_500, annual: 145_000 }, growth: { monthly: 39_000 }, business: { monthly: 95_000, annual: 950_000 } }, overagePer100: 500 });
+      expect(p).toMatchObject({ currency: 'XAF', fallback: false, plans: { starter: { monthly: 14_500, annual: 159_500 }, growth: { monthly: 39_000 }, business: { monthly: 95_000, annual: 1_045_000 } }, overagePer100: 500 });
     }
     expect(f).not.toHaveBeenCalled();
   });
@@ -119,7 +119,7 @@ describe('GET /api/pricing: public prices in the visitor\'s currency', () => {
     stub(feed());
     const p = await pricing('NG');
     expect(p).toMatchObject({ country: 'NG', currency: 'NGN', fallback: false, requestedCurrency: 'NGN', overagePer100: 1_200 });
-    expect(p.plans.starter).toEqual({ monthly: 34_800, annual: 348_000 }); // 14,500 × 2.4
+    expect(p.plans.starter).toEqual({ monthly: 34_800, annual: 383_000 }); // 14,500 × 2.4; a year is 11 months
     expect(p.plans.growth.monthly).toBe(93_600);
     expect(p.plansFCFA.starter.monthly).toBe(14_500);
     expect(p.quote).toMatchObject({ rate: 2.4, source: 'live' });

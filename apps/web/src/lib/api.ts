@@ -35,9 +35,15 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
     // callers and SWR caches would otherwise treat an empty object as a real answer and crash on `account.user.x`.
     catch { if (res.ok) throw new ApiError(0, 'network', 'network'); data = {}; }
   }
-  if (!res.ok) throw new ApiError(res.status, data?.error ?? 'error', data?.message ?? res.statusText, data?.details, data?.issues);
+  if (!res.ok) {
+    // One screen answers every "connect your WhatsApp number first" refusal, wherever it came from (see components/whatsapp-gate.tsx).
+    if (data?.error === 'whatsapp_not_connected' && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(WHATSAPP_REQUIRED_EVENT));
+    throw new ApiError(res.status, data?.error ?? 'error', data?.message ?? res.statusText, data?.details, data?.issues);
+  }
   return (data ?? undefined) as T;
 }
+
+export const WHATSAPP_REQUIRED_EVENT = 'sf:whatsapp-required';
 
 /** Downloads a binary export through the proxy (keeps the filename the API chose). */
 export async function download(path: string, fallbackName: string) {

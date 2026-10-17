@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { assertWhatsAppConnected } from '../services/whatsapp/require';
 import { z } from 'zod';
 import { rl } from '../lib/ratelimit';
 import { assertFeature, assertNotSuspended, loadAccount } from '../services/subscription/limits';
@@ -26,6 +27,7 @@ export default async function walletRoutes(app: FastifyInstance) {
       method: z.enum(['mobile_money', 'card', 'bank_transfer']),
       phone: z.string().trim().max(30).optional(),
     }).parse(req.body);
+    await assertWhatsAppConnected(req.userId);
     const ctx = await loadAccount(req.userId);
     assertNotSuspended(ctx);
     // A plan without gift automation can never spend the balance, and V1 has no payout-back path: don't take the money.

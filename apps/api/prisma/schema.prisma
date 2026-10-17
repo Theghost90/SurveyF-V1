@@ -121,6 +121,8 @@ model User {
   messageLogs      MessageLog[]
   sheetSyncs       SheetSync[]
   walletEntries    WalletEntry[]
+  funnelEvents     FunnelEvent[]
+  ownerPhones      OwnerPhone[]
 }
 
 model WhatsAppAccount {
@@ -499,4 +501,32 @@ model FxRate {
   rate            Float
   sourceUpdatedAt DateTime? // when the rate source published it
   fetchedAt       DateTime @default(now())
+}
+
+// ADDED (Explore/Activate): the first time each milestone happens for an owner, so the first weeks of real sign-ups show where people stop
+// (signup → whatsapp_connected → first_send → first_response → paywall_view → checkout_start → paid). One row per (owner, milestone).
+model FunnelEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([name, createdAt])
+}
+
+// ADDED (Analytics Bot): a phone that has been proven to belong to this owner by sending a one-time code (LINK <code>) to the SurveyFlow
+// number. Only linked phones may ask for numbers; a phone belongs to ONE account; at most 3 per account. `phone` is the WhatsApp id (digits).
+model OwnerPhone {
+  id        String   @id @default(cuid())
+  userId    String
+  phone     String   @unique
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

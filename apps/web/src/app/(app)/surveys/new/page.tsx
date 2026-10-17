@@ -3,7 +3,11 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { FilePlus2, MessageSquareText } from 'lucide-react';
 import { toast } from 'sonner';
+import Link from 'next/link';
+import { Smartphone } from 'lucide-react';
+import { buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { useWhatsAppGate } from '@/components/whatsapp-gate';
 import { PageHeader } from '@/components/page-header';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { useLocale, useT } from '@/lib/i18n/client';
@@ -16,6 +20,7 @@ export default function NewSurveyPage() {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const templates = surveyTemplates(locale);
+  const { connected } = useWhatsAppGate();
 
   async function create(id: string, body: object) {
     setBusy(id);
@@ -32,6 +37,13 @@ export default function NewSurveyPage() {
   return (
     <>
       <PageHeader title={t('new.title')} sub={t('new.sub')} />
+      {!connected ? (
+        <Card className="flex flex-wrap items-center gap-4 border-2 border-brand bg-mint/40 p-6" data-testid="new-needs-wa">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand text-ink"><Smartphone className="h-6 w-6" aria-hidden /></span>
+          <div className="min-w-0 flex-1 basis-64"><p className="font-display text-xl font-bold">{t('wa.req.title')}</p><p className="text-sm text-body">{t('wa.req.text')}</p></div>
+          <Link href="/onboarding" className={buttonVariants({ variant: 'brand', size: 'lg' })}>{t('wa.req.cta')}</Link>
+        </Card>
+      ) : (
       <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
         <button type="button" disabled={!!busy} onClick={() => create('blank', { title: t('new.untitled'), questions: [] })} className={cn('text-left', busy && busy !== 'blank' && 'opacity-60')}>
           <Card className="flex h-full flex-col gap-3 border-dashed border-line-2 p-6 shadow-none transition-colors hover:bg-white">
@@ -57,6 +69,7 @@ export default function NewSurveyPage() {
           </button>
         ))}
       </div>
+      )}
     </>
   );
 }

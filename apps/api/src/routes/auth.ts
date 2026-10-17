@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import bcrypt from 'bcryptjs';
 import { rlCredentials } from '../lib/ratelimit';
 import { z } from 'zod';
-import { CUSTOMER_SEGMENTS, TRIAL_DAYS, normalizePhone, currencyForCountry, phoneExampleFor, supportedCountry } from '@surveyflow/shared';
+import { CUSTOMER_SEGMENTS, normalizePhone, currencyForCountry, phoneExampleFor, supportedCountry } from '@surveyflow/shared';
 import { env } from '../config/env';
 import { AppError, badRequest, conflict, forbidden, unauthorized } from '../lib/errors';
 import { detectedCountry } from '../lib/geo';
@@ -11,6 +11,9 @@ import { safeEqual } from '../lib/crypto';
 import { prisma } from '../lib/prisma';
 import { redis } from '../lib/redis';
 import { accountSummary, userDto } from '../services/account';
+import { track } from '../services/funnel';
+import { assertWhatsAppConnected } from '../services/whatsapp/require';
+import { exploreWindowEnd } from '../services/subscription/lifecycle';
 
 const registerSchema = z.object({
   businessName: z.string().trim().min(1).max(120),
@@ -27,20 +30,21 @@ const loginSchema = z.object({ email: z.string().trim().toLowerCase().email(), p
 // A fixed hash so unknown-email logins cost the same as wrong-password ones (no user enumeration by timing).
 const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 12);
 
-export async function createUserWithTrial(input: {
+/** A new owner starts on Explore: free, no clock, capped by usage (see PLANS.trial). */
+export async function createUserExplore(input: {
   email: string; name: string; businessName: string; phone: string; passwordHash: string | null; country: string; locale: string;
 }) {
   const now = new Date();
-  const trialEnd = new Date(now.getTime() + TRIAL_DAYS * 86_400_000);
-  return prisma.user.create({
+  const user = await prisma.user.create({
     data: {
       ...input,
       plan: 'trial',
       preferredCurrency: currencyForCountry(input.country),
-      trialEndsAt: trialEnd,
-      subscription: { create: { plan: 'trial', status: 'trial', currentPeriodStart: now, currentPeriodEnd: trialEnd, amountFCFA: 0 } },
+      subscription: { create: { plan: 'trial', status: 'trial', currentPeriodStart: now, currentPeriodEnd: exploreWindowEnd(now), amountFCFA: 0 } },
     },
   });
+  await track(user.id, 'signup');
+  return user;
 }
 
 export default async function authRoutes(app: FastifyInstance) {
@@ -54,7 +58,7 @@ export default async function authRoutes(app: FastifyInstance) {
     if (!phone) throw badRequest('invalid_phone', `Enter a valid WhatsApp phone number, e.g. ${phoneExampleFor(country)}`);
     if (await prisma.user.findUnique({ where: { email: body.email } })) throw conflict('email_taken', 'An account with this email already exists');
 
-    const user = await createUserWithTrial({
+    const user = await createUserExplore({
       email: body.email, name: body.name, businessName: body.businessName, phone, country, locale: body.locale,
       passwordHash: await bcrypt.hash(body.password, 12),
     });
@@ -89,7 +93,7 @@ export default async function authRoutes(app: FastifyInstance) {
     const body = z.object({ email: z.string().toLowerCase().email(), name: z.string().min(1).max(120).default('') }).parse(req.body);
     let user = await prisma.user.findUnique({ where: { email: body.email } });
     if (!user) {
-      user = await createUserWithTrial({
+      user = await createUserExplore({
         email: body.email, name: body.name || body.email.split('@')[0]!, businessName: body.name || 'My business',
         phone: '', passwordHash: null, country: supportedCountry(undefined), locale: 'fr',
       });
@@ -140,6 +144,7 @@ export default async function authRoutes(app: FastifyInstance) {
     }
     // The one required answer of onboarding: setup cannot be marked done without it.
     if (body.onboardingDone && !(body.segment ?? current.segment)) throw badRequest('segment_required', 'Choose your customer segment to finish setup');
+    if (body.onboardingDone) await assertWhatsAppConnected(req.userId); // the two required steps of setup: segment, then the WhatsApp number
     const user = await prisma.user.update({
       where: { id: req.userId },
       data: {
@@ -147,6 +152,7 @@ export default async function authRoutes(app: FastifyInstance) {
         ...(body.onboardingDone ? { onboardingDoneAt: new Date() } : {}),
       },
     });
+    if (body.onboardingDone) await track(req.userId, 'onboarding_done');
     return { user: userDto(user) };
   });
 }

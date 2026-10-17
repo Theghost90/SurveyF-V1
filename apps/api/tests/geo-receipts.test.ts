@@ -6,7 +6,7 @@ import { GiftError, setGiftProvider } from '../src/services/gifts/providers';
 import { processDueGifts } from '../src/services/gifts';
 import { buildReceiptHtml, giftIdFromToken, loadReceipt, receiptToken, receiptUrl } from '../src/services/receipts';
 import { runSendWorkerOnce } from '../src/services/whatsapp/sender';
-import { answerIdFor, buildWorld, chatOf, client, makeApp, registerOwner, replyMsg, resetAll, say, templateBtn, textMsg, type World } from './helpers';
+import { answerIdFor, buildWorld, chatOf, client, makeApp, registerOwner, replyMsg, resetAll, say, templateBtn, textMsg, type World, connectMockWhatsApp } from './helpers';
 
 let app: FastifyInstance;
 beforeAll(async () => { app = await makeApp(); });
@@ -21,6 +21,7 @@ async function register(country: string | undefined, over: Record<string, unknow
     headers: { 'content-type': 'application/json', ...(country ? { 'x-sf-country': country } : {}) },
   });
   const body = JSON.parse(res.body);
+  if (res.statusCode === 201) await connectMockWhatsApp(body.user.id);
   return { status: res.statusCode, body, c: client(app, body.token, body.user?.id) };
 }
 const meWith = (c: ReturnType<typeof client>, country?: string) =>
@@ -47,7 +48,7 @@ describe('country and currency follow the visitor', () => {
       const { c } = await register('NG', { phone: '0803 123 4567' });
       const sub = await c.get('/api/subscription');
       expect(sub.currency).toBe('NGN');
-      expect(sub.prices.growth).toMatchObject({ monthly: 93_600, annual: 936_000, currency: 'NGN' }); // 39,000 × 2.4
+      expect(sub.prices.growth).toMatchObject({ monthly: 93_600, annual: 1_030_000, currency: 'NGN' }); // 39,000 × 2.4; a year is 11 months
       expect(sub.methods).toEqual(['card']); // no Mobile Money in naira
     } finally { vi.unstubAllGlobals(); }
   });

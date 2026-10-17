@@ -61,7 +61,7 @@ export function convertFromXAF(amountXAF: number, quote: FxQuote): number {
   return roundPrice(amountXAF * quote.rate, quote.currency);
 }
 
-/** Same, but exact (no price rounding): for sums that are rounded once at the end, like annual = 10 × monthly. */
+/** Same, but exact (no price rounding): for sums that are rounded once at the end, like annual = 11 × monthly. */
 export function convertFromXAFExact(amountXAF: number, quote: FxQuote): number {
   return isCfa(quote.currency) ? amountXAF : amountXAF * quote.rate;
 }

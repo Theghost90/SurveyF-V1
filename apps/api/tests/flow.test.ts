@@ -450,9 +450,9 @@ describe('plan limits (402)', () => {
   });
 
   it('blocks a send that would exceed the monthly message quota, but never blocks participants\' answers', async () => {
-    const w = await buildWorld(app, { contacts: 3, send: false }); // trial: 100 messages
+    const w = await buildWorld(app, { contacts: 3, send: false, plan: 'starter' }); // starter: 1,000 messages
     const { prisma: db } = await import('../src/lib/prisma');
-    await db.messageLog.createMany({ data: Array.from({ length: 99 }, () => ({ userId: w.owner.userId, kind: 'invitation' })) });
+    await db.messageLog.createMany({ data: Array.from({ length: 999 }, () => ({ userId: w.owner.userId, kind: 'invitation' })) });
     const r = await w.owner.post(`/api/surveys/${w.surveyId}/send`, { all: true });
     expect(r.status).toBe(402);
     expect(r.details).toMatchObject({ limit: 'messagesPerMonth', remaining: 1, requested: 3 });

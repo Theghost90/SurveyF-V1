@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { PAID_GIFT_TYPES, currencyLabel, normalizeQuestion, publishProblems, surveyInputSchema, TEMPLATE_NAMES, walletLimits, type SurveyInput } from '@surveyflow/shared';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { prisma } from '../lib/prisma';
-import { assertCanActivateSurvey, assertCanSendMessages, assertFeature, assertNotSuspended, loadAccount, messagesRemaining } from '../services/subscription/limits';
+import { assertCanActivateSurvey, assertCanAddRecipients, assertCanSendMessages, assertFeature, assertNotSuspended, freshRecipientCount, loadAccount, messagesRemaining, recipientsRemaining } from '../services/subscription/limits';
 import { enqueueInvitations } from '../services/whatsapp/sender';
 import { manualReminderState, sendManualReminders } from '../services/reminders';
 import { isTemplateApproved } from '../services/whatsapp/accounts';
@@ -13,6 +13,9 @@ import { walletCurrency, walletQuote } from '../services/billing-currency';
 import { giftReadiness } from '../services/wallet';
 import { receiptUrl } from '../services/receipts';
 import { randomInt } from 'node:crypto';
+import { AppError } from '../lib/errors';
+import { track } from '../services/funnel';
+import { assertWhatsAppConnected } from '../services/whatsapp/require';
 
 const GIFT_AUTOMATION = new Set(['airtime', 'momo', 'discount', 'prize_draw']);
 
@@ -106,6 +109,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
   });
 
   app.post('/api/surveys', auth, async (req, reply) => {
+    await assertWhatsAppConnected(req.userId);
     const input = surveyInputSchema.parse(req.body);
     assertDeadlineOk(input.deadlineAt);
     await assertGiftAllowed(req.userId, input.gift);
@@ -115,6 +119,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
       if (input.questions.length) await tx.question.createMany({ data: questionRows(s.id, input) });
       return s;
     });
+    await track(req.userId, 'survey_created');
     reply.code(201);
     return dto(await owned(req.userId, survey.id));
   });
@@ -160,6 +165,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
 
   /** Duplicate = the way to "edit" a published survey's questions. */
   app.post('/api/surveys/:id/duplicate', auth, async (req, reply) => {
+    await assertWhatsAppConnected(req.userId);
     const s = await owned(req.userId, (req.params as { id: string }).id);
     const copy = await prisma.$transaction(async (tx) => {
       const c = await tx.survey.create({
@@ -179,6 +185,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
   // ---- lifecycle -------------------------------------------------------------------------------
 
   app.post('/api/surveys/:id/publish', auth, async (req) => {
+    await assertWhatsAppConnected(req.userId);
     const s = await owned(req.userId, (req.params as { id: string }).id);
     if (s.status !== 'draft') throw conflict('not_a_draft', 'Only drafts can be published');
     const problems = publishProblems(s);
@@ -216,10 +223,11 @@ export default async function surveyRoutes(app: FastifyInstance) {
   });
 
   app.post('/api/surveys/:id/send', auth, async (req) => {
+    await assertWhatsAppConnected(req.userId);
     const s = await owned(req.userId, (req.params as { id: string }).id);
     const body = sendSchema.parse(req.body ?? {});
     if (s.status !== 'active') throw conflict('not_active', 'Publish the survey before sending it');
-    if (!s.whatsappAccountId) throw conflict('no_whatsapp', 'Connect a WhatsApp number first (Settings → WhatsApp)');
+    if (!s.whatsappAccountId) throw conflict('whatsapp_not_connected', 'Finish connecting your WhatsApp Business number first.');
     const account = await prisma.whatsAppAccount.findUnique({ where: { id: s.whatsappAccountId } });
     if (!account || account.status !== 'active') throw conflict('whatsapp_unavailable', 'Your WhatsApp connection needs attention (Settings → WhatsApp)');
     if (!(await isTemplateApproved(account.id, TEMPLATE_NAMES.invitation, s.language))) {
@@ -231,9 +239,16 @@ export default async function surveyRoutes(app: FastifyInstance) {
     if (!contacts.length) throw badRequest('no_eligible_contacts', 'No eligible contacts: they may be opted out, lack consent, or were already invited');
 
     const ctx = await loadAccount(req.userId);
-    assertCanSendMessages(ctx, contacts.length); // 402 with the upgrade hint when over the plan's message quota
+    try {
+      await assertCanAddRecipients(ctx, contacts.map((c) => c.id)); // Explore: 5 people in all; the wall is here, at the moment they want to reach everyone
+      assertCanSendMessages(ctx, contacts.length); // 402 with the upgrade hint when over the plan's message quota
+    } catch (err) {
+      if (err instanceof AppError && err.status === 402) await track(req.userId, 'paywall_view', { code: err.code });
+      throw err;
+    }
     const when = body.scheduledAt && body.scheduledAt > new Date() ? body.scheduledAt : new Date();
     const queued = await enqueueInvitations(s, contacts.map((c) => c.id), when);
+    await track(req.userId, 'first_send', { plan: ctx.plan.key });
     const gift = await giftReadiness(req.userId, s, queued);
     return { queued, scheduledFor: when, messagesRemaining: messagesRemaining(ctx) - queued, gift, giftWarning: gift && !gift.sufficient ? { code: gift.empty ? 'gift_wallet_empty' : 'gift_wallet_low', ...gift } : null };
   });
@@ -246,10 +261,13 @@ export default async function surveyRoutes(app: FastifyInstance) {
     const ctx = await loadAccount(req.userId);
     const total = await prisma.contact.count({ where: { userId: req.userId } });
     const optedOut = await prisma.contact.count({ where: { userId: req.userId, optedOutAt: { not: null } } });
-    return { eligible: eligible.length, totalContacts: total, optedOut, messagesRemaining: messagesRemaining(ctx), gift: await giftReadiness(req.userId, s, eligible.length) };
+    // Explore reaches a fixed number of different people: say how many are left and how many of THIS audience are new people.
+    const newPeople = ctx.plan.limits.recipients === null ? 0 : await freshRecipientCount(req.userId, eligible.map((c) => c.id));
+    return { eligible: eligible.length, totalContacts: total, optedOut, messagesRemaining: messagesRemaining(ctx), recipientsRemaining: recipientsRemaining(ctx), newPeople, gift: await giftReadiness(req.userId, s, eligible.length) };
   });
 
   app.post('/api/surveys/:id/remind', auth, async (req) => {
+    await assertWhatsAppConnected(req.userId);
     const s = await owned(req.userId, (req.params as { id: string }).id);
     const { target } = z.object({ target: z.enum(['abandoned', 'no_reply']) }).parse(req.body);
     if (s.status !== 'active') throw conflict('not_active', 'The survey must be active to send reminders');

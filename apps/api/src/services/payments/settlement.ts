@@ -3,6 +3,7 @@ import { ANNUAL_MONTHS_CHARGED, PLANS, currencyLabel, type Currency, type PaidPl
 import { prisma } from '../../lib/prisma';
 import { notifyOwner } from '../notify';
 import { creditWallet } from '../wallet';
+import { track } from '../funnel';
 import type { VerifyResult } from './types';
 
 export function addMonths(d: Date, n: number): Date {
@@ -131,6 +132,7 @@ export async function settleTransaction(txId: string, v: VerifyResult, log: Sett
   }
   if (result === 'activated') {
     void notifyOwner(tx.userId, paidText(tx)).catch(() => undefined);
+    if (tx.purpose !== 'gift_topup') void track(tx.userId, 'paid', { plan: tx.plan, interval: tx.interval, psp: tx.pspProvider });
     return 'activated';
   }
   return 'already_settled';
