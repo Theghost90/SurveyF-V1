@@ -188,3 +188,18 @@ describe('push alerts', () => {
     expect(await sweepSlowdowns()).toBe(0);
   });
 });
+
+describe('funnel', () => {
+  it('the first completed response is recorded once for the owner', async () => {
+    const w = await buildWorld(app, { plan: 'growth', contacts: 2 });
+    const [q1, q2] = w.questions;
+    for (const idx of [0, 1]) {
+      await say(app, w, idx, (f) => templateBtn(f, `START:${w.surveyId}`));
+      await say(app, w, idx, (f) => replyMsg(f, answerIdFor(q1!, 0), 'button_reply'));
+      await say(app, w, idx, (f) => replyMsg(f, answerIdFor(q2!, 0), 'list_reply'));
+      await say(app, w, idx, (f) => textMsg(f, 'done'));
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    expect(await prisma.funnelEvent.count({ where: { userId: w.owner.userId, name: 'first_response' } })).toBe(1);
+  });
+});
