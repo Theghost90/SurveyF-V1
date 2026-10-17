@@ -51,7 +51,7 @@ await step('register, upgrade to Growth (mock checkout), connect a simulated num
   await page.click('button[type=submit]');
   await page.waitForURL('**/onboarding**', { timeout: 30000 });
   await page.getByRole('radio', { name: /Businesses/ }).click(); // the one required onboarding answer; the app redirects here until it is given
-  await page.getByText(/Saved\. You can change it later/).waitFor({ timeout: 10000 });
+  await page.getByRole('heading', { name: 'Connect WhatsApp' }).waitFor({ timeout: 10000 }); // choosing a segment moves on by itself
   const up = await call('PUT', '/subscription/upgrade', { plan: 'growth', interval: 'monthly', method: 'mobile_money', phone: '+237677112233' });
   expect(up.status === 200, `upgrade: ${JSON.stringify(up)}`);
   const paid = await call('POST', `/payments/mock/${up.json.reference}`, { outcome: 'success' });

@@ -21,7 +21,7 @@ interface OwnerSnap { from: string; platformPhone: string | null; linked: boolea
 
 /** Sample questions for the Explore view, where there is no real data to answer from: a typical customer-satisfaction survey. */
 const SAMPLE = [
-  { text: 'How satisfied are you with our service?', type: 'single', required: true, options: [1, 2, 3] },
+  { text: 'How satisfied are you with our service?', type: 'button', required: true, options: [{ label: 'Very satisfied' }, { label: 'Neutral' }, { label: 'Unsatisfied' }] },
   { text: 'How likely are you to recommend us?', type: 'rating', required: true, options: null },
   { text: 'What could we do better?', type: 'text', required: false, options: null },
 ];

@@ -156,7 +156,7 @@ export function exampleBotStats(title: string, questions: Array<{ text: string; 
     return {
       number: i + 1, text: q.text || '…', type: q.type, required: q.required, optionCount: q.options?.length ?? 0, passed, abandonedHere: ab[i]!,
       answered, average: q.type === 'rating' ? 4.2 : null,
-      top: q.type === 'single' || q.type === 'multi' ? { label: label || '…', count: Math.round(answered * 0.62), pct: 62 } : null,
+      top: q.type === 'button' || q.type === 'list' || q.type === 'multi' ? { label: label || '…', count: Math.round(answered * 0.62), pct: 62 } : null,
     };
   });
   return { title: title || '…', totals, questions: qs };

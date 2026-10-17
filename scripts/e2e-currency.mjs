@@ -54,13 +54,16 @@ await step('a Kenyan visitor sees shillings on the pricing page, with the rate a
   await page.click('button[type=submit]');
   await page.waitForURL('**/onboarding**', { timeout: 30000 });
   await page.getByRole('radio', { name: /Academics/ }).click();
-  await page.getByText(/Saved\. You can change it later/).waitFor({ timeout: 10000 });
+  await page.getByRole('heading', { name: 'Connect WhatsApp' }).waitFor({ timeout: 10000 }); // choosing a segment moves on by itself
+  await page.getByRole('button', { name: /use a simulated number/i }).click();
+  await page.getByTestId('ob-connected').waitFor({ timeout: 15000 });
+  await page.getByRole('button', { name: /go to dashboard/i }).click();
+  await page.waitForURL('**/dashboard**', { timeout: 15000 });
 });
 
-await step('settings: Currency reads "Kenya (KES)"; onboarding plan prices are in shillings', async () => {
-  await page.goto(`${base}/onboarding`);
-  await page.getByRole('button', { name: /Choose a plan/i }).first().click();
-  await page.getByText('7,800 KES / month').waitFor({ timeout: 15000 }); // Growth 39,000 × 0.2
+await step('settings: Currency reads "Kenya (KES)"; the plan prices of the billing page are in shillings', async () => {
+  await page.goto(`${base}/billing`); // (onboarding no longer has a plan step: plans are chosen here)
+  await page.getByText('7,800', { exact: true }).first().waitFor({ timeout: 15000 }); // Growth 39,000 × 0.2
   await page.goto(`${base}/settings`);
   await page.locator('#p-currency').waitFor();
   expect(await page.locator('#p-currency').inputValue() === 'Kenya (KES)', `got ${await page.locator('#p-currency').inputValue()}`);

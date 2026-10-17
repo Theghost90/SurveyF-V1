@@ -17,9 +17,10 @@ interface LinkCode { code: string; expiresAt: string; waLink: string }
 /** Settings → Analytics on WhatsApp: link up to 3 phones with a one-time code, remove them, or (Explore) see what it is and where to try it. */
 export function AnalyticsBotCard() {
   const t = useT();
-  const { data, mutate } = useSWR<BotState>('/analytics-bot');
+  const { data, error, mutate } = useSWR<BotState>('/analytics-bot');
   const [code, setCode] = useState<LinkCode | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  if (error) return <Card className="p-6 text-center"><p className="mb-3 text-sm">{errorMessage(error, t)}</p><Button variant="outline" size="sm" onClick={() => mutate()}>{t('common.retry')}</Button></Card>;
   if (!data) return <Skeleton className="h-48" />;
 
   async function createCode() {

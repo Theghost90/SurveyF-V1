@@ -56,7 +56,7 @@ await step('register an owner (Cameroon, Mobile Money available)', async () => {
   await page.click('button[type=submit]');
   await page.waitForURL('**/onboarding**', { timeout: 30000 });
   await page.getByRole('radio', { name: /Businesses/ }).click();
-  await page.getByText(/Saved\. You can change it later/).waitFor({ timeout: 10000 });
+  await page.getByRole('heading', { name: 'Connect WhatsApp' }).waitFor({ timeout: 10000 }); // choosing a segment moves on by itself
 });
 
 await step('a payment the provider has not decided yet is NEVER shown as failed: "still waiting", with the reference and "do not pay again"', async () => {

@@ -95,7 +95,7 @@ await step('contacts: add a contact (consent required) and import a CSV', async 
   await page.getByLabel(/agreed to receive WhatsApp messages/i).check();
   await submit.click();
   await toast('Added');
-  await page.getByRole('button', { name: /import csv/i }).click();
+  await page.getByRole('button', { name: /import csv/i }).first().click();
   const csv = 'nom;téléphone;tags\nPaul K.;677 10 00 02;vip\nAïcha M.;677 10 00 03;\nBad Row;12;\n';
   await page.setInputFiles('#c-file', { name: 'contacts.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
   const imp = page.getByRole('dialog').getByRole('button', { name: /^import contacts$/i });
@@ -418,7 +418,7 @@ await step('geo: a Nigerian visitor sees naira prices, the Nigerian number forma
   await p.click('button[type=submit]');
   await p.waitForURL('**/onboarding**', { timeout: 30000 });
   await p.getByRole('radio', { name: /Institutions/ }).click(); // the required question; without it the app keeps redirecting here
-  await p.getByText(/Saved\. You can change it later/).waitFor({ timeout: 10000 });
+  await p.getByRole('heading', { name: 'Connect WhatsApp' }).waitFor({ timeout: 10000 }); // choosing a segment moves on by itself
   await p.goto(`${base}/settings`);
   await p.locator('#p-currency').waitFor({ timeout: 15000 });
   expect(await p.locator('#p-currency').inputValue() === 'Nigeria (NGN)', `got ${await p.locator('#p-currency').inputValue()}`);
