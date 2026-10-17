@@ -55,7 +55,7 @@ Each of these is covered by an automated test (see `apps/api/tests`).
 
 ### Internal contradictions
 
-9. **Trial → "auto-downgrade to Starter if no payment method"** vs. Starter being a *paid* plan vs. the lifecycle
+9. **(Superseded 2026-10-17, see 3.5: Explore has no trial clock.) Trial → "auto-downgrade to Starter if no payment method"** vs. Starter being a *paid* plan vs. the lifecycle
    `trial → active → past_due → suspended`. Implemented as written (`TRIAL_EXPIRY_POLICY=starter`): the account drops to
    Starter **limits at no charge — effectively a permanent free tier** (3 surveys, 500 responses, 1,000 invitations a month).
    Set `TRIAL_EXPIRY_POLICY=suspend` for a read-only account until paid. **You should decide this** (§3).
@@ -279,6 +279,37 @@ Goal and full register: `docs/PAYMENTS.md`. Decisions that are yours to confirm 
 5. **Reuse windows by method** (card 10 min, Mobile Money 90 s) and **at most 4 payments in flight** per customer. These numbers are judgement calls; they are constants at the top of `services/payments/service.ts`.
 6. **A lower plan can no longer be bought while a higher one is active, through any route** (not only the upgrade button), and a payment that lands as a downgrade after an upgrade goes to `review`.
 7. **Renewal reminders**: WhatsApp 3 days before the end and when overdue, plus an in-app banner. Mobile Money has no automatic debit, so *renewal is always the customer's action*; this is the only prompt they get.
+
+### 3.5 Explore / Activate, WhatsApp-first onboarding, Analytics Bot (built 2026-10-17)
+
+**Pricing model (cash-first).** *Explore* is free, has **no clock** and is capped by usage only: 1 live survey, 5 different people reached for the whole life of
+the account, 25 messages. *Activate* (Starter / Growth / Business) removes the people cap. Annual billing is 11 months charged ("1 month free"). Not built, by
+decision: founding-member pricing, a money-back guarantee, a time-limited trial (revisit once conversion data exists). A lapsed or cancelled paid plan returns to
+Explore, never to a free Starter. `TRIAL_EXPIRY_POLICY` and `TRIAL_DAYS` are gone. Funnel milestones (`FunnelEvent`, once per owner) exist to measure conversion.
+*Risk:* the 5-people cap is a guess; nothing measures it yet.
+
+**Onboarding.** Two required steps: the customer's segment, then *Connect WhatsApp* (can be postponed with "I will do this later"). Anything that needs the number
+(create or publish a survey, add or import contacts, top up, send) answers `409 whatsapp_not_connected`; the web app turns that into one shared "finish connecting
+your WhatsApp Business number" dialog. The rest of the set-up lives in the dashboard's *Getting started* box. *Cost:* until Meta setup is done a newcomer cannot
+build; the dashboard card and "do this later" soften it, but a long Meta verification is a real drop-off risk.
+
+**Is connecting WhatsApp silent?** Not entirely, and it cannot be. With Embedded Signup the customer logs in to Facebook, picks or creates their WhatsApp Business
+account, enters the number and confirms the code Meta sends to it, and approves the permissions; **they must also add a payment method to their WhatsApp
+account** (Meta bills them directly). SurveyFlow then does the rest unattended: token exchange, webhook subscription, and the submission of the message
+templates (now in the background in live mode; approval is asynchronous). Number registration (`/register` with a PIN) is *not* implemented and Embedded Signup
+may need it: only a real run shows. None of this has been exercised against real Meta.
+
+**Analytics Bot** (Starter, Growth, Business; Explore sees it in the builder preview and the simulator with example numbers). It speaks from SurveyFlow's own
+number. The owner proves the phone with a one-time code (`LINK <code>`, 15 minutes, single use, up to 3 phones, `UNLINK`): the phone in the profile is never
+trusted. Commands (FR/EN, any case or accent): STATS, RESULTS, DROP (alias PERQ), NONRESP, STARTED, COMPLETED, SURVEYS, MORE, HELP, MUTE / ALERTS ON. Names are shown with
+**masked numbers**; complete numbers exist only in SurveyFlow (paged list and CSV, which defuses spreadsheet formulas). One shared formatter produces the replies, the
+builder preview and the simulator; a test asserts every bot number equals the dashboard's. Corrections to the original design: STATS adds up (in progress is its own
+row), opted-out people are excluded from every list, "consider making it optional" follows one rule everywhere.
+*RESULTS* shows the top choice **with its share and count** (never the name alone), the average of a rating, the number of comments.
+*Push alerts*: a milestone (100, 500, 1,000, 5,000, 10,000 completed) and a slowdown (no answer for 48 h on a survey with at least 10, once a week). Because the bot
+is on SurveyFlow's number, an alert outside the owner's 24-hour window is an approved template **billed to SurveyFlow, not to the owner**: hence the free in-window
+reply, the cap of 3 templates a day and 15 a month per owner, and the mute switch (typed, or in Settings). The `owner_alert` template is submitted to the platform
+WABA in live mode; until Meta approves it only in-window alerts go out.
 
 ## 4. What is verified and what is not
 

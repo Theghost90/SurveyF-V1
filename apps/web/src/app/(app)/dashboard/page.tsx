@@ -62,7 +62,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      <div className={incomplete ? 'grid gap-6 lg:grid-cols-[1.6fr_1fr]' : 'grid gap-6'}>
+      <div className={incomplete ? 'grid gap-6 lg:grid-cols-[1.6fr_1fr] [&>*]:min-w-0' : 'grid gap-6 [&>*]:min-w-0'}>
         <div className="flex flex-col gap-6">
           <Card>
             <CardHeader className="flex-row items-baseline justify-between gap-3">
@@ -97,9 +97,9 @@ export default function DashboardPage() {
                   {recent.map((s) => (
                     <li key={s.id}>
                       <Link href={s.status === 'draft' ? `/surveys/${s.id}` : `/surveys/${s.id}/analytics`} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3.5 no-underline hover:bg-canvas/60">
-                        <span className="min-w-0 flex-1 truncate font-semibold">{s.title}</span>
+                        <span className="min-w-[10rem] flex-1 font-semibold sm:min-w-0 sm:truncate">{s.title}</span>
                         <SurveyStatusBadge status={s.status} />
-                        <span className="w-40 text-right text-sm text-muted-foreground">{s.sent} {t('dash.sent')} · {s.completed} {t('dash.completed')}</span>
+                        <span className="w-full text-sm text-muted-foreground sm:w-40 sm:text-right">{s.sent} {t('dash.sent')} · {s.completed} {t('dash.completed')}</span>
                       </Link>
                     </li>
                   ))}

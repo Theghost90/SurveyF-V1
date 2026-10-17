@@ -2,7 +2,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 export const Table = ({ className, ...p }: React.TableHTMLAttributes<HTMLTableElement>) => (
-  <div className="w-full overflow-x-auto rounded-2xl border border-line"><table className={cn('w-full min-w-[560px] border-collapse text-sm', className)} {...p} /></div>
+  <div className="relative w-full overflow-x-auto rounded-2xl border border-line"><table className={cn('w-full min-w-[560px] border-collapse text-sm', className)} {...p} /></div>
 );
 export const THead = ({ className, ...p }: React.HTMLAttributes<HTMLTableSectionElement>) => <thead className={cn('bg-canvas text-left text-xs uppercase tracking-wider text-muted-foreground', className)} {...p} />;
 export const TBody = (p: React.HTMLAttributes<HTMLTableSectionElement>) => <tbody {...p} />;

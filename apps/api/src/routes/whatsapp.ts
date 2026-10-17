@@ -51,7 +51,10 @@ export default async function whatsappRoutes(app: FastifyInstance) {
     });
     // Surveys drafted before connecting get attached to the new number.
     await prisma.survey.updateMany({ where: { userId, whatsappAccountId: null }, data: { whatsappAccountId: account.id } });
-    await ensureTemplates(account);
+    // Submitting the 14 templates is ~14 Graph calls: against the real Meta that must not hold the customer's "Connect" click, so it runs behind the
+    // response (the Settings page shows each template's approval status as it lands). The mock is instant, and tests read the templates right away.
+    if (env.waMode === 'live') ensureTemplates(account).catch((err) => app.log.warn({ err: (err as Error).message }, 'template submission failed after connect'));
+    else await ensureTemplates(account);
     await track(userId, 'whatsapp_connected');
     return account;
   }

@@ -69,7 +69,7 @@ apps/api            Fastify API, Prisma schema + migrations, workers (send queue
   src/services/{analytics,exports,gifts,subscription}/
 apps/web            Next.js app (marketing, auth, dashboard, builder, analytics, billing, simulator)
 packages/shared     plans & prices (single source of truth), phone normalisation, WhatsApp message builders
-scripts/            ui-tour.mjs (screenshots), e2e-ui.mjs (23-step browser test), shoot.mjs
+scripts/            ui-tour.mjs (screenshots), e2e-ui.mjs (29-step browser test), e2e-bot.mjs, e2e-responsive.mjs, shoot.mjs
 docs/DECISIONS.md   spec/design deviations, open questions, verification status
 docs/PAYMENTS.md    payment flow vs the PSP diagram, risk register, operations guide, what is not covered
 docs/META_CHECK.md  running the WhatsApp integration against a real Meta test app
@@ -83,6 +83,8 @@ node scripts/e2e-ui.mjs /tmp/e2e # real-browser end-to-end run against the runni
 node scripts/e2e-wallet.mjs /tmp/e2e-wallet # wallet + gift receipt run
 node scripts/e2e-payments.mjs /tmp/e2e-payments # what a customer sees: still waiting, in progress, review, renewal banner
 node scripts/fx-stub.mjs & # fixed exchange rates for offline demos (API: FX_API_URL=http://127.0.0.1:4299/v6/latest/XAF)
+node scripts/e2e-bot.mjs /tmp/e2e-bot # Analytics Bot: link a phone, owner simulator, RESULTS, alerts switch, live preview
+node scripts/e2e-responsive.mjs /tmp/e2e-resp # every screen at 360/390/768/1280 px: no horizontal overflow
 node scripts/e2e-currency.mjs /tmp/e2e-currency # a Kenyan owner: plan, wallet and gifts in shillings
 ```
 
