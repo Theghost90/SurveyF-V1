@@ -67,7 +67,7 @@ function LiveOwner() {
   }
 
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[360px_1fr]" data-testid="sim-owner-live">
+    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[360px_1fr]" data-testid="sim-owner-live">
       <div className="mx-auto w-full max-w-[360px] rounded-[34px] bg-ink p-2.5 shadow-phone">
         <div className="overflow-hidden rounded-[26px] bg-wa-bg">
           <div className="flex items-center gap-2.5 bg-wa-header px-4 py-3 text-white">

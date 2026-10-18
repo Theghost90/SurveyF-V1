@@ -149,7 +149,7 @@ export function AnalyticsDashboard({ id }: { id: string }) {
         {t('a.footnote', { completed: tt.completed, declined: tt.declined, optedOut: tt.optedOut, abandoned: tt.abandoned, progress: tt.inProgress, failed: tt.failed, time: fmtDur(tt.avgCompletionSeconds) })}
       </p>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader><CardTitle>{t('a.funnel')}</CardTitle><CardDescription>{t('a.funnelSub')}</CardDescription></CardHeader>
           <CardContent className="flex flex-col gap-3">
@@ -267,7 +267,7 @@ export function AnalyticsDashboard({ id }: { id: string }) {
       </div>
 
       <h2 className="mb-4 mt-10 text-2xl font-extrabold tracking-[-0.02em]">{t('a.results')}</h2>
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {data.perQuestion.map((q) => (
           <Card key={q.id} className="lg:[&:nth-child(odd):last-child]:col-span-2">
             <CardHeader>

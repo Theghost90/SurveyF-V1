@@ -8,6 +8,10 @@ export const en = {
   'nav.dashboard': 'Dashboard',
   'nav.main': 'Main',
   'nav.language': 'Language',
+  'nav.trialShort': 'Explore free',
+  'nav.openMenu': 'Open menu',
+  'nav.closeMenu': 'Close menu',
+  'nav.menu': 'Menu',
 
   'hero.badge': 'Surveys that live inside WhatsApp',
   'hero.title1': 'Stop guessing what your customers think.',
@@ -151,6 +155,10 @@ export const fr: Record<keyof typeof en, string> = {
   'nav.dashboard': 'Tableau de bord',
   'nav.main': 'Principal',
   'nav.language': 'Langue',
+  'nav.trialShort': 'Explorer',
+  'nav.openMenu': 'Ouvrir le menu',
+  'nav.closeMenu': 'Fermer le menu',
+  'nav.menu': 'Menu',
 
   'hero.badge': 'Des sondages qui vivent dans WhatsApp',
   'hero.title1': 'Arrêtez de deviner ce que pensent vos clients.',

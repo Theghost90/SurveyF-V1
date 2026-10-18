@@ -138,9 +138,9 @@ export function SendPanel({ surveyId, status, language, onPublish, publishing, d
                 {target === 0 && !empty && audience ? t('b.send.nobody') : remaining !== null && t('b.send.quota', { n: target, remaining: num(remaining, locale) })}
               </p>
               {overCap ? (
-                <Link href={`/billing?plan=${suggested}`} data-testid="send-activate" className={buttonVariants({ variant: 'brand', size: 'lg', className: 'h-12' })}>{t('b.send.exploreCta')}</Link>
+                <Link href={`/billing?plan=${suggested}`} data-testid="send-activate" className={buttonVariants({ variant: 'brand', size: 'lg', className: 'h-auto min-h-12 w-full whitespace-normal py-2.5 text-center sm:w-auto' })}>{t('b.send.exploreCta')}</Link>
               ) : (
-                <Button size="lg" onClick={send} loading={busy} disabled={!!waProblem || dirty || target === 0 || (schedule && !when)} className="h-12">
+                <Button size="lg" onClick={send} loading={busy} disabled={!!waProblem || dirty || target === 0 || (schedule && !when)} className="h-auto min-h-12 w-full whitespace-normal py-2.5 text-center sm:w-auto">
                   <Send className="h-4 w-4" aria-hidden />{t('b.send.cta')}
                 </Button>
               )}

@@ -27,7 +27,8 @@
     --radius: 0.75rem;
   }
   * { @apply border-border; }
-  html { -webkit-text-size-adjust: 100%; }
+  /* the menu bar is sticky: in-page anchors (#how, #gifts…) must stop below it, not under it */
+  html { -webkit-text-size-adjust: 100%; scroll-padding-top: 5rem; }
   body {
     @apply bg-canvas font-sans text-ink antialiased;
     font-feature-settings: 'ss01';

@@ -16,6 +16,7 @@ export function MarketingFooter() {
             <span className="font-bold">{t('footer.product')}</span>
             <Link className="text-body hover:text-leaf" href="/#how">{t('nav.how')}</Link>
             <Link className="text-body hover:text-leaf" href="/#gifts">{t('nav.gifts')}</Link>
+            <Link className="text-body hover:text-leaf" href="/#agencies">{t('nav.agencies')}</Link>
             <Link className="text-body hover:text-leaf" href="/pricing">{t('nav.pricing')}</Link>
           </div>
           <div className="flex flex-col gap-2">

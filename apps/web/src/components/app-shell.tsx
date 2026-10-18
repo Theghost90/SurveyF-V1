@@ -35,9 +35,10 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
     { href: '/dashboard', label: t('app.nav.dashboard') },
     { href: '/surveys', label: t('app.nav.surveys') },
     { href: '/contacts', label: t('app.nav.contacts') },
-    { href: '/settings', label: t('app.nav.settings') },
     ...(showSimulator ? [{ href: '/simulator', label: t('app.nav.simulator') }] : []),
   ];
+
+  const inAccount = ['/settings', '/billing'].some((h) => pathname === h || pathname.startsWith(h + '/'));
 
   const sub = account?.subscription;
   const banner =
@@ -77,17 +78,28 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
             )}
             <LanguageToggle />
             <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-2 rounded-xl border border-line-2 bg-white py-1.5 pl-1.5 pr-1.5 text-sm font-semibold sm:pr-3" aria-label={t('app.account')}>
+              <DropdownMenuTrigger className={cn('flex min-h-[44px] items-center gap-2 rounded-xl border bg-white py-1.5 pl-1.5 pr-1.5 text-sm font-semibold sm:pr-3', inAccount ? 'border-ink' : 'border-line-2')} aria-label={t('app.account')}>
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-sm font-bold text-ink">{(account?.user.name ?? '?').slice(0, 1).toUpperCase()}</span>
                 <span className="hidden max-w-[120px] truncate sm:inline">{account?.user.businessName ?? <Skeleton className="h-4 w-20" />}</span>
                 <ChevronDown className="hidden h-4 w-4 opacity-60 sm:block" aria-hidden />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>{account?.user.email}</DropdownMenuLabel>
-                <DropdownMenuItem asChild><Link href="/billing"><CreditCard className="h-4 w-4" aria-hidden />{t('app.nav.billing')}</Link></DropdownMenuItem>
-                <DropdownMenuItem asChild><Link href="/settings"><Settings className="h-4 w-4" aria-hidden />{t('app.nav.settings')}</Link></DropdownMenuItem>
+              {/* Billing and Settings live here only (not in the menu bar). The plan and the wallet balance show in the bar from 640 px; on a phone they show here. */}
+              <DropdownMenuContent align="end" className="min-w-[220px]">
+                <DropdownMenuLabel className="sm:hidden">{account?.user.businessName}</DropdownMenuLabel>
+                <DropdownMenuLabel className="font-normal text-muted-foreground">{account?.user.email}</DropdownMenuLabel>
+                <DropdownMenuItem asChild className="min-h-[44px]">
+                  <Link href="/billing"><CreditCard className="h-4 w-4" aria-hidden />{t('app.nav.billing')}
+                    {account && <Badge className="ml-auto sm:hidden" variant={account.plan.key === 'trial' ? 'amber' : 'default'}>{t(`plan.${account.plan.key as 'trial'}`)}</Badge>}
+                  </Link>
+                </DropdownMenuItem>
+                {account?.plan.features.giftAutomation && wallet && (
+                  <DropdownMenuItem asChild className="min-h-[44px] sm:hidden">
+                    <Link href="/billing#wallet"><Wallet className="h-4 w-4" aria-hidden />{t('w.title')}<Badge className="ml-auto" variant={wallet.balance === 0 ? 'amber' : 'neutral'}>{num(wallet.balance, locale)}</Badge></Link>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem asChild className="min-h-[44px]"><Link href="/settings"><Settings className="h-4 w-4" aria-hidden />{t('app.nav.settings')}</Link></DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => void signOut({ callbackUrl: '/' })}><LogOut className="h-4 w-4" aria-hidden />{t('app.signout')}</DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[44px]" onSelect={() => void signOut({ callbackUrl: '/' })}><LogOut className="h-4 w-4" aria-hidden />{t('app.signout')}</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

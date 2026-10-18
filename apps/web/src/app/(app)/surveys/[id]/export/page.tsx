@@ -68,7 +68,7 @@ export default function ExportPage({ params }: { params: { id: string } }) {
       <Link href={`/surveys/${id}/analytics`} className="mb-4 flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-ink"><ArrowLeft className="h-4 w-4" aria-hidden />{t('x.back')}</Link>
       <PageHeader title={t('x.title')} sub={survey?.title} />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader><CardTitle>{t('x.download')}</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-5">
