@@ -1,4 +1,11 @@
+import { existsSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
+
+/** PDF tests need a real Chrome. Honour the developer's own path, else the sandbox's Chromium if it exists, else let Puppeteer use the browser it downloaded. */
+function chromePath(): string {
+  const linuxSandbox = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  return process.env.PUPPETEER_EXECUTABLE_PATH || (existsSync(linuxSandbox) ? linuxSandbox : '');
+}
 
 export default defineConfig({
   test: {
@@ -23,7 +30,7 @@ export default defineConfig({
       GOOGLE_CLIENT_ID: 'gid',
       GOOGLE_CLIENT_SECRET: 'gsecret',
       GOOGLE_REDIRECT_URI: 'http://localhost:4222/integrations/google/callback',
-      PUPPETEER_EXECUTABLE_PATH: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+      PUPPETEER_EXECUTABLE_PATH: chromePath(),
       // Hermetic: a developer's own .env or shell must never leak into the tests (a real INTERNAL_API_SECRET makes every call 403,
       // real PSP keys change which providers exist). Empty = "not configured".
       INTERNAL_API_SECRET: '',
