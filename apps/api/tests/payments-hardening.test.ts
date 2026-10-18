@@ -1,4 +1,5 @@
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type SpawnSyncOptions } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { Prisma } from '@prisma/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
@@ -55,6 +56,11 @@ const txOf = (id: string) => prisma.paymentTransaction.findUniqueOrThrow({ where
 const quiet = { warn: () => undefined };
 
 // ════════════════════════════════════════════════════════════════ MINOR ═══
+
+// `npx` is `npx.cmd` on Windows (needs a shell) and file URLs must be converted, not `.pathname`d ("/C:/..." is not a directory).
+const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
+const runNpx = (args: string[], opts: SpawnSyncOptions) => spawnSync('npx', args, { shell: process.platform === 'win32', cwd: REPO_ROOT, encoding: 'utf8', ...opts });
+const OS_ENV = Object.fromEntries(['PATH', 'Path', 'HOME', 'USERPROFILE', 'SystemRoot', 'ComSpec', 'PATHEXT', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP'].filter((k) => process.env[k]).map((k) => [k, process.env[k] as string]));
 
 describe('MINOR: what the customer sees and what we log', () => {
   it('m1 the browser gets a safe failure category, never the provider\'s own words', async () => {
@@ -321,8 +327,8 @@ describe('MAJOR: a production API that cannot take a payment does not start', ()
     WHATSAPP_MODE: 'live', WHATSAPP_ACCESS_TOKEN: 'x', META_APP_SECRET: 'x', GIFT_PROVIDER: 'campay', INTERNAL_API_SECRET: 'i'.repeat(40), PUBLIC_API_URL: 'https://api.example.com',
   };
   const boot = (extra: Record<string, string>) => {
-    const r = spawnSync('npx', ['tsx', 'apps/api/src/config/env.ts'], { cwd: new URL('../../..', import.meta.url).pathname, env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...base, ...extra }, encoding: 'utf8' });
-    return { code: r.status, err: r.stderr + r.stdout };
+    const r = runNpx(['tsx', 'apps/api/src/config/env.ts'], { env: { ...OS_ENV, ...base, ...extra } });
+    return { code: r.status, err: `${r.stderr ?? ''}${r.stdout ?? ''}${r.error ?? ''}` };
   };
   it('M9 refuses with no provider, starts with one (and warns when its webhook secret is missing)', () => {
     const none = boot({});
@@ -685,8 +691,7 @@ describe('CRITICAL C4: money we received but cannot simply apply is never lost a
 });
 
 describe('CRITICAL: the operator tool for payments in review', () => {
-  const root = new URL('../../..', import.meta.url).pathname;
-  const run = (...args: string[]) => spawnSync('npx', ['tsx', 'scripts/payments-review.mts', ...args], { cwd: root, env: process.env, encoding: 'utf8' });
+  const run = (...args: string[]) => runNpx(['tsx', 'scripts/payments-review.mts', ...args], { env: process.env });
 
   it('lists a payment in review, needs a note, credits it exactly once, and refuses to touch anything that is not in review', async () => {
     const o = await registerOwner(app);
