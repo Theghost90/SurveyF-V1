@@ -4,10 +4,11 @@
 // Postgres is touched directly for two things no browser can cause: a payment parked in `review`, and a plan that is about to end.
 // Usage: node scripts/e2e-payments.mjs [outDir] [baseUrl]      (DATABASE_URL: the API's database; default = the dev database)
 import { chromium } from 'playwright-core';
+import { chromePath } from './lib/browser-path.mjs';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 
-const exe = process.env.PUPPETEER_EXECUTABLE_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const exe = await chromePath();
 const [out = '/tmp/e2e-payments', base = 'http://localhost:4222'] = process.argv.slice(2);
 const db = process.env.DATABASE_URL || 'postgresql://surveyflow:surveyflow@127.0.0.1:5432/surveyflow';
 mkdirSync(out, { recursive: true });

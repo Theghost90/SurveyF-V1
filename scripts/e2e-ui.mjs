@@ -1,9 +1,10 @@
 // Real-browser end-to-end test against the running app (web :4222 + API :4223, mock WhatsApp / mock PSP).
 // Usage: node scripts/e2e-ui.mjs [outDir] [baseUrl]
 import { chromium } from 'playwright-core';
+import { chromePath } from './lib/browser-path.mjs';
 import { mkdirSync, statSync } from 'node:fs';
 
-const exe = process.env.PUPPETEER_EXECUTABLE_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const exe = await chromePath();
 const [out = '/tmp/e2e', base = 'http://localhost:4222'] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
 

@@ -2,9 +2,10 @@
 // Starts from an EMPTY wallet and follows the money: warn → participant finishes unpaid → top up → release → delivered.
 // Usage: node scripts/e2e-wallet.mjs [outDir] [baseUrl]
 import { chromium } from 'playwright-core';
+import { chromePath } from './lib/browser-path.mjs';
 import { mkdirSync } from 'node:fs';
 
-const exe = process.env.PUPPETEER_EXECUTABLE_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const exe = await chromePath();
 const [out = '/tmp/e2e-wallet', base = 'http://localhost:4222'] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
 

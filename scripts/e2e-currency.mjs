@@ -3,9 +3,10 @@
 // Start first:  node scripts/fx-stub.mjs   and the API with   FX_API_URL=http://127.0.0.1:4299/v6/latest/XAF
 // Usage: node scripts/e2e-currency.mjs [outDir] [baseUrl]
 import { chromium } from 'playwright-core';
+import { chromePath } from './lib/browser-path.mjs';
 import { mkdirSync } from 'node:fs';
 
-const exe = process.env.PUPPETEER_EXECUTABLE_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const exe = await chromePath();
 const [out = '/tmp/e2e-currency', base = 'http://localhost:4222'] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
 

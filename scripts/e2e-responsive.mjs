@@ -1,9 +1,10 @@
 // Every main screen at phone (360, 390), small tablet (768) and laptop (1280) widths: no horizontal scroll, no element sticking out of the viewport,
 // no tap target smaller than 32px in the header. Logged in as the seeded demo owner (npm run db:seed). Usage: node scripts/e2e-responsive.mjs [outDir] [baseUrl]
 import { chromium } from 'playwright-core';
+import { chromePath } from './lib/browser-path.mjs';
 import { mkdirSync } from 'node:fs';
 
-const exe = process.env.PUPPETEER_EXECUTABLE_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const exe = await chromePath();
 const [out = '/tmp/e2e-resp', base = 'http://localhost:4222'] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
 const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });

@@ -1,8 +1,9 @@
 // Usage: node scripts/shoot.mjs <outDir> <name=url[@WxH][+full]>...   (uses the preinstalled Chromium)
 import { chromium } from 'playwright-core';
+import { chromePath } from './lib/browser-path.mjs';
 import { mkdirSync } from 'node:fs';
 
-const exe = process.env.PUPPETEER_EXECUTABLE_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const exe = await chromePath();
 const [out, ...jobs] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
 const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });

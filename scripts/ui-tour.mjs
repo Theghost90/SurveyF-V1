@@ -1,9 +1,10 @@
 // Logs in through the real form and screenshots every main screen. Reports console errors and failed requests.
 // Usage: node scripts/ui-tour.mjs <outDir> [baseUrl] [locale]
 import { chromium } from 'playwright-core';
+import { chromePath } from './lib/browser-path.mjs';
 import { mkdirSync } from 'node:fs';
 
-const exe = process.env.PUPPETEER_EXECUTABLE_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const exe = await chromePath();
 const [out, base = 'http://localhost:4222', locale = 'en-GB'] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
 const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });
