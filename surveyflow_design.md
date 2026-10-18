@@ -6,7 +6,7 @@ Scanned from the implemented web app (`apps/web`: Next.js 14, Tailwind 3, Radix 
 - **Calm, trustworthy, WhatsApp-adjacent.** Deep green ink on a pale green-grey canvas, one bright green for the primary positive action, amber for caution.
 - **Low effort for the owner.** One clear next step per screen; empty states say what to do and link to it.
 - **Never alarm about money.** A pending or under-review payment is never styled or worded as a failure.
-- **Mobile first, from 360 px.** No horizontal page scroll anywhere.
+- **Mobile first, from 320 px.** No horizontal page scroll anywhere.
 - **Bilingual.** Every string exists in French and English; layouts must tolerate French being about 20 percent longer.
 
 ## 2. Colour tokens
@@ -74,11 +74,12 @@ Bars use, in order: `#0F7A40, #2BD46E, #E9A23B, #4CC584, #0B2B22, #9FD9B4, #6B4A
 - **Dark mode:** `darkMode: 'class'` is configured but **no dark theme is defined**. Treat the product as light-only.
 
 ## 5. Layout and navigation
-- **App shell:** sticky white header with logo, main nav (Dashboard, Surveys, Contacts, Settings, Simulator), plan badge, wallet badge (when gifts are available), FR/EN toggle, account menu (Billing, Settings, Sign out).
-- **Nav on phones (below 640 px):** a fixed bottom tab bar with five tabs (Home, Surveys, Contacts, Simulator, More; Settings takes the Simulator slot where there is no simulator). The current tab has a mint pill behind its icon. "More" opens a bottom sheet: Billing & wallet (plan badge), Settings, Analytics on WhatsApp, Language, Sign out. The header keeps only logo, language toggle and account button on one row. Hidden during onboarding. From 640 px the text menu returns to the header.
+- **Public site menu bar** (`components/marketing/header.tsx`, `mobile-menu.tsx`): sticky at the top at every width (`sticky top-0 z-40`, canvas at 95 percent with a blur and a bottom `line` border); in-page anchors stop below it (`scroll-padding-top: 5rem`). From 768 px: logo with wordmark, text links (How it works, Gifts, For agencies & NGOs, Pricing), language switch, Sign in, "Explore free". From 640 to 767 px the same row, compact: the wordmark and the longest link give way (that link stays in the footer). Below 640 px: one row of logo, language switch, a short "Explore free" button ("Explorer" in French) and a 44 px hamburger; the hamburger opens a side menu from the right (86 percent of the width, at most 340 px, full height, overlay behind it) with the four links, Sign in, a full-width "Explore free" button and the Privacy and Terms links; it closes on a link, the X button, the overlay or Escape. Below 480 px the wordmark is hidden (the mark stays) so that the language switch and the call to action always fit; below 360 px the switch and the button use tighter padding. The signed-in variant shows "Dashboard" instead of Sign in and "Explore free".
+- **App shell** (`components/app-shell.tsx`): sticky white header with logo, main nav (Dashboard, Surveys, Contacts, and Simulator where it exists), plan badge and wallet badge (from 640 px; when gifts are available), FR/EN toggle, account menu. **Settings is not in the main nav**: Billing and Settings are reachable only from the account menu (items 44 px high; on phones the menu also shows the business name, the plan badge on the Billing row and the gift wallet balance). The account button gets a dark border while Settings or Billing is open.
+- **Nav on phones (below 640 px):** a fixed bottom tab bar with Home, Surveys, Contacts and, where it exists, Simulator (three or four tabs, 48 px high; the current tab has a mint pill behind its icon). There is no "More" sheet: Billing, Settings and Sign out are in the account menu at the top, as on larger screens, and Analytics on WhatsApp is a tab of Settings. The header keeps logo, language toggle and a 44 px account button on one row. The tab bar is hidden during onboarding and from 640 px.
 - **Banners** under the header: info (mint) for Explore usage, warn (amber) for renewal, danger (red) for suspension; each has one action button on the right.
 - **Page header:** title, optional one-line subtitle, actions on the right (wraps below on phones).
-- **Breakpoints:** Tailwind defaults (`sm` 640, `md` 768, `lg` 1024); verified widths 360, 390, 768, 1280.
+- **Breakpoints:** Tailwind defaults (`sm` 640, `md` 768, `lg` 1024); extra thresholds `min-[360px]` and `min-[480px]` in the public menu bar only. Verified widths: 320, 360, 390, 430, 600, 639, 640, 768, 1024, 1280, 1440, 1920.
 - **Rule:** tables live inside a `relative overflow-x-auto` wrapper (an absolutely positioned screen-reader-only element inside a table once leaked a page-wide scrollbar). Grid children use `min-w-0`.
 
 ## 6. Components
@@ -152,11 +153,13 @@ Dark bezel phone (max width 330 to 360 px), green header with avatar and name, w
 - WCAG AA contrast on the palette (ink on canvas and white; ink on brand green). Amber-ink on amber-soft for warnings. Do not put white text on `brand`.
 - Visible focus ring everywhere; every icon button, switch, tab and radio has an accessible name; status and error regions use `role="status"` / `role="alert"`; live chat regions are `aria-live="polite"`.
 - Keyboard: drag-and-drop reordering has a keyboard path (focus handle, Space, arrows, Space); dialogs trap and restore focus.
-- Targets: 48 px tab bar and More-sheet rows, 44 px primary buttons, at least 32 px for chips and small controls.
+- Targets: 48 px tab bar, 44 px hamburger, account button and account-menu rows, 44 px primary buttons, at least 32 px for chips and small controls.
 - Meaning never by colour alone (badges carry text).
 
 ## 11. Responsive rules
-- 360 px is the minimum; no horizontal page scroll (checked on 16 screens at 360, 390, 768, 1280).
+- 320 px is the minimum; no horizontal page scroll (checked on the 16 app screens at 320, 360, 390, 600, 768, 1024, 1280 and 1920, and on the six public and sign-in screens at 12 widths from 320 to 1920 px).
+- The menu bar of both the public site and the app stays at the top while scrolling, at every width; below 640 px it never wraps to a second row.
+- Grids that become two columns at a breakpoint declare `grid-cols-1` below it (a bare `grid` lets a long unbreakable item widen the column past the screen); a primary button with a long label may wrap its text on phones and is full width there.
 - Rows that mix a long title with metadata stack on phones (title on its own line, details below).
 - Below 640 px the surveys list is a list of cards (status, title, date, sent, completed, completion); the table returns from 640 px.
 - Dialogs and the phone preview scale down; preview max width 330 px.
