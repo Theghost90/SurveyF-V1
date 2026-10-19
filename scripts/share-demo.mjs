@@ -30,6 +30,21 @@ const die = (m) => { console.error(`\n✗ ${m}\n`); process.exit(1); };
 // NODE_ENV is NOT taken from .env here: a build started with NODE_ENV=development fails ("<Html> should not be imported outside of pages/_document").
 const run = (cmd, a, env = {}) => { const { NODE_ENV: _ignored, ...fromFile } = fileEnv; const base = { ...fromFile, ...process.env }; if (base.NODE_ENV === 'development') delete base.NODE_ENV; return spawnSync(cmd, a, { cwd: root, stdio: 'inherit', shell: win, env: { ...base, ...env } }); };
 
+
+/** cloudflared on the PATH, else where the Windows installer / winget / Homebrew put it (a terminal opened before the install does not have it on its PATH yet). */
+function findCloudflared() {
+  if (spawnSync('cloudflared', ['--version'], { shell: win, stdio: 'ignore' }).status === 0) return 'cloudflared';
+  const pf = process.env.ProgramFiles, pf86 = process.env['ProgramFiles(x86)'], la = process.env.LOCALAPPDATA;
+  const candidates = [
+    pf86 && path.join(pf86, 'cloudflared', 'cloudflared.exe'),
+    pf && path.join(pf, 'cloudflared', 'cloudflared.exe'),
+    la && path.join(la, 'Microsoft', 'WinGet', 'Links', 'cloudflared.exe'),
+    la && path.join(la, 'Programs', 'cloudflared', 'cloudflared.exe'),
+    '/opt/homebrew/bin/cloudflared', '/usr/local/bin/cloudflared', '/usr/bin/cloudflared',
+  ].filter(Boolean);
+  return candidates.find((c) => existsSync(c)) ?? null;
+}
+
 // ---- 1. prerequisites ----
 if (Number(process.versions.node.split('.')[0]) < 20) die(`Node 20 or newer is required (you have ${process.versions.node}).`);
 const envFile = path.join(root, '.env');
@@ -98,12 +113,14 @@ const start = (label, cmd, a, opts) => {
 // ---- 6. the public address ----
 let publicUrl = opt('public-url')?.replace(/\/$/, '');
 if (!publicUrl) {
-  if (spawnSync('cloudflared', ['--version'], { shell: win, stdio: 'ignore' }).status !== 0) {
-    die('cloudflared (the free tunnel tool) is not installed.\n  Windows:  winget install --id Cloudflare.cloudflared   (then close and reopen this terminal)\n  macOS:    brew install cloudflared\n  Or use your own address:  npm run share -- --public-url=https://your-address');
+  const cloudflared = findCloudflared();
+  if (!cloudflared) {
+    die('cloudflared (the free tunnel tool) was not found, neither on the terminal\'s PATH nor in its usual install folders.\n  Windows:  winget install --id Cloudflare.cloudflared   (then close ALL terminal windows and open a new one)\n  macOS:    brew install cloudflared\n  Or use your own address:  npm run share -- --public-url=https://your-address');
   }
+  say(`Using ${cloudflared}`);
   say('Opening the public address...');
   publicUrl = await new Promise((resolve, reject) => {
-    const t = start('tunnel', 'cloudflared', ['tunnel', '--no-autoupdate', '--url', `http://127.0.0.1:${WEB_PORT}`], { quiet: true });
+    const t = start('tunnel', cloudflared, ['tunnel', '--no-autoupdate', '--url', `http://127.0.0.1:${WEB_PORT}`], { quiet: true });
     const timer = setTimeout(() => reject(new Error('timeout')), 60_000);
     const look = (d) => { const m = String(d).match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/); if (m) { clearTimeout(timer); resolve(m[0]); } };
     t.stdout.on('data', look); t.stderr.on('data', look);
