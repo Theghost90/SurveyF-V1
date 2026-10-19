@@ -63,3 +63,24 @@ I could test everything except the real tunnel tool: this was checked on Linux w
 ## Later: a permanent test site
 
 This is the quickest way, and it depends on your computer. A permanent site (a small hosted server with its own address) is the right next step once the real WhatsApp check is done, and needs accounts only you can create. The repository has deployment templates (`apps/api/Dockerfile`, `deploy/`) that have **not** been run yet.
+
+## Cheat sheet: starting again, and after a change
+
+Always stop what is running first (Ctrl+C in its window). `npm run dev` and `npm run share` use the same ports: never run both at once.
+
+| I want to... | Command (Git Bash, repo folder) |
+|---|---|
+| Use it **only on my computer** (fast, refreshes by itself) | `docker compose up -d` then `npm run dev`, open http://localhost:4222 |
+| **Share it** again, code unchanged since the last build | `npm run share -- --skip-build` |
+| Share it with a **fresh demo account** (new random password) | `npm run share -- --skip-build --seed` |
+| Share it after **any code change** (rebuilds first) | `npm run share` |
+
+| Kind of change | Local (`npm run dev`) | Shared (`npm run share`) |
+|---|---|---|
+| **Minor**: wording, colours, layout, one screen | Save the file, refresh the browser. Nothing else. | Stop, then `npm run share` (it rebuilds; a few minutes). |
+| **Major**: API logic, a new package, anything shared by several screens | `git diff --name-only ORIG_HEAD HEAD` after a pull: if `package.json` or `package-lock.json` is listed, stop everything and run `npm ci`. Then `npm test`, restart `npm run dev`. | Same checks, then `npm run share`. |
+| **Critical**: the database (`prisma/schema.prisma`), payments, sign-in, secrets or `.env` | **First a backup:** `docker compose exec -T postgres pg_dump -U surveyflow surveyflow > backup.sql`. Then `npm ci` if packages changed, `npm run db:push` (never accept a "data loss" warning without asking), `npm test`, `npm run typecheck`, restart. | Same, then `npm run share` (it runs `db:push` itself). Try the app yourself before sending the address. |
+
+After pulling from me: `git pull origin claude/happy-cray-zqvzf1`, then `git diff --name-only ORIG_HEAD HEAD` shows what changed: `package*.json` means `npm ci`; `schema.prisma` means treat it as critical; otherwise it is minor or major as above.
+
+`docker compose down -v` erases ALL local data (accounts, surveys): use it only to start from zero.
