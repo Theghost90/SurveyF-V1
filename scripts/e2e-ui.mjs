@@ -88,7 +88,7 @@ await step('onboarding 2/2: connect the simulated WhatsApp number, then go to th
 
 await step('contacts: add a contact (consent required) and import a CSV', async () => {
   await page.goto(`${base}/contacts`);
-  await page.getByRole('button', { name: 'Add contact', exact: true }).click();
+  await page.getByRole('button', { name: 'Add contact', exact: true }).first().click(); // .first(): the empty state offers a second button once the list has loaded
   await page.fill('#c-name', 'Marie N.');
   await page.fill('#c-phone', '+237 677 10 00 01');
   const submit = page.getByRole('dialog').getByRole('button', { name: /^add$/i });

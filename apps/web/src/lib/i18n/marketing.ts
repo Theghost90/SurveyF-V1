@@ -12,6 +12,7 @@ export const en = {
   'nav.openMenu': 'Open menu',
   'nav.closeMenu': 'Close menu',
   'nav.menu': 'Menu',
+  'demo.notice': 'Test environment: WhatsApp messages, payments and gifts are simulated. Please do not enter real personal data.',
 
   'hero.badge': 'Surveys that live inside WhatsApp',
   'hero.title1': 'Stop guessing what your customers think.',
@@ -159,6 +160,7 @@ export const fr: Record<keyof typeof en, string> = {
   'nav.openMenu': 'Ouvrir le menu',
   'nav.closeMenu': 'Fermer le menu',
   'nav.menu': 'Menu',
+  'demo.notice': 'Environnement de test : les messages WhatsApp, les paiements et les cadeaux sont simulés. N\'entrez aucune donnée personnelle réelle.',
 
   'hero.badge': 'Des sondages qui vivent dans WhatsApp',
   'hero.title1': 'Arrêtez de deviner ce que pensent vos clients.',

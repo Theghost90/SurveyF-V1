@@ -19,6 +19,8 @@ PDF / Excel / Google Sheets, reward participants with airtime, Mobile Money, cod
 | Payments | Notch Pay · CinetPay · Campay · CamerPay · PayUnit · Flutterwave behind one adapter interface, picked silently per payment (cheapest first, with failover) + a demo "mock" PSP |
 | Design | Tokens and layouts from the "SurveyFlow Hero & Pricing" artifact — **Hero A** and **Pricing A** |
 
+**Letting someone test it over the internet:** `npm run share`, see `docs/SHARE_DEMO.md` (and give the tester `docs/TESTER_GUIDE.md`).
+
 ## Run it locally (demo mode, no external accounts needed)
 
 ```bash

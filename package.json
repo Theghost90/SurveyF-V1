@@ -17,7 +17,8 @@
     "db:push": "npm run db:push -w @surveyflow/api",
     "db:seed": "npm run db:seed -w @surveyflow/api",
     "test": "npm run test -w @surveyflow/shared && npm run test -w @surveyflow/api",
-    "typecheck": "npm run typecheck -w @surveyflow/shared && npm run typecheck -w @surveyflow/api && npm run typecheck -w @surveyflow/web"
+    "typecheck": "npm run typecheck -w @surveyflow/shared && npm run typecheck -w @surveyflow/api && npm run typecheck -w @surveyflow/web",
+    "share": "node scripts/share-demo.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",

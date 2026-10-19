@@ -1,0 +1,63 @@
+# Letting someone test SurveyFlow over the internet
+
+**One command, from your own computer:** `npm run share`. It starts the app the way a server would, opens a public https address that points only at the website, and keeps everything simulated. The tester opens the address in any browser (phone or computer); you keep control and stop it with Ctrl+C.
+
+## Which version is shared
+
+The one **in your folder when you run the command**. Always run `git pull origin claude/happy-cray-zqvzf1` first so that it is the latest pushed version (the Git branch is the reference; your local copy is the same code as long as you have pulled and have no uncommitted edits: check with `git status`). Never share a copy you changed by hand and did not commit: nobody could reproduce what the tester saw.
+
+## What you need (once)
+
+1. Docker Desktop running (the database and cache), Node 20+, the repo installed (`npm ci`), a `.env` file (copy of `.env.example`).
+2. **cloudflared**, the free tunnel tool (no account): `winget install --id Cloudflare.cloudflared`, then close and reopen the terminal.
+
+## Each time
+
+```
+git pull origin claude/happy-cray-zqvzf1
+npm ci
+npm run share -- --seed
+```
+
+- First run: a few minutes (the app is built). Later runs with unchanged code: add `--skip-build`.
+- `--seed` creates the demo account (sample surveys, contacts and results) with a **random password printed at the end**. Leave it out if the tester should start from a blank account. Seeding again resets the demo account.
+- The command prints the **address for the tester** (`https://something.trycloudflare.com`). Send them that address and `docs/TESTER_GUIDE.md`.
+- Keep the window open, the computer awake (Windows: Settings, Power, never sleep while plugged in) and connected. The address **changes every time** you start it.
+- Stop: Ctrl+C. The address stops working at once. Technical log: `share-demo.log` in the repo folder.
+
+Other options: `--no-docker` (Postgres/Redis already running), `--public-url=https://...` (use your own tunnel or server address), `--verbose` (show the server log).
+
+## What is and is not exposed
+
+| | |
+|---|---|
+| Exposed to anyone who has the address | The website (home, sign-up, dashboard). Anyone with the address can create an account. |
+| Not exposed | The API (private, on your computer, answers only the website), the database, your files. |
+| Simulated, whatever your `.env` contains | WhatsApp (nothing is sent to a real number), payments (a demo checkout page, no money), gifts, the Meta and payment-provider keys (ignored). |
+
+Rules of thumb: the address is long and random, but treat it like a password: send it only to the tester. Tell the tester **not to enter real personal data** (a notice says so on every page). Do not leave it running unattended. Sign-up has no email verification and no CAPTCHA yet (see the security review), which is acceptable for a short, private, simulated test and is **not** acceptable for a public launch.
+
+## What the tester can and cannot judge
+
+Can: the whole product flow, the screens on phone and computer, French and English, the wording, the plan and price display (prices follow the tester's country: a visitor in Nigeria or Kenya sees local prices, using a live exchange-rate source), the WhatsApp experience through the **Simulator** (it plays the participant's phone and the owner's analytics bot).
+
+Cannot: anything involving the real WhatsApp, a real phone, a real payment provider or Google Sheets (not configured here). Those are the next stage (see `docs/META_CHECK.md`).
+
+## If something goes wrong
+
+| Message or symptom | What to do |
+|---|---|
+| "Something is already running on port 4222/4223" | Close the window where `npm run dev` runs (Ctrl+C), run again. |
+| "cloudflared is not installed" | `winget install --id Cloudflare.cloudflared`, reopen the terminal. |
+| Docker error | Start Docker Desktop, wait until it says running, run again. |
+| The address does not open for the tester | Wait a minute and retry; check the computer is awake and online; restart the command (new address). |
+| The tester sees an error page | Look at `share-demo.log`, send it to me with the time. |
+| Reset everything | Ctrl+C, then `docker compose down -v` (deletes ALL local data), then run again. |
+
+## Not verified here
+
+I could test everything except the real tunnel tool: this was checked on Linux with a local forwarder standing in for the public address (the production build, the sign-up, all 29 browser steps, the private API and the secret gate). The first real run on Windows with cloudflared may need a small fix: send me the output if it stops.
+
+## Later: a permanent test site
+
+This is the quickest way, and it depends on your computer. A permanent site (a small hosted server with its own address) is the right next step once the real WhatsApp check is done, and needs accounts only you can create. The repository has deployment templates (`apps/api/Dockerfile`, `deploy/`) that have **not** been run yet.

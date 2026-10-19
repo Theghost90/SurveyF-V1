@@ -20,6 +20,8 @@ if (env.isProd) {
 
 // Small deterministic PRNG so the demo looks the same every time.
 let s = 20261013;
+/** A shared test instance seeds the demo account with a password of its own (SEED_DEMO_PASSWORD); the public default is for local use only. */
+const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD || 'demo-password-123';
 const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
 const pick = <T,>(a: T[]) => a[Math.floor(rnd() * a.length)]!;
 const chance = (p: number) => rnd() < p;
@@ -40,7 +42,7 @@ async function main() {
   const now = new Date();
   const user = await prisma.user.create({
     data: {
-      email, passwordHash: await bcrypt.hash('demo-password-123', 12), name: 'Jean-Paul Nkou', businessName: 'Boulangerie Akwa',
+      email, passwordHash: await bcrypt.hash(DEMO_PASSWORD, 12), name: 'Jean-Paul Nkou', businessName: 'Boulangerie Akwa',
       phone: '+237677000000', plan: 'growth', country: 'CM', locale: 'en', preferredCurrency: 'XAF', segment: 'business', onboardingDoneAt: now,
       subscription: { create: { plan: 'growth', status: 'active', currentPeriodStart: hoursAgo(24 * 10), currentPeriodEnd: new Date(now.getTime() + 20 * 86_400_000), amountFCFA: 39_000, paymentMethod: 'mobile_money', pspProvider: 'mock', interval: 'monthly' } },
     },
@@ -160,7 +162,7 @@ async function main() {
   const sub = await prisma.subscription.findUniqueOrThrow({ where: { userId: user.id } });
   await prisma.paymentTransaction.create({ data: { subscriptionId: sub.id, userId: user.id, pspProvider: 'mock', amount: 39_000, currency: 'XAF', status: 'success', reference: 'sfdemoinvoice00000001', plan: 'growth', interval: 'monthly', method: 'mobile_money', paidAt: hoursAgo(24 * 10), createdAt: hoursAgo(24 * 10) } });
 
-  console.log('\nSeeded demo data.\n  Email:    demo@surveyflow.test\n  Password: demo-password-123\n  Plan:     Growth (simulated WhatsApp number, mock gifts, mock checkout)\n');
+  console.log(`\nSeeded demo data.\n  Email:    demo@surveyflow.test\n  Password: ${DEMO_PASSWORD === 'demo-password-123' ? DEMO_PASSWORD : '(the one you set in SEED_DEMO_PASSWORD)'}\n  Plan:     Growth (simulated WhatsApp number, mock gifts, mock checkout)\n`);
 }
 
 main()
