@@ -35,6 +35,8 @@ Other options: `--no-docker` (Postgres/Redis already running), `--public-url=htt
 | Not exposed | The API (private, on your computer, answers only the website), the database, your files. |
 | Simulated, whatever your `.env` contains | WhatsApp (nothing is sent to a real number), payments (a demo checkout page, no money), gifts, the Meta and payment-provider keys (ignored). |
 
+**Is it safe for my computer?** Reasonably, if you follow these rules, but not risk-free. `cloudflared` only makes an outbound connection (no router setting, no open port, no firewall rule), and only the website is reachable. The real risk is a flaw in the website itself: if someone found one, they would be running code as *you* on your computer. So: run it from a **normal (non-administrator) terminal**, only while a test is going on, **not on public or shared Wi-Fi**, with Windows, Docker Desktop and Node up to date, and stop it afterwards. Postgres and Redis listen on this computer only (`docker-compose.yml`); run `docker compose up -d` once after pulling so that they are recreated that way. A hosted test site (see the end) isolates all of this from your personal computer.
+
 Rules of thumb: the address is long and random, but treat it like a password: send it only to the tester. Tell the tester **not to enter real personal data** (a notice says so on every page). Do not leave it running unattended. Sign-up has no email verification and no CAPTCHA yet (see the security review), which is acceptable for a short, private, simulated test and is **not** acceptable for a public launch.
 
 ## What the tester can and cannot judge
