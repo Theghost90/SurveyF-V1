@@ -109,7 +109,7 @@ export function SubscriptionPage({ initialPlan, initialInterval }: { initialPlan
         </div>
       </div>
       <FxNote data={data} />
-      <div className="grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(290px,1fr))]">
+      <div className="grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(290px,100%),1fr))]">
         {PAID_PLAN_KEYS.map((key) => {
           const price = data.prices[key];
           const current = plan.key === key && paid;

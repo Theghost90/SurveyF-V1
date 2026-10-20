@@ -123,7 +123,7 @@ export function ContactManager({ embedded = false }: { embedded?: boolean }) {
               {items.length === 0 && <TR><TD colSpan={6} className="py-10 text-center text-muted-foreground">{t('c.noMatch')}</TD></TR>}
             </TBody>
           </Table>
-          <div className="mt-3 flex items-center justify-between text-sm">
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
             <span className="text-muted-foreground">{t('c.total', { n: data.total })}</span>
             {data.total > data.pageSize && (
               <div className="flex items-center gap-3">

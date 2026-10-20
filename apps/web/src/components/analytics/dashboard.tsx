@@ -138,7 +138,7 @@ export function AnalyticsDashboard({ id }: { id: string }) {
         <Link href={`/surveys/${id}/export`} className={buttonVariants({})}><Download className="h-4 w-4" aria-hidden />{t('a.export')}</Link>
       </div>
 
-      <section aria-label={t('a.metrics')} className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
+      <section aria-label={t('a.metrics')} className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr))]">
         <Metric value={tt.sent} label={t('a.sent')} />
         <Metric value={tt.started} label={t('a.started')} />
         <Metric value={`${tt.completionRate}%`} label={t('a.completionRate')} tone="brand" />
@@ -321,7 +321,7 @@ export function AnalyticsDashboard({ id }: { id: string }) {
             </TBody>
           </Table>
           {rows.total > rows.pageSize && (
-            <div className="mt-3 flex items-center justify-between text-sm">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
               <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>{t('common.prev')}</Button>
               <span className="text-muted-foreground">{t('common.page', { n: page, total: Math.ceil(rows.total / rows.pageSize) })} · {rows.total}</span>
               <Button size="sm" variant="outline" disabled={page * rows.pageSize >= rows.total} onClick={() => setPage(page + 1)}>{t('common.next')}</Button>

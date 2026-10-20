@@ -1,5 +1,6 @@
 import type { Config } from 'tailwindcss';
 import animate from 'tailwindcss-animate';
+import plugin from 'tailwindcss/plugin';
 
 /**
  * Tokens lifted from the "SurveyFlow Hero & Pricing" design (Hero A / Pricing A):
@@ -51,6 +52,11 @@ const config: Config = {
       animation: { 'fade-up': 'fade-up 0.25s ease-out both' },
     },
   },
-  plugins: [animate],
+  plugins: [
+    animate,
+    // Landscape phones are wide but SHORT: `short:` applies below 480 px of height, whatever the width. (A variant, not a `screens` entry: a raw
+    // screen would silently switch off every max-* variant.)
+    plugin(({ addVariant }) => addVariant('short', '@media (max-height: 480px)')),
+  ],
 };
 export default config;

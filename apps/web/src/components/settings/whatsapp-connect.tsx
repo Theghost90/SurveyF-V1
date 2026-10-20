@@ -154,7 +154,7 @@ export function WhatsAppConnect({ compact = false, onConnected }: { compact?: bo
       {!compact && (
         <>
           <div>
-            <div className="mb-2 flex items-center justify-between"><h3 className="font-display text-lg font-bold">{t('w.templates')}</h3><Button size="sm" variant="outline" onClick={syncTemplates} loading={busy === 'sync'}><RefreshCw className="h-4 w-4" aria-hidden />{t('w.refresh')}</Button></div>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h3 className="font-display text-lg font-bold">{t('w.templates')}</h3><Button size="sm" variant="outline" onClick={syncTemplates} loading={busy === 'sync'}><RefreshCw className="h-4 w-4" aria-hidden />{t('w.refresh')}</Button></div>
             <p className="mb-3 text-sm text-muted-foreground">{t('w.templatesHelp')}</p>
             <Table>
               <THead><tr><TH>{t('common.name')}</TH><TH>{t('w.lang')}</TH><TH>{t('common.status')}</TH></tr></THead>

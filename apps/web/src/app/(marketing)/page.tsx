@@ -56,7 +56,7 @@ export default async function HomePage() {
 
       {/* Ask → Hear → Know → Act */}
       <section id="how" aria-label={t('steps.label')} className="mx-auto max-w-[1344px] scroll-mt-6 px-5 pb-14 pt-2 sm:px-8">
-        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr))]">
           {steps.map(([title, text], i) => {
             const last = i === steps.length - 1;
             return (

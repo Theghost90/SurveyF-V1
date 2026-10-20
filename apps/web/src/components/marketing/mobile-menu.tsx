@@ -24,7 +24,7 @@ export function MobileMenu({ links, signedIn, labels }: { links: MobileMenuLink[
 
   return (
     <D.Root open={open} onOpenChange={setOpen}>
-      <D.Trigger aria-label={labels.open} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line-2 bg-white text-ink sm:hidden">
+      <D.Trigger aria-label={labels.open} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line-2 bg-white text-ink short:h-10 short:w-10 max-[299px]:h-9 max-[299px]:w-9 sm:hidden">
         <Menu className="h-5 w-5" aria-hidden />
       </D.Trigger>
       <D.Portal>
@@ -42,7 +42,7 @@ export function MobileMenu({ links, signedIn, labels }: { links: MobileMenuLink[
           </div>
           <nav aria-label={labels.menu} className="flex-1 overflow-y-auto">
             {links.map((l) => (
-              <Link key={l.href} href={l.href} aria-current={l.current ? 'page' : undefined} onClick={() => setOpen(false)} className={cn(row, l.current && 'text-leaf')}>{l.label}</Link>
+              <Link key={l.href} href={l.href} aria-current={l.current ? 'page' : undefined} onClick={() => setOpen(false)} className={cn(row, 'short:min-h-[44px]', l.current && 'text-leaf')}>{l.label}</Link>
             ))}
             {!signedIn && <Link href="/login" onClick={() => setOpen(false)} className={row}>{labels.signin}</Link>}
           </nav>

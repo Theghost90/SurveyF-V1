@@ -73,11 +73,11 @@ export default function ExportPage({ params }: { params: { id: string } }) {
           <CardHeader><CardTitle>{t('x.download')}</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-5">
             <div className="flex flex-col gap-2">
-              <Button size="lg" variant="outline" className="h-14 justify-start" loading={busy === 'pdf'} onClick={() => dl('pdf')}><FileText className="h-5 w-5 text-leaf" aria-hidden />{t('x.pdf')}</Button>
+              <Button size="lg" variant="outline" className="h-auto min-h-14 justify-start whitespace-normal py-2 text-left" loading={busy === 'pdf'} onClick={() => dl('pdf')}><FileText className="h-5 w-5 text-leaf" aria-hidden />{t('x.pdf')}</Button>
               <p className="text-sm text-muted-foreground">{t('x.pdfText')}</p>
             </div>
             <div className="flex flex-col gap-2">
-              <Button size="lg" variant="outline" className="h-14 justify-start" loading={busy === 'excel'} onClick={() => dl('excel')}><FileSpreadsheet className="h-5 w-5 text-leaf" aria-hidden />{t('x.excel')}</Button>
+              <Button size="lg" variant="outline" className="h-auto min-h-14 justify-start whitespace-normal py-2 text-left" loading={busy === 'excel'} onClick={() => dl('excel')}><FileSpreadsheet className="h-5 w-5 text-leaf" aria-hidden />{t('x.excel')}</Button>
               <p className="text-sm text-muted-foreground">{t('x.excelText')}</p>
             </div>
           </CardContent>

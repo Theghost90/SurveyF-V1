@@ -57,49 +57,53 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
     <div className="min-h-screen">
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-white focus:px-3 focus:py-2">{t('app.skipToContent')}</a>
       <header className="sticky top-0 z-40 border-b border-line bg-canvas/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1344px] items-center gap-x-3 px-4 py-3 sm:flex-wrap sm:gap-x-6 sm:gap-y-2 sm:px-8">
-          <Logo href="/dashboard" className="[&_span]:text-lg sm:[&_span]:text-xl" />
-          <nav aria-label={t('nav.main')} className="hidden sm:flex sm:flex-1 sm:gap-1">
+        <div className="mx-auto flex max-w-[1344px] items-center gap-x-3 px-4 py-3 short:py-1 sm:gap-x-3 sm:px-6 xl:gap-x-6 xl:px-8">
+          {/* ONE row that fits in English and in French at every width, so it grows in steps (measured, see scripts/e2e-landscape.mjs):
+              from 640 px logo mark, four links, language switch, account button (initial only); from 800 px the wordmark; from 1024 px the plan and wallet
+              badges; from 1280 px the business name and roomier links. Below 340 px the wordmark gives way too (a folded phone is 280 px wide);
+              on a short (landscape) screen the bar is slimmer. */}
+          <Logo href="/dashboard" className="shrink-0 [&_span]:hidden min-[340px]:max-sm:[&_span]:inline min-[800px]:[&_span]:inline [&_span]:text-lg xl:[&_span]:text-xl [&_svg]:h-8 [&_svg]:w-8 short:[&_svg]:h-8 short:[&_svg]:w-8" />
+          <nav aria-label={t('nav.main')} className="hidden min-w-0 sm:flex sm:flex-1 sm:gap-1">
             {nav.map((n) => {
               const active = pathname === n.href || pathname.startsWith(n.href + '/');
               return (
-                <Link key={n.href} href={n.href} aria-current={active ? 'page' : undefined} className={cn('whitespace-nowrap rounded-xl px-3.5 py-2.5 text-[15px] font-semibold no-underline transition-colors', active ? 'bg-ink text-white' : 'text-body hover:bg-mint/60')}>
+                <Link key={n.href} href={n.href} aria-current={active ? 'page' : undefined} className={cn('whitespace-nowrap rounded-xl px-2.5 py-2.5 text-sm font-semibold no-underline transition-colors short:py-2 xl:px-3.5 xl:text-[15px]', active ? 'bg-ink text-white' : 'text-body hover:bg-mint/60')}>
                   {n.label}
                 </Link>
               );
             })}
           </nav>
-          <div className="ml-auto flex items-center gap-2 sm:ml-0 sm:gap-3">
-            {account && <Link href="/billing" className="hidden sm:inline"><Badge variant={account.plan.key === 'trial' ? 'amber' : 'default'}>{t(`plan.${account.plan.key as 'trial'}`)}</Badge></Link>}
+          <div className="ml-auto flex shrink-0 items-center gap-2 sm:ml-0 sm:gap-3">
+            {account && <Link href="/billing" className="hidden lg:inline"><Badge variant={account.plan.key === 'trial' ? 'amber' : 'default'}>{t(`plan.${account.plan.key as 'trial'}`)}</Badge></Link>}
             {account?.plan.features.giftAutomation && wallet && (
-              <Link href="/billing#wallet" className="hidden sm:inline" aria-label={`${t('w.title')}: ${money(wallet.balance, wallet.currency, locale)}`}>
+              <Link href="/billing#wallet" className="hidden lg:inline" aria-label={`${t('w.title')}: ${money(wallet.balance, wallet.currency, locale)}`}>
                 <Badge variant={wallet.balance === 0 ? 'amber' : 'neutral'}><Wallet className="mr-1 h-3.5 w-3.5" aria-hidden />{num(wallet.balance, locale)}</Badge>
               </Link>
             )}
-            <LanguageToggle />
+            <LanguageToggle className="[&_button]:px-2 min-[360px]:[&_button]:px-3" />
             <DropdownMenu>
-              <DropdownMenuTrigger className={cn('flex min-h-[44px] items-center gap-2 rounded-xl border bg-white py-1.5 pl-1.5 pr-1.5 text-sm font-semibold sm:pr-3', inAccount ? 'border-ink' : 'border-line-2')} aria-label={t('app.account')}>
+              <DropdownMenuTrigger className={cn('flex min-h-[44px] items-center gap-2 rounded-xl border bg-white py-1.5 pl-1.5 pr-1.5 text-sm font-semibold short:min-h-[40px] short:py-1 xl:pr-3', inAccount ? 'border-ink' : 'border-line-2')} aria-label={t('app.account')}>
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-sm font-bold text-ink">{(account?.user.name ?? '?').slice(0, 1).toUpperCase()}</span>
-                <span className="hidden max-w-[120px] truncate sm:inline">{account?.user.businessName ?? <Skeleton className="h-4 w-20" />}</span>
-                <ChevronDown className="hidden h-4 w-4 opacity-60 sm:block" aria-hidden />
+                <span className="hidden max-w-[120px] truncate xl:inline">{account?.user.businessName ?? <Skeleton className="h-4 w-20" />}</span>
+                <ChevronDown className="hidden h-4 w-4 opacity-60 xl:block" aria-hidden />
               </DropdownMenuTrigger>
-              {/* Billing and Settings live here only (not in the menu bar). The plan and the wallet balance show in the bar from 640 px; on a phone they show here. */}
+              {/* Billing and Settings live here only (not in the menu bar). The plan and the wallet balance show in the bar from 1024 px, the business name from 1280 px; below that they show here. */}
               <DropdownMenuContent align="end" className="min-w-[220px]">
-                <DropdownMenuLabel className="sm:hidden">{account?.user.businessName}</DropdownMenuLabel>
+                <DropdownMenuLabel className="short:hidden xl:hidden">{account?.user.businessName}</DropdownMenuLabel>
                 <DropdownMenuLabel className="font-normal text-muted-foreground">{account?.user.email}</DropdownMenuLabel>
-                <DropdownMenuItem asChild className="min-h-[44px]">
+                <DropdownMenuItem asChild className="min-h-[44px] short:min-h-[36px]">
                   <Link href="/billing"><CreditCard className="h-4 w-4" aria-hidden />{t('app.nav.billing')}
-                    {account && <Badge className="ml-auto sm:hidden" variant={account.plan.key === 'trial' ? 'amber' : 'default'}>{t(`plan.${account.plan.key as 'trial'}`)}</Badge>}
+                    {account && <Badge className="ml-auto lg:hidden" variant={account.plan.key === 'trial' ? 'amber' : 'default'}>{t(`plan.${account.plan.key as 'trial'}`)}</Badge>}
                   </Link>
                 </DropdownMenuItem>
                 {account?.plan.features.giftAutomation && wallet && (
-                  <DropdownMenuItem asChild className="min-h-[44px] sm:hidden">
+                  <DropdownMenuItem asChild className="min-h-[44px] short:min-h-[36px] lg:hidden">
                     <Link href="/billing#wallet"><Wallet className="h-4 w-4" aria-hidden />{t('w.title')}<Badge className="ml-auto" variant={wallet.balance === 0 ? 'amber' : 'neutral'}>{num(wallet.balance, locale)}</Badge></Link>
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem asChild className="min-h-[44px]"><Link href="/settings"><Settings className="h-4 w-4" aria-hidden />{t('app.nav.settings')}</Link></DropdownMenuItem>
+                <DropdownMenuItem asChild className="min-h-[44px] short:min-h-[36px]"><Link href="/settings"><Settings className="h-4 w-4" aria-hidden />{t('app.nav.settings')}</Link></DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="min-h-[44px]" onSelect={() => void signOut({ callbackUrl: '/' })}><LogOut className="h-4 w-4" aria-hidden />{t('app.signout')}</DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[44px] short:min-h-[36px]" onSelect={() => void signOut({ callbackUrl: '/' })}><LogOut className="h-4 w-4" aria-hidden />{t('app.signout')}</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -116,7 +120,7 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
         </div>
       )}
 
-      <main id="main" className="mx-auto max-w-[1344px] px-5 pb-28 pt-8 sm:px-8 sm:pb-20">{needsSegment ? <Skeleton className="h-64" /> : children}</main>
+      <main id="main" className="mx-auto max-w-[1344px] px-5 pb-28 pt-8 short:pb-20 short:pt-4 sm:px-8 sm:pb-20">{needsSegment ? <Skeleton className="h-64" /> : children}</main>
       <MobileNav showSimulator={showSimulator} />
       <WhatsAppRequiredDialog />
     </div>

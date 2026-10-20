@@ -44,7 +44,7 @@ export default function NewSurveyPage() {
           <Link href="/onboarding" className={buttonVariants({ variant: 'brand', size: 'lg' })}>{t('wa.req.cta')}</Link>
         </Card>
       ) : (
-      <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
+      <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr))]">
         <button type="button" disabled={!!busy} onClick={() => create('blank', { title: t('new.untitled'), questions: [] })} className={cn('text-left', busy && busy !== 'blank' && 'opacity-60')}>
           <Card className="flex h-full flex-col gap-3 border-dashed border-line-2 p-6 shadow-none transition-colors hover:bg-white">
             <FilePlus2 className="h-7 w-7 text-leaf" aria-hidden />

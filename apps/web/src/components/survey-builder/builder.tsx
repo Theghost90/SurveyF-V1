@@ -219,7 +219,7 @@ export function SurveyBuilder({ id }: { id: string }) {
           <SendPanel surveyId={id} status={survey.status} language={draft.language} onPublish={publish} publishing={busy === 'publish'} dirty={dirty} />
         </div>
 
-        <aside className="lg:sticky lg:top-24" aria-label={t('b.pv.title')}>
+        <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto" aria-label={t('b.pv.title')}>
           <Card className="p-5">
             <h2 className="mb-3 font-display text-lg font-bold">{t('b.pv.title')}</h2>
             <WhatsAppPreview surveyId={survey.status === 'draft' ? undefined : id} draft={draft} businessName={account?.user.businessName ?? ''} step={Math.min(step, draft.questions.length + 1)} onStep={(n) => { setStep(n); if (n >= 1 && draft.questions[n - 1]) setActiveKey(draft.questions[n - 1]!.key); }} />

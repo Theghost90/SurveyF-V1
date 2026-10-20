@@ -100,7 +100,7 @@ export function PricingClient({ pricing, initial = 1200 }: { pricing: PricingDat
       </section>
 
       <section aria-label={t('pricing.plans')} className="mx-auto max-w-[1344px] px-5 pb-8 sm:px-8">
-        <div className="grid items-stretch gap-5 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
+        <div className="grid items-stretch gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr))]">
           <div className="flex flex-col gap-[18px] rounded-3xl border-2 border-dashed border-mint-2 bg-mint/40 p-7 text-ink" data-testid="explore-card">
             <div className="flex min-h-[30px] items-center justify-between"><h3 className="font-display text-[26px] font-bold">{t('plan.trial')}</h3></div>
             <p className="text-[15px] leading-[1.45] text-body">{t('pricing.exploreWho')}</p>
@@ -154,7 +154,7 @@ export function PricingClient({ pricing, initial = 1200 }: { pricing: PricingDat
       </section>
 
       <section aria-label={t('pricing.t1')} className="mx-auto max-w-[1344px] px-5 pb-8 sm:px-8">
-        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr))]">
           {([['pricing.t1', 'pricing.t1b'], ['pricing.t2', 'pricing.t2b'], ['pricing.t3', 'pricing.t3b']] as const).map(([h, b]) => (
             <div key={h} className="rounded-2xl border border-line-3 bg-white p-5"><p className="font-display text-lg font-bold">{t(h)}</p><p className="mt-1 text-[15px] leading-relaxed text-body">{t(b)}</p></div>
           ))}

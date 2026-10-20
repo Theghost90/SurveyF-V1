@@ -7,7 +7,7 @@ export const DropdownMenu = M.Root;
 export const DropdownMenuTrigger = M.Trigger;
 export const DropdownMenuContent = React.forwardRef<React.ElementRef<typeof M.Content>, React.ComponentPropsWithoutRef<typeof M.Content>>(({ className, sideOffset = 6, ...p }, ref) => (
   <M.Portal>
-    <M.Content ref={ref} sideOffset={sideOffset} className={cn('z-50 min-w-[12rem] overflow-hidden rounded-2xl border border-line bg-white p-1.5 shadow-float data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95', className)} {...p} />
+    <M.Content ref={ref} sideOffset={sideOffset} className={cn('z-50 max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[12rem] overflow-y-auto rounded-2xl border border-line bg-white p-1.5 shadow-float data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95', className)} {...p} />
   </M.Portal>
 ));
 DropdownMenuContent.displayName = 'DropdownMenuContent';
