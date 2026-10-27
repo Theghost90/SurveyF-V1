@@ -12,7 +12,7 @@ Thank you for testing SurveyFlow. It lets a business run a survey **inside Whats
 4. **Create a survey** from the "Order & delivery" template. Try to break it: empty question, 4 buttons, very long text.
 5. **Send it** to all contacts, then open **Simulator**: run the send queue, answer as a participant (tap the buttons, type), answer some questions, leave one conversation unfinished, press "Skip 25 h".
 6. **Analytics:** do the numbers match what you did? Look at the funnel, the per-question results, the "haven't replied" list. Download the PDF and Excel.
-7. **Analytics on WhatsApp** (Settings, then that tab): link a phone with the code, then in the Simulator's "Owner" tab try `STATS`, `RESULTS`, `DROP`.
+7. **Analytics on WhatsApp** (account menu at the top right, then Settings, then that tab): link a phone with the code, then in the Simulator's "Owner" tab try `STATS`, `RESULTS`, `DROP`.
 8. **Billing:** open Billing, pick a plan, go through the demo checkout (no real card or money).
 9. **Language and phone:** switch FR/EN; then use everything on a **phone**: menus, the survey list, the builder.
 10. **Free exploration:** do what a real business owner would do.
@@ -50,7 +50,7 @@ Merci de tester SurveyFlow. L'outil permet à une entreprise de lancer un sondag
 4. **Créez un sondage** à partir du modèle « Commande et livraison ». Essayez de le casser : question vide, 4 boutons, texte très long.
 5. **Envoyez-le** à tous les contacts, puis ouvrez **Simulateur** : lancez la file d'envoi, répondez comme un participant (boutons, texte), laissez une conversation inachevée, cliquez sur « Sauter 25 h de silence ».
 6. **Analytique :** les chiffres correspondent-ils à ce que vous avez fait ? Regardez l'entonnoir, les résultats par question, la liste de ceux qui n'ont pas répondu. Téléchargez le PDF et l'Excel.
-7. **Analytique sur WhatsApp** (Paramètres, puis cet onglet) : liez un téléphone avec le code, puis, dans l'onglet « Propriétaire » du Simulateur, essayez `STATS`, `RESULTS`, `DROP`.
+7. **Analytique sur WhatsApp** (menu du compte en haut à droite, puis Paramètres, puis cet onglet) : liez un téléphone avec le code, puis, dans l'onglet « Propriétaire » du Simulateur, essayez `STATS`, `RESULTS`, `DROP`.
 8. **Abonnement :** ouvrez la page, choisissez une offre, passez la caisse de démonstration (aucune vraie carte, aucun argent).
 9. **Langue et téléphone :** passez de FR à EN ; puis utilisez tout sur un **téléphone** : menus, liste des sondages, éditeur.
 10. **Exploration libre :** faites ce que ferait un vrai chef d'entreprise.

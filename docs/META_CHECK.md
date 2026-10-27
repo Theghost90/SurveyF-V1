@@ -60,6 +60,7 @@ common codes, what to do about it.
 - **The Embedded Signup popup** in a browser, by a person who has a role on your Meta app (a test app cannot onboard strangers).
 - **A real inbound round trip**: tap "Start survey" on your phone and watch the survey begin in the dashboard (this exercises the signed webhook with a real Meta payload).
 - Sending limits, throughput and quality-rating behaviour under real volume; Meta changing a template's category after approval.
+- **The Analytics Bot over real WhatsApp**: linking a phone (`LINK <code>` typed on the owner's own phone, answered from SurveyFlow's own number) and the `owner_alert` template (submitted to SurveyFlow's platform WhatsApp account, not to your customers'; it is not one of the 14 templates above and this script does not check it). Until Meta approves it, only in-window alerts go out (`DECISIONS.md` §3.5).
 
 ## Self-test of the script itself
 

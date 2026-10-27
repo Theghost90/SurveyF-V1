@@ -1,8 +1,8 @@
 # SurveyFlow — WhatsApp-native surveys for Cameroon
 
 Build a survey on the web, send it on WhatsApp, collect answers inside the chat, watch live analytics, export to
-PDF / Excel / Google Sheets, reward participants with airtime, Mobile Money, codes or a prize draw. Billed in FCFA
-(MTN MoMo, Orange Money, card) through a multi-PSP orchestration layer.
+PDF / Excel / Google Sheets, reward participants with airtime, Mobile Money, codes or a prize draw, and ask the **Analytics Bot** for your numbers from your own phone. Free to explore (1 live survey, 5 people reached),
+then billed in FCFA (MTN MoMo, Orange Money, card) or, in Nigeria, Kenya and Ghana, in the local currency by card, through a multi-PSP orchestration layer.
 
 > **Read [`docs/DECISIONS.md`](docs/DECISIONS.md) first.** It lists where this build departs from the spec/design (and why),
 > the open business decisions, and exactly which integrations are verified vs. not.
@@ -46,7 +46,7 @@ For a production-like preview: `npm run build && npm start` (the API reads the r
 
 ## Going live (checklist)
 
-1. Postgres + Redis; `npx prisma migrate deploy` (`apps/api/prisma/migrations`: `init` + `gift_wallet` + `reminders_geo_segment` + `multicurrency_wallet` + `payments_notices` + `payments_reconcile`, applied from scratch and diffed against the schema — no drift).
+1. Postgres + Redis; `npx prisma migrate deploy` (`apps/api/prisma/migrations`, nine: `init`, `gift_wallet`, `reminders_geo_segment`, `multicurrency_wallet`, `payments_notices`, `payments_reconcile`, `explore_activate`, `analytics_bot`, `analytics_alerts`; applied from scratch and diffed against the schema — no drift, checked 2026-10-27).
 2. Set **production** env: `NODE_ENV=production`, `JWT_SECRET`, `TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`), `NEXTAUTH_SECRET`,
    `WHATSAPP_MODE=live`, `META_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, PSP keys, `GIFT_PROVIDER=campay`. **The API refuses to start**
    in production with mock modes, a missing app secret, or weak secrets. Set `GIFT_FEE_PERCENT` from the real provider tariffs (default 5 is a
@@ -69,10 +69,15 @@ apps/api            Fastify API, Prisma schema + migrations, workers (send queue
   src/services/whatsapp/             gateway (Cloud API + mock), send queue, templates
   src/services/payments/             router, adapters, settlement (idempotent, amount-verified)
   src/services/{analytics,exports,gifts,subscription}/
+  src/services/analytics-bot.ts      Analytics Bot: owner linking, commands, shared formatters (analytics-alerts.ts: milestone and slowdown alerts)
+  src/services/{reminders,fx,wallet,receipts,funnel}.ts
 apps/web            Next.js app (marketing, auth, dashboard, builder, analytics, billing, simulator)
 packages/shared     plans & prices (single source of truth), phone normalisation, WhatsApp message builders
-scripts/            ui-tour.mjs (screenshots), e2e-ui.mjs (29-step browser test), e2e-bot.mjs, e2e-responsive.mjs, shoot.mjs
+scripts/            share-demo.mjs (npm run share), e2e-*.mjs browser tests (ui, bot, wallet, payments, currency, responsive, landscape), ui-tour.mjs and shoot.mjs (screenshots)
+surveyflow_design.md   design specification: tokens, layout and navigation, components, responsive rules
 docs/DECISIONS.md   spec/design deviations, open questions, verification status
+docs/SHARE_DEMO.md, docs/TESTER_GUIDE.md   sharing a test instance over the internet; what to hand the tester
+docs/SurveyFlow_V1_Reverse_Engineered_Blueprint.docx   the build blueprint with the full testing plan
 docs/PAYMENTS.md    payment flow vs the PSP diagram, risk register, operations guide, what is not covered
 docs/META_CHECK.md  running the WhatsApp integration against a real Meta test app
 ```
@@ -80,13 +85,14 @@ docs/META_CHECK.md  running the WhatsApp integration against a real Meta test ap
 ## Tests
 
 ```bash
-npm test                          # shared + API (needs the local Postgres/Redis; uses the `surveyflow_test` database)
+npm test                          # shared (62) + API (264) tests (needs the local Postgres/Redis; uses the `surveyflow_test` database)
 node scripts/e2e-ui.mjs /tmp/e2e # real-browser end-to-end run against the running app on :4222 (reseed first: `npm run db:seed`)
 node scripts/e2e-wallet.mjs /tmp/e2e-wallet # wallet + gift receipt run
 node scripts/e2e-payments.mjs /tmp/e2e-payments # what a customer sees: still waiting, in progress, review, renewal banner
 node scripts/fx-stub.mjs & # fixed exchange rates for offline demos (API: FX_API_URL=http://127.0.0.1:4299/v6/latest/XAF)
 node scripts/e2e-bot.mjs /tmp/e2e-bot # Analytics Bot: link a phone, owner simulator, RESULTS, alerts switch, live preview
-node scripts/e2e-responsive.mjs /tmp/e2e-resp # every screen at 360/390/768/1280 px: no horizontal overflow
+node scripts/e2e-responsive.mjs /tmp/e2e-resp # every screen from 320 to 1920 px, both menus: no horizontal overflow
+node scripts/e2e-landscape.mjs /tmp/e2e-land # menu bars at every width from 280 px and screens on 30 device orientations (portrait + landscape), English and French
 node scripts/e2e-currency.mjs /tmp/e2e-currency # a Kenyan owner: plan, wallet and gifts in shillings
 ```
 
@@ -96,5 +102,5 @@ node scripts/e2e-currency.mjs /tmp/e2e-currency # a Kenyan owner: plan, wallet a
 `POST surveys/:id/{publish,pause,resume,close,duplicate,send,audience,remind,draw}` · `GET surveys/:id/{analytics,responses,recipients,gifts,sync}` ·
 `POST surveys/:id/gifts/{retry,release}` · `GET wallet` · `POST wallet/topup` ·
 `GET surveys/:id/export/{pdf,excel}` · `POST|DELETE surveys/:id/sync/google-sheets` · `GET contacts` · `POST contacts[/import|/bulk-delete|/bulk-tag]` ·
-`GET|POST webhook/whatsapp` · `GET receipts/:token` (public PDF, delivered gifts only) · `GET pricing` (prices in the visitor's currency) · `POST payments/initiate` · `GET payments[/:id]` · `GET|POST payments/webhook/:psp` ·
-`GET subscription` · `PUT subscription/upgrade` · `POST subscription/{cancel,reactivate}` · `GET|POST whatsapp/accounts…` · `GET integrations/google…`
+`GET|POST|PATCH|DELETE analytics-bot…` (link a phone, list, mute) · `GET surveys/:id/not-started[.csv]` · `POST auth/oauth` (Google sign-in, server to server) · `GET|POST webhook/whatsapp` · `GET receipts/:token` (public PDF, delivered gifts only) · `GET pricing` (prices in the visitor's currency) · `POST payments/initiate` · `GET payments[/:id]` · `GET|POST payments/webhook/:psp` ·
+`GET subscription` · `PUT subscription/upgrade` · `POST subscription/{cancel,reactivate}` · `GET|POST whatsapp/{accounts…,embedded-signup,config}` · `GET integrations/google…`

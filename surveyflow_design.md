@@ -138,6 +138,11 @@ Left: question cards (numbered, drag handle, type select, required switch, optio
 ### Analytics
 Metric tiles in an auto-fit grid (min 170 px), a footnote that shows the arithmetic, funnel bars, an amber drop-off note with advice, results cards (question title followed by its type in parentheses, muted 14 px), paged list with a CSV button.
 
+### Analytics Bot (the owner's numbers on WhatsApp)
+- **Settings → "Analytics on WhatsApp"** tab: the owner proves a phone with a one-time code to send as `LINK <code>` (valid 15 minutes, up to 3 phones, each can be removed), with an alerts switch on each linked phone (alerts can also be muted by typing `MUTE` to the bot). On Explore the tab shows a locked note ("Included in Starter, Growth and Business…") with two buttons: "See how it looks" (the Owner simulator) and "Activate" (Billing).
+- **Builder preview** has a Participant / Owner switch: Owner shows the bot's replies with example numbers; the **Simulator** has the same switch and answers for real on a paid plan. Replies use the same phone mock as the participant side (section 7, WhatsApp simulation).
+- Names appear with **masked numbers** in every bot reply; complete numbers live only in the web app ("haven't started" list and its CSV). The numbers in a reply always equal the Analytics page's.
+
 ### Money and payment states
 Pending: "Still waiting for the provider", with the reference and "do not pay again". Review: calm wording, never "failed". Wallet: balance in a display number, limits, history list. Prices always show as "amount label" (for example `14,500 FCFA`), annual price under the monthly one.
 
