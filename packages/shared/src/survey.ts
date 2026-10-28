@@ -1,3 +1,4 @@
+import './zod-setup';
 import { z } from 'zod';
 
 export const QUESTION_TYPES = ['button', 'list', 'text', 'rating', 'multi'] as const;
