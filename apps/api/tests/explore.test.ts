@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../src/lib/prisma';
 import { redis } from '../src/lib/redis';
@@ -150,8 +150,8 @@ describe('funnel milestones: the first time each happens, once', () => {
     const o = await registerOwner(app);
     const init = await o.post('/api/payments/initiate', { plan: 'starter', interval: 'monthly', method: 'card' });
     await o.post(`/api/payments/mock/${init.reference}`, { outcome: 'success' });
-    const got = await names(o.userId);
-    expect(got).toContain('checkout_start');
-    expect(got).toContain('paid');
+    expect(await names(o.userId)).toContain('checkout_start');
+    // `paid` is recorded off the settlement's critical path (a failed analytics write must never fail a payment), so it may land a moment after the response.
+    await vi.waitFor(async () => expect(await names(o.userId)).toContain('paid'), { timeout: 5000, interval: 50 });
   });
 });
