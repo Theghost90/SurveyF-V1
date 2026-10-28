@@ -24,6 +24,18 @@ export interface MailParams {
 
 export const escapeHtml = (s: string): string => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
+/**
+ * A name somebody typed into a form, made safe to print in a greeting: one short line, and nothing that could be a link or an address. Anybody can type anything
+ * into the sign-up form, and the e-mail goes to the address they typed, which may be a stranger's: without this, SurveyFlow's own sender would deliver their text.
+ * Better no greeting by name than a clever one.
+ */
+export function greetingName(raw: string | undefined | null): string | undefined {
+  if (!raw) return undefined;
+  const line = raw.split(/[\r\n]/)[0]!.replace(/[\u0000-\u001f\u007f<>]/g, ' ').trim();
+  if (!line || /[:/@\\]|www\./i.test(line)) return undefined;
+  return line.slice(0, 40);
+}
+
 const settingsUrl = () => `${env.webBaseUrl}/settings?tab=security`;
 const forgotUrl = () => `${env.webBaseUrl}/forgot-password`;
 const loginUrl = () => `${env.webBaseUrl}/login`;
@@ -32,7 +44,9 @@ interface Body { subject: string; lines: string[]; button?: { label: string; url
 
 function build(kind: MailKind, lang: Lang, p: MailParams): Body {
   const fr = lang === 'fr';
-  const hi = p.name ? (fr ? `Bonjour ${p.name},` : `Hello ${p.name},`) : fr ? 'Bonjour,' : 'Hello,';
+  // The confirmation e-mail never greets by name: the name came from whoever filled in the sign-up form, and the address may not be theirs.
+  const who = kind === 'verify_email' ? undefined : greetingName(p.name);
+  const hi = who ? (fr ? `Bonjour ${who},` : `Hello ${who},`) : fr ? 'Bonjour,' : 'Hello,';
   const notYou = fr
     ? `Ce n’était pas vous ? Changez votre mot de passe et déconnectez tous vos appareils : ${settingsUrl()}`
     : `Wasn’t you? Change your password and sign out everywhere: ${settingsUrl()}`;

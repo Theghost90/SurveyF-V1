@@ -13,16 +13,17 @@ import { detectedCountry } from '../lib/geo';
 import { assertPasswordAllowed, hashPassword, verifyPassword } from '../lib/password';
 import { prisma } from '../lib/prisma';
 import { rl, rlCredentials } from '../lib/ratelimit';
+import { padResponse } from '../lib/timing';
 import { matchTotp, newTotpSecret, otpauthUrl } from '../lib/totp';
 import { describeAgent } from '../lib/user-agent';
 import { accountSummary, userDto } from '../services/account';
 import { audit, auditContext, auditStrict, recentActivity } from '../services/audit';
 import { track } from '../services/funnel';
-import { sendMail, type Lang } from '../services/mail';
+import { sendMail, sendMailInBackground, type Lang } from '../services/mail';
 import { consumeEmailToken, createEmailToken, peekEmailToken } from '../services/security/email-tokens';
 import { ALERT_AT, checkLoginGuard, claimFailedLoginAlert, clearLoginFailures, recordLoginFailure } from '../services/security/login-guard';
 import { remainingRecoveryCodes, replaceRecoveryCodes, verifySecondFactor } from '../services/security/second-factor';
-import { createSession, isNewDevice, listSessions, refreshSession, revokeAllSessions, revokeSession, type IssuedTokens, type RequestMeta } from '../services/security/sessions';
+import { createSession, isNewDevice, listSessions, refreshSession, revokeAllSessions, revokeByRefreshToken, revokeSession, type IssuedTokens, type RequestMeta } from '../services/security/sessions';
 import { sendStepUpCode, stepUpMethods, verifyStepUp } from '../services/security/step-up';
 import { assertWhatsAppConnected } from '../services/whatsapp/require';
 import { exploreWindowEnd } from '../services/subscription/lifecycle';
@@ -99,10 +100,11 @@ export default async function authRoutes(app: FastifyInstance) {
    * An account whose address was NEVER confirmed does not hold the address: registering again replaces it (finding 1: nobody can squat someone else's address).
    */
   app.post('/api/auth/register', { ...rlCredentials(5) }, async (req, reply) => {
+    const started = Date.now();
     const body = registerSchema.parse(req.body);
     const meta = requestMeta(req);
     if (!(await verifyCaptcha(body.captchaToken, meta.ip ?? undefined))) throw new AppError(400, 'captcha_failed', 'Please complete the security check and try again');
-    if ((await hit(`reg:ip:${meta.ip}`, 3600)) > 20) throw new AppError(429, 'rate_limited', 'Too many sign-ups from this connection. Try again later.');
+    if ((await hit(`reg:ip:${meta.ip}`, 3600)) > env.SIGNUP_PER_IP_HOUR) throw new AppError(429, 'rate_limited', 'Too many sign-ups from this connection. Try again later.');
 
     // Country follows where the visitor really is (CDN header via the website), then an explicit value, then Cameroon.
     const country = supportedCountry(detectedCountry(req) ?? body.country);
@@ -117,7 +119,7 @@ export default async function authRoutes(app: FastifyInstance) {
     try {
       if (existing?.emailVerifiedAt) {
         // A confirmed account keeps its address. Tell its owner, at most once an hour per mailbox.
-        if ((await hit(`reg:exists:${canonical}`, 3600)) === 1) await sendMail(existing.email, 'register_existing', lang(existing.locale), { name: existing.name });
+        if ((await hit(`reg:exists:${canonical}`, 3600)) === 1) sendMailInBackground(existing.email, 'register_existing', lang(existing.locale), { name: existing.name });
       } else {
         if (existing) {
           await prisma.user.delete({ where: { id: existing.id } }); // never confirmed, so it holds nothing worth keeping (it could not send, pay or export)
@@ -125,7 +127,7 @@ export default async function authRoutes(app: FastifyInstance) {
         }
         const user = await createUserExplore({ email: body.email, name: body.name, businessName: body.businessName, phone, country, locale: body.locale, passwordHash });
         const token = await createEmailToken(user.id, 'verify_email', { ...(body.plan ? { plan: body.plan } : {}), ...(body.interval ? { interval: body.interval } : {}) });
-        await sendMail(user.email, 'verify_email', lang(user.locale), { url: verifyLink(token, 'verify-email'), name: user.name });
+        sendMailInBackground(user.email, 'verify_email', lang(user.locale), { url: verifyLink(token, 'verify-email'), name: user.name });
         await audit({ ...ctx, userId: user.id }, { action: 'register' });
       }
     } catch (err) {
@@ -133,6 +135,7 @@ export default async function authRoutes(app: FastifyInstance) {
       if (!(err as { code?: string }).code?.startsWith('P2002')) throw err;
     }
     reply.code(202);
+    await padResponse(started); // the same time for a new address and for one that already has an account
     return { ok: true };
   });
 
@@ -148,16 +151,18 @@ export default async function authRoutes(app: FastifyInstance) {
 
   /** For someone who closed the tab before confirming: the same generic answer whether or not the address exists. */
   app.post('/api/auth/verify-email/resend', { ...rlCredentials(5) }, async (req, reply) => {
+    const started = Date.now();
     const body = z.object({ email: z.string().trim().toLowerCase().email().max(254), captchaToken: z.string().max(4096).optional() }).parse(req.body);
     const meta = requestMeta(req);
     if (!(await verifyCaptcha(body.captchaToken, meta.ip ?? undefined))) throw new AppError(400, 'captcha_failed', 'Please complete the security check and try again');
     const canonical = canonicalEmail(body.email);
     const user = await prisma.user.findUnique({ where: { emailCanonical: canonical } });
     if (user && !user.emailVerifiedAt && (await hit(`verify:resend:${canonical}`, 3600)) <= 3) {
-      await sendMail(user.email, 'verify_email', lang(user.locale), { url: verifyLink(await createEmailToken(user.id, 'verify_email'), 'verify-email'), name: user.name });
+      sendMailInBackground(user.email, 'verify_email', lang(user.locale), { url: verifyLink(await createEmailToken(user.id, 'verify_email'), 'verify-email'), name: user.name });
       await audit(auditContext(req, user.id), { action: 'verification_resent' });
     }
     reply.code(202);
+    await padResponse(started);
     return { ok: true };
   });
 
@@ -232,6 +237,14 @@ export default async function authRoutes(app: FastifyInstance) {
     return tokensDto(tokens);
   });
 
+  /** Signing out from the website once the API token has expired: the refresh token proves whose session it is. Always 204 (it says nothing about whether the token was real). */
+  app.post('/api/auth/signout', { ...rl(60) }, async (req, reply) => {
+    const { refreshToken } = z.object({ refreshToken: z.string().min(1).max(200) }).parse(req.body);
+    const ended = await revokeByRefreshToken(refreshToken);
+    if (ended) await audit({ ...auditContext(req, ended.userId), sessionId: ended.sessionId }, { action: 'logout' });
+    return reply.code(204).send();
+  });
+
   app.post('/api/auth/logout', auth, async (req, reply) => {
     await revokeSession(req.sessionId, 'logout');
     await audit(auditContext(req), { action: 'logout' });
@@ -265,16 +278,18 @@ export default async function authRoutes(app: FastifyInstance) {
 
   /** "I forgot my password". The same answer whether or not the address has an account; the e-mail goes only to a real one. */
   app.post('/api/auth/password/forgot', { ...rlCredentials(5) }, async (req, reply) => {
+    const started = Date.now();
     const body = z.object({ email: z.string().trim().toLowerCase().email().max(254), captchaToken: z.string().max(4096).optional() }).parse(req.body);
     const meta = requestMeta(req);
     if (!(await verifyCaptcha(body.captchaToken, meta.ip ?? undefined))) throw new AppError(400, 'captcha_failed', 'Please complete the security check and try again');
     const canonical = canonicalEmail(body.email);
     const user = await prisma.user.findUnique({ where: { emailCanonical: canonical } });
     if (user && (await hit(`reset:${canonical}`, 3600)) <= 3 && (await hit(`reset:ip:${meta.ip}`, 3600)) <= 10) {
-      await sendMail(user.email, 'reset_password', lang(user.locale), { url: verifyLink(await createEmailToken(user.id, 'reset_password'), 'reset-password'), name: user.name });
+      sendMailInBackground(user.email, 'reset_password', lang(user.locale), { url: verifyLink(await createEmailToken(user.id, 'reset_password'), 'reset-password'), name: user.emailVerifiedAt ? user.name : undefined });
       await audit(auditContext(req, user.id), { action: 'password_reset_requested' });
     }
     reply.code(202);
+    await padResponse(started);
     return { ok: true };
   });
 

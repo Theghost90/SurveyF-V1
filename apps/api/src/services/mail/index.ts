@@ -70,8 +70,22 @@ export async function sendMail(to: string, kind: MailKind, lang: Lang, params: M
   return false;
 }
 
+const inFlight = new Set<Promise<unknown>>();
+
+/**
+ * Sends without making the caller wait. For the places where the answer must not depend on whether a message was sent (sign-up, "resend the link", "forgot my
+ * password"): handing a message to a provider takes tens to hundreds of milliseconds, so waiting for it would tell a patient stranger which addresses are customers.
+ * `mailIdle()` waits for everything in flight (the mock mailbox reader, so tests stay deterministic, and shutdown).
+ */
+export function sendMailInBackground(...args: Parameters<typeof sendMail>): void {
+  const p: Promise<unknown> = sendMail(...args).catch(() => false).finally(() => inFlight.delete(p));
+  inFlight.add(p);
+}
+export const mailIdle = async (): Promise<void> => { await Promise.allSettled([...inFlight]); };
+
 /** The mock provider's mailbox for one address, newest first. Only meaningful (and only exposed) when EMAIL_PROVIDER=mock. */
 export async function readMockMailbox(to: string): Promise<Array<{ at: string; kind: MailKind; subject: string; text: string; links: string[] }>> {
+  await mailIdle();
   const raw = await redis.lrange(`sf:mailbox:${to.toLowerCase()}`, 0, 19);
   return raw.map((r) => {
     const m = JSON.parse(r) as { at: string; kind: MailKind; subject: string; text: string };

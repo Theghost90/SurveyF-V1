@@ -25,7 +25,7 @@ let app: FastifyInstance;
 const PUBLIC = new Set([
   'GET /healthz',
   'GET /api/auth/config', 'POST /api/auth/register', 'POST /api/auth/login', 'POST /api/auth/refresh',
-  'POST /api/auth/verify-email', 'POST /api/auth/verify-email/resend', 'POST /api/auth/password/forgot', 'POST /api/auth/password/reset',
+  'POST /api/auth/signout', 'POST /api/auth/verify-email', 'POST /api/auth/verify-email/resend', 'POST /api/auth/password/forgot', 'POST /api/auth/password/reset',
   'POST /api/auth/google', 'POST /api/auth/google/link/confirm',
   'GET /api/pricing', 'GET /api/plans',
   'GET /api/receipts/:token', // a signed link the participant opens

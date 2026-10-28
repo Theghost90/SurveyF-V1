@@ -82,6 +82,16 @@ const schema = z.object({
   AUDIT_RETENTION_DAYS: z.coerce.number().int().min(30).default(400),
   /** An account whose address was never confirmed is deleted after this many hours. */
   UNVERIFIED_PURGE_HOURS: z.coerce.number().int().min(1).default(24),
+  /**
+   * Sign-ups from one connection per hour. Mobile networks put many subscribers behind one public address (carrier-grade NAT), so this is generous on purpose: a
+   * CAPTCHA does the real work, and this only stops one source from creating accounts by the thousand.
+   */
+  SIGNUP_PER_IP_HOUR: z.coerce.number().int().min(1).default(30),
+  /**
+   * Sign-up, "resend the confirmation" and "forgot my password" answer the same whether or not the address has an account, and take the same time: a response is
+   * held until at least this many milliseconds have passed, so that the few milliseconds of extra database work for a real address cannot be measured.
+   */
+  AUTH_MIN_RESPONSE_MS: z.coerce.number().int().min(0).max(5000).default(350),
 
   // --- WhatsApp ---
   WHATSAPP_MODE: z.enum(['mock', 'live']).optional(),

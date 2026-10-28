@@ -7,7 +7,7 @@ import { buildApp } from '../src/app';
 import { env } from '../src/config/env';
 import { clientIp, ipPrefix } from '../src/lib/client-ip';
 import { encryptSecret } from '../src/lib/crypto';
-import { prisma, rawPrisma } from '../src/lib/prisma';
+import { Prisma, prisma, rawPrisma } from '../src/lib/prisma';
 import { redis } from '../src/lib/redis';
 import { runRetention } from '../src/jobs/retention';
 import { guardAuditLog, prepareDatabase } from '../src/services/startup';
@@ -137,6 +137,35 @@ describe('housekeeping (retention)', () => {
     expect(await prisma.authSession.count()).toBe(2);
     expect((await prisma.authSession.findUnique({ where: { id: active.id } }))?.id).toBe(active.id);
     expect(live).not.toBe(used);
+  });
+});
+
+describe('a reply parked for retry does not become a readable copy of the number (SEC-15)', () => {
+  it('stores the participant\'s number encrypted, sends to the real number, and drops the payload when the job is over', async () => {
+    const { enqueueSessionMessage, runSendWorkerOnce } = await import('../src/services/whatsapp/sender');
+    const owner = await registerOwner(app);
+    const acct = await prisma.whatsAppAccount.findFirstOrThrow({ where: { userId: owner.userId } });
+    await enqueueSessionMessage(owner.userId, acct.phoneNumberId, '237677000999', [{ kind: 'text', body: 'Thank you for answering' }]);
+    const [raw] = await prisma.$queryRaw<Array<{ payload: { to: string } }>>`SELECT payload FROM "SendJob" WHERE kind = 'session_message'`;
+    expect(raw!.payload.to).toMatch(/^v2\./);
+    expect(JSON.stringify(raw)).not.toContain('237677000999');
+    await runSendWorkerOnce(10);
+    expect(await redis.keys('sf:mock:chat:*:237677000999')).toHaveLength(1); // it reached the real number
+    const [after] = await prisma.$queryRaw<Array<{ status: string; payload: unknown }>>`SELECT status, payload FROM "SendJob" WHERE kind = 'session_message'`;
+    expect(after).toEqual({ status: 'done', payload: null });
+  });
+
+  it('a job parked before this existed (plain number) still goes out, and the retention job empties the payload of a job that failed for good', async () => {
+    const { runSendWorkerOnce } = await import('../src/services/whatsapp/sender');
+    const owner = await registerOwner(app);
+    const acct = await prisma.whatsAppAccount.findFirstOrThrow({ where: { userId: owner.userId } });
+    await prisma.sendJob.create({ data: { userId: owner.userId, kind: 'session_message', payload: { phoneNumberId: acct.phoneNumberId, to: '237677000998', messages: [{ kind: 'text', body: 'older job' }] } } });
+    await runSendWorkerOnce(10);
+    expect(await redis.keys('sf:mock:chat:*:237677000998')).toHaveLength(1);
+    await prisma.sendJob.create({ data: { userId: owner.userId, kind: 'session_message', status: 'failed', lastError: 'account_missing', payload: { phoneNumberId: 'gone', to: '237677000997', messages: [] } } });
+    const r = await runRetention();
+    expect(r.parkedPayloads).toBeGreaterThanOrEqual(1);
+    expect(await prisma.sendJob.count({ where: { kind: 'session_message', NOT: { payload: { equals: Prisma.DbNull } } } })).toBe(0);
   });
 });
 

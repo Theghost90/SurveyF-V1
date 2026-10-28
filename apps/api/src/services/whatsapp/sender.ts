@@ -1,6 +1,7 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { COUNTRY_CONFIG, TEMPLATE_NAMES, estimateMinutes, formatDeadline, supportedCountry, toWaId, type OutboundMessage } from '@surveyflow/shared';
 import { templatePayload } from '@surveyflow/shared';
+import { decryptIfEncrypted, encryptSecret } from '../../lib/crypto';
 import { redis } from '../../lib/redis';
 import { prisma } from '../../lib/prisma';
 import { credsFor } from './accounts';
@@ -54,8 +55,12 @@ export async function enqueueInvitations(survey: { id: string; userId: string },
   return queued;
 }
 
+/**
+ * A reply parked for retry. The participant's number is stored ENCRYPTED, like the contact's, and the whole payload is dropped once the job is over
+ * (below, and by the retention job): a queue row must not become a second, readable copy of the number the contact table protects.
+ */
 export async function enqueueSessionMessage(userId: string, phoneNumberId: string, to: string, messages: OutboundMessage[]) {
-  await prisma.sendJob.create({ data: { userId, kind: 'session_message', payload: { phoneNumberId, to, messages } as unknown as Prisma.InputJsonValue } });
+  await prisma.sendJob.create({ data: { userId, kind: 'session_message', payload: { phoneNumberId, to: encryptSecret(to), messages } as unknown as Prisma.InputJsonValue } });
 }
 
 export async function enqueueGiftNotice(userId: string, recipientId: string, giftValue: string, receiptToken?: string) {
@@ -156,8 +161,9 @@ async function processJob(id: string) {
       const p = job.payload as unknown as { phoneNumberId: string; to: string; messages: OutboundMessage[] };
       const acct = await prisma.whatsAppAccount.findUnique({ where: { phoneNumberId: p.phoneNumberId } });
       if (!acct) return finish(id, { status: 'failed', lastError: 'account_missing' });
-      for (const m of p.messages) await gw.sendMessage(credsFor(acct), p.to, m);
-      return finish(id, { status: 'done' });
+      const to = decryptIfEncrypted(p.to); // jobs parked before the number was encrypted hold it plain: still readable
+      for (const m of p.messages) await gw.sendMessage(credsFor(acct), to, m);
+      return finish(id, { status: 'done', payload: Prisma.DbNull });
     }
 
     const r = job.recipient;

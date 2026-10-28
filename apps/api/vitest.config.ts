@@ -50,6 +50,7 @@ export default defineConfig({
       TURNSTILE_SECRET_KEY: '',
       CAPTCHA_DISABLED: '',
       HIBP_CHECK: 'false',
+      AUTH_MIN_RESPONSE_MS: '0', // the padding has its own test; everywhere else it would only slow the suite down
       ARGON2_MEMORY_KIB: '1024',
       ARGON2_TIME_COST: '1',
       ACCESS_TOKEN_TTL_SECONDS: '900',

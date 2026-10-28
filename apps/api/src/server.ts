@@ -5,6 +5,7 @@ import { prisma } from './lib/prisma';
 import { prepareDatabase } from './services/startup';
 import { redis } from './lib/redis';
 import { closeBrowser } from './services/exports/pdf';
+import { mailIdle } from './services/mail';
 
 const app = await buildApp();
 // Before the first request: one-off data fixes (encrypt existing contacts, fill new columns) and the append-only guard on the audit log.
@@ -15,6 +16,7 @@ async function shutdown(signal: string) {
   app.log.info({ signal }, 'shutting down');
   stopJobs();
   await app.close();
+  await mailIdle(); // messages still being handed to the provider (sign-up, password reset) are not dropped
   await closeBrowser();
   await prisma.$disconnect();
   redis.disconnect();

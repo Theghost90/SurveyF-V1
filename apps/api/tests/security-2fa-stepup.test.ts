@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { env } from '../src/config/env';
@@ -137,6 +138,16 @@ describe('authenticator app (SEC-09)', () => {
     expect(used).toHaveLength(1);
     expect(used[0]!.meta).toEqual({ left: 9 });
     expect((await loginRaw(app, 'rc@example.com', TEST_PASSWORD, {}, { recoveryCode: 'AAAA-BBBB-CCCC-DDDD' })).statusCode).toBe(401);
+  });
+
+  it('recovery codes are stored as a plain SHA-256 of the code, so rotating JWT_SECRET (or any key) can never invalidate them', async () => {
+    const o = await registerOwner(app, { email: 'rcrot@example.com' });
+    const { recoveryCodes } = await enableTwoFactor(o);
+    const stored = (await prisma.recoveryCode.findMany({ where: { userId: o.userId } })).map((r) => r.codeHash).sort();
+    const expected = recoveryCodes.map((c) => createHash('sha256').update(`recovery-code:${c.replace(/-/g, '')}`).digest('hex')).sort();
+    expect(stored).toEqual(expected);
+    // about 80 bits: 16 characters from a 31-letter alphabet, which is what makes an unkeyed hash safe
+    for (const c of recoveryCodes) expect(c).toMatch(/^[A-HJ-NP-Z2-9]{4}(-[A-HJ-NP-Z2-9]{4}){3}$/);
   });
 
   it('turning it off needs the password and a current code (or a recovery code); a stolen session alone cannot', async () => {

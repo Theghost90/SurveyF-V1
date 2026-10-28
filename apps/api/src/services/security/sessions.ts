@@ -115,6 +115,20 @@ export async function activeSession(sessionId: string, userId: string): Promise<
   return true;
 }
 
+/**
+ * Ends the session a refresh token belongs to, when the token is genuine. This is how the website signs somebody out after their API token has expired.
+ * A wrong secret does NOT end anything (unlike a refresh with a replayed token): nobody gains by guessing, and a stranger must not be able to sign people out.
+ */
+export async function revokeByRefreshToken(raw: string): Promise<{ userId: string; sessionId: string } | null> {
+  const parsed = parseRefreshToken(raw);
+  if (!parsed) return null;
+  const s = await prisma.authSession.findUnique({ where: { id: parsed.sessionId } });
+  if (!s || s.revokedAt) return null;
+  const given = sha256Hex(parsed.secret);
+  if (!safeEqual(given, s.refreshHash) && !(s.prevRefreshHash && safeEqual(given, s.prevRefreshHash))) return null;
+  return (await revokeSession(s.id, 'logout')) ? { userId: s.userId, sessionId: s.id } : null;
+}
+
 export async function revokeSession(sessionId: string, reason: string): Promise<boolean> {
   const r = await prisma.authSession.updateMany({ where: { id: sessionId, revokedAt: null }, data: { revokedAt: new Date(), revokedReason: reason } });
   await redis.del(cacheKey(sessionId));

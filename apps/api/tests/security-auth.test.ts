@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { env } from '../src/config/env';
 import { verifyCaptcha } from '../src/lib/captcha';
 import { prisma } from '../src/lib/prisma';
+import { rlCredentials } from '../src/lib/ratelimit';
 import { redis } from '../src/lib/redis';
 import { readMockMailbox } from '../src/services/mail';
 import { PAIR_FREE, checkLoginGuard, delaySeconds } from '../src/services/security/login-guard';
@@ -41,6 +42,34 @@ describe('sign-up (findings 1 and 9)', () => {
     expect(again.body).toBe(a.body);
     expect(confirmed.body).toBe(a.body);
     expect(json(a)).toEqual({ ok: true });
+  });
+
+  it('takes the same time whether or not the address has an account, because the answer is held to a minimum (sign-up, resend and forgot password)', async () => {
+    const original = env.AUTH_MIN_RESPONSE_MS;
+    env.AUTH_MIN_RESPONSE_MS = 250;
+    try {
+      await register('known@example.com');
+      await confirm('known@example.com');
+      await register('waiting@example.com');
+      const timed = async (fn: () => Promise<unknown>) => { const t = Date.now(); await fn(); return Date.now() - t; };
+      const runs = {
+        'sign-up, confirmed address': await timed(() => register('known@example.com')),
+        'sign-up, new address': await timed(() => register('brand-new@example.com')),
+        'resend, unknown address': await timed(() => call('POST', '/api/auth/verify-email/resend', { email: 'nobody@example.com' })),
+        'resend, waiting address': await timed(() => call('POST', '/api/auth/verify-email/resend', { email: 'waiting@example.com' })),
+        'forgot, unknown address': await timed(() => call('POST', '/api/auth/password/forgot', { email: 'nobody@example.com' })),
+        'forgot, real address': await timed(() => call('POST', '/api/auth/password/forgot', { email: 'known@example.com' })),
+      };
+      for (const [what, ms] of Object.entries(runs)) expect(ms, what).toBeGreaterThanOrEqual(245);
+    } finally { env.AUTH_MIN_RESPONSE_MS = original; }
+  });
+
+  it('the e-mail is handed to the provider after the answer, and is there once the mail system is idle (so its delay cannot give an address away)', async () => {
+    const r = await register('later@example.com');
+    expect(r.statusCode).toBe(202);
+    expect(await mailsOf('later@example.com', 'verify_email')).toHaveLength(1); // readMockMailbox waits for anything still in flight
+    await call('POST', '/api/auth/password/forgot', { email: 'later@example.com' });
+    expect(await mailsOf('later@example.com', 'reset_password')).toHaveLength(1);
   });
 
   it('a confirmed account keeps its address, is not changed by a second sign-up, and its owner is told', async () => {
@@ -101,12 +130,17 @@ describe('sign-up (findings 1 and 9)', () => {
     expect(json(r)).toEqual({ ok: true, plan: 'growth', interval: 'annual' });
   });
 
-  it('limits sign-ups from one connection to 20 an hour', async () => {
-    for (let i = 0; i < 20; i++) expect((await register(`bulk${i}@example.com`)).statusCode).toBe(202);
-    const r = await register('bulk-over@example.com');
-    expect(r.statusCode).toBe(429);
-    expect(json(r).error).toBe('rate_limited');
-    expect((await register('bulk-other-ip@example.com', {}, { 'x-sf-client-ip': '198.51.100.7' })).statusCode).toBe(202);
+  it('limits sign-ups from one connection per hour (generous: many subscribers share one address on a mobile network)', async () => {
+    expect(env.SIGNUP_PER_IP_HOUR).toBe(30);
+    const saved = env.SIGNUP_PER_IP_HOUR;
+    env.SIGNUP_PER_IP_HOUR = 6;
+    try {
+      for (let i = 0; i < 6; i++) expect((await register(`bulk${i}@example.com`)).statusCode).toBe(202);
+      const r = await register('bulk-over@example.com');
+      expect(r.statusCode).toBe(429);
+      expect(json(r).error).toBe('rate_limited');
+      expect((await register('bulk-other-ip@example.com', {}, { 'x-sf-client-ip': '198.51.100.7' })).statusCode).toBe(202);
+    } finally { env.SIGNUP_PER_IP_HOUR = saved; }
   });
 
   it('exposes only what the forms need', async () => {
@@ -299,6 +333,15 @@ describe('brute force: rising delays, never a lock-out (finding 5)', () => {
     const spellings = ['john.doe@gmail.com', 'johndoe@gmail.com', 'JOHN.DOE@gmail.com', 'j.o.h.n.d.o.e@gmail.com', 'johndoe+1@gmail.com'];
     for (const s of spellings) expect((await login(s, 'wrong-guess-xyz-1', ip(5))).statusCode).toBe(401);
     expect((await login('john.doe+2@gmail.com', 'wrong-guess-xyz-2', ip(5))).statusCode).toBe(429);
+  });
+
+  it('the per-minute cap on credential calls is per mailbox too: aliases of one address share one allowance', () => {
+    const key = (email: string, ip = '203.0.113.9') => rlCredentials(10).config.rateLimit.keyGenerator({ body: { email }, headers: {}, socket: { remoteAddress: ip } } as never);
+    const keys = new Set(['john.doe@gmail.com', 'J.O.H.N.DOE@gmail.com', 'johndoe+shop@gmail.com', 'johndoe@googlemail.com', ' JohnDoe@Gmail.com '].map((e) => key(e)));
+    expect(keys.size).toBe(1);
+    expect(key('other@gmail.com')).not.toBe(key('john.doe@gmail.com'));
+    expect(key('john.doe@gmail.com', '198.51.100.7')).not.toBe(key('john.doe@gmail.com')); // and still per connection
+    expect(key('a.b@corp.example')).not.toBe(key('ab@corp.example')); // unknown domains are not folded: that could be two different people
   });
 
   it('a successful sign-in forgives the earlier failures of that address from that connection', async () => {
@@ -578,6 +621,27 @@ describe('refresh tokens (finding 3)', () => {
     const c = await fresh('rf3@example.com');
     await prisma.authSession.update({ where: { id: c.sessionId }, data: { expiresAt: new Date(Date.now() - 1000) } });
     expect((await refresh(c.refreshToken)).statusCode).toBe(401);
+  });
+
+  it('the website signs somebody out with the refresh token alone, once the API token has expired; a wrong secret ends nothing', async () => {
+    const signout = (rt: string) => call('POST', '/api/auth/signout', { refreshToken: rt });
+    const a = await fresh('so1@example.com');
+    const [, sid] = /^rt_([A-Za-z0-9]+)_/.exec(a.refreshToken)!;
+    for (const wrong of ['nonsense', `rt_${sid}_${'A'.repeat(48)}`, `rt_${'x'.repeat(25)}_${'A'.repeat(48)}`]) expect((await signout(wrong)).statusCode, wrong).toBe(204);
+    expect((await prisma.authSession.findUniqueOrThrow({ where: { id: a.sessionId } })).revokedAt).toBeNull(); // nobody can sign others out by guessing
+    expect((await call('GET', '/api/auth/me', undefined, asUser(a.accessToken))).statusCode).toBe(200);
+
+    expect((await signout(a.refreshToken)).statusCode).toBe(204);
+    expect((await call('GET', '/api/auth/me', undefined, asUser(a.accessToken))).statusCode).toBe(401);
+    expect((await refresh(a.refreshToken)).statusCode).toBe(401);
+    expect((await prisma.authSession.findUniqueOrThrow({ where: { id: a.sessionId } })).revokedReason).toBe('logout');
+    expect(await auditRows('logout')).toHaveLength(1);
+    expect((await signout(a.refreshToken)).statusCode).toBe(204); // already over: still the same answer
+
+    const b = await fresh('so2@example.com');
+    const rotated = json(await refresh(b.refreshToken));
+    expect((await signout(b.refreshToken)).statusCode).toBe(204); // the previous token (a parallel tab) still proves the session
+    expect((await refresh(rotated.refreshToken)).statusCode).toBe(401);
   });
 
   it('a refresh token is not an API token', async () => {
