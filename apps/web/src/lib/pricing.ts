@@ -20,7 +20,7 @@ export interface PricingData {
  * page still renders, in FCFA: the canonical prices need no exchange rate, so this fallback is exact, not a guess.
  */
 export async function getPricing(): Promise<PricingData> {
-  const country = countryFromHeaders(headers());
+  const country = countryFromHeaders(await headers());
   try {
     const res = await fetch(`${API_URL}/api/pricing`, {
       headers: { ...internalHeaders(), ...(country ? { 'x-sf-country': country } : {}) },

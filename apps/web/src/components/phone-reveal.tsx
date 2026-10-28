@@ -15,7 +15,7 @@ export function RevealablePhone({ contactId, masked, className }: { contactId: s
   const t = useT();
   const [full, setFull] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
 
   async function show() {

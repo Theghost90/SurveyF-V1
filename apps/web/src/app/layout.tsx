@@ -11,9 +11,9 @@ export const metadata: Metadata = {
 };
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#0B2B22' };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const locale = getLocale();
-  const geo = getGeo();
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale();
+  const geo = await getGeo();
   return (
     <html lang={locale}>
       <body>

@@ -1,13 +1,13 @@
 import { cookies, headers } from 'next/headers';
 import { LOCALE_COOKIE, detectLocale, isLocale, makeT, type Locale } from './index';
 
-export function getLocale(): Locale {
-  const c = cookies().get(LOCALE_COOKIE)?.value;
+export async function getLocale(): Promise<Locale> {
+  const c = (await cookies()).get(LOCALE_COOKIE)?.value;
   if (isLocale(c)) return c;
-  return detectLocale(headers().get('accept-language'));
+  return detectLocale((await headers()).get('accept-language'));
 }
 
-export function getT() {
-  const locale = getLocale();
+export async function getT() {
+  const locale = await getLocale();
   return { locale, t: makeT(locale) };
 }

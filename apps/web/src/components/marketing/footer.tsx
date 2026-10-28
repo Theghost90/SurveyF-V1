@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { Logo } from '@/components/logo';
 import { getT } from '@/lib/i18n/server';
 
-export function MarketingFooter() {
-  const { t } = getT();
+export async function MarketingFooter() {
+  const { t } = await getT();
   return (
     <footer className="border-t border-line bg-white">
       <div className="mx-auto flex max-w-[1344px] flex-wrap items-start justify-between gap-8 px-5 py-10 sm:px-8">

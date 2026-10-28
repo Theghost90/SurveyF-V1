@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
  * Below 640 px: logo, language switch, "Explore free" and a hamburger (side menu) in one row, so both stay visible without a second line.
  */
 export async function MarketingHeader({ current }: { current?: 'pricing' }) {
-  const { t } = getT();
+  const { t } = await getT();
   const live = await getServerSession(authOptions).then((s) => !!s && !s.error); // a cookie that has run past its end is not a sign-in
   const link = 'text-[15px] font-medium text-ink no-underline hover:text-leaf';
   const links = [

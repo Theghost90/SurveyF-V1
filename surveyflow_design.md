@@ -1,6 +1,6 @@
 # SurveyFlow Design Specification
 
-Scanned from the implemented web app (`apps/web`: Next.js 14, Tailwind 3, Radix primitives, shadcn-style components). Values are quoted from `tailwind.config.ts`, `globals.css` and `components/ui/*`. Where something is a convention seen across screens rather than a coded token, it says so.
+Scanned from the implemented web app (`apps/web`: Next.js 15, Tailwind 3, Radix primitives, shadcn-style components). Values are quoted from `tailwind.config.ts`, `globals.css` and `components/ui/*`. Where something is a convention seen across screens rather than a coded token, it says so.
 
 ## 1. Principles
 - **Calm, trustworthy, WhatsApp-adjacent.** Deep green ink on a pale green-grey canvas, one bright green for the primary positive action, amber for caution.

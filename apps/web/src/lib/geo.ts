@@ -36,8 +36,8 @@ export function geoFrom(raw: string | undefined): Geo {
 }
 
 /** For server components and layouts. */
-export function getGeo(): Geo {
-  return geoFrom(countryFromHeaders(nextHeaders()));
+export async function getGeo(): Promise<Geo> {
+  return geoFrom(countryFromHeaders(await nextHeaders()));
 }
 
 export { DEFAULT_COUNTRY };

@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { use, useState } from 'react';
 import useSWR from 'swr';
 import { ArrowLeft, ExternalLink, FileSpreadsheet, FileText, Lock, RefreshCw, Sheet } from 'lucide-react';
 import { toast } from 'sonner';
@@ -17,10 +17,10 @@ import { useLocale, useT } from '@/lib/i18n/client';
 
 interface Sync { enabled: boolean; autoSync?: boolean; spreadsheetUrl?: string; lastSyncedAt?: string | null; rowsSynced?: number }
 
-export default function ExportPage({ params }: { params: { id: string } }) {
+export default function ExportPage({ params }: { params: Promise<{ id: string }> }) {
   const t = useT();
   const locale = useLocale();
-  const { id } = params;
+  const { id } = use(params);
   const { account } = useAccount();
   const { data: survey } = useSWR<{ title: string }>(`/surveys/${id}`);
   const { data: google, mutate: refreshGoogle } = useSWR<{ configured: boolean; connected: boolean; email: string | null }>('/integrations/google');

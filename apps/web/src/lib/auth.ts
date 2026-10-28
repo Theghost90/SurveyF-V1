@@ -84,7 +84,7 @@ export const authOptions: NextAuthOptions = {
       try {
         res = await fetch(`${API_URL}/api/auth/google`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...internalHeaders(), ...forwardedFrom(headerGetter(nextHeaders())) },
+          headers: { 'Content-Type': 'application/json', ...internalHeaders(), ...forwardedFrom(headerGetter(await nextHeaders())) },
           body: JSON.stringify({ idToken: account.id_token }),
           cache: 'no-store',
         });

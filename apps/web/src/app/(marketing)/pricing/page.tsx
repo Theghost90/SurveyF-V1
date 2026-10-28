@@ -7,7 +7,7 @@ import { getPricing } from '@/lib/pricing';
 export const metadata: Metadata = { title: 'Pricing' };
 
 export default async function PricingPage() {
-  const { t } = getT();
+  const { t } = await getT();
   const pricing = await getPricing();
   const included = ['pricing.inc1', 'pricing.inc2', 'pricing.inc3', 'pricing.inc4', 'pricing.inc5'] as const;
   return (

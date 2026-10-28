@@ -12,7 +12,7 @@ then billed in FCFA (MTN MoMo, Orange Money, card) or, in Nigeria, Kenya and Gha
 
 | | |
 |---|---|
-| Web | Next.js 14 (App Router), TypeScript, Tailwind, shadcn-style components (Radix), NextAuth, Recharts, dnd-kit — **port 4222** |
+| Web | Next.js 15 (App Router) with React 19, TypeScript, Tailwind, shadcn-style components (Radix), NextAuth, Recharts, dnd-kit — **port 4222** |
 | API | Node.js + Fastify, TypeScript — **port 4223** |
 | Data | PostgreSQL (Prisma), Redis (ioredis) |
 | WhatsApp | Meta Cloud API client + a local **mock gateway/simulator** |

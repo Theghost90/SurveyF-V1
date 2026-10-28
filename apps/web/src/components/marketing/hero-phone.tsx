@@ -3,8 +3,8 @@ import { getT } from '@/lib/i18n/server';
 import { Rich } from './rich';
 
 /** The design's phone: an example survey chat with two floating cards. Content is clearly labelled as an example. */
-export function HeroPhone() {
-  const { t } = getT();
+export async function HeroPhone() {
+  const { t } = await getT();
   const bubbleIn = 'self-start max-w-[86%] rounded-[4px_12px_12px_12px] bg-white px-3 py-2.5';
   const bubbleOut = 'self-end rounded-[12px_4px_12px_12px] bg-wa-out px-3 py-2';
   return (

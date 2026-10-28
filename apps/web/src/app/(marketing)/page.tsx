@@ -9,7 +9,7 @@ import { getT } from '@/lib/i18n/server';
 import { cn } from '@/lib/utils';
 
 export default async function HomePage() {
-  const { t, locale } = getT();
+  const { t, locale } = await getT();
   const pricing = await getPricing();
   const salesWa = process.env.NEXT_PUBLIC_SALES_WHATSAPP; // e.g. 237600000000 — set per deployment, never hard-coded
   const steps = [

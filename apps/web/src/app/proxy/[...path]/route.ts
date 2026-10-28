@@ -16,8 +16,8 @@ const UPSTREAM_TIMEOUT_MS = 120_000;
 
 const refuse = (status: number, error: string, message?: string) => NextResponse.json(message ? { error, message } : { error }, { status });
 
-async function handler(req: NextRequest, { params }: { params: { path: string[] } }) {
-  const segments = params.path;
+async function handler(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+  const { path: segments } = await params;
   // Only plain pieces: no traversal out of /api, no smuggled slash, question mark or percent sign (packages/shared/src/web-guard.ts says why).
   const verdict = proxyVerdict(segments);
   if (verdict === 'bad_request') return refuse(400, 'bad_request');
