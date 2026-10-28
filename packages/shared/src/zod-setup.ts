@@ -7,4 +7,5 @@ import { z } from 'zod';
  * Browsers therefore get zod's plain parser; servers (which have no such policy) keep the fast one. The setting is read when a schema is built, so this module must be
  * imported before the first one: survey.ts imports it first.
  */
-if (typeof window !== 'undefined') z.config({ jitless: true });
+// Read through `globalThis`: this package is compiled without the DOM library, so the bare name `window` does not type-check here.
+if (typeof (globalThis as { window?: unknown }).window !== 'undefined') z.config({ jitless: true });
