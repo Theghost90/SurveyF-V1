@@ -16,10 +16,11 @@
     "start": "concurrently -n api,web \"npm run start -w @surveyflow/api\" \"npm run start -w @surveyflow/web\"",
     "db:push": "npm run db:push -w @surveyflow/api",
     "db:seed": "npm run db:seed -w @surveyflow/api",
-    "test": "npm run test -w @surveyflow/shared && npm run test -w @surveyflow/api && npm run test -w @surveyflow/web && npm run test:scripts",
+    "test": "npm run test -w @surveyflow/shared && npm run test -w @surveyflow/api && npm run test -w @surveyflow/web && npm run test:scripts && npm run backlog:check",
     "test:scripts": "node --test \"scripts/tests/*.test.mjs\"",
     "typecheck": "npm run typecheck -w @surveyflow/shared && npm run typecheck -w @surveyflow/api && npm run typecheck -w @surveyflow/web",
     "audit:gate": "node scripts/audit-gate.mjs",
+    "backlog:check": "node scripts/backlog-check.mjs",
     "release:check": "npm run typecheck && npm run lint -w @surveyflow/web && npm test && npm run audit:gate",
     "share": "node scripts/share-demo.mjs"
   },
