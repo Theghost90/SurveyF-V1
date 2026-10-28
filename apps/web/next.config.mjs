@@ -7,6 +7,10 @@ if (existsSync(rootEnv)) {
   try { process.loadEnvFile(rootEnv); } catch { /* older Node: use apps/web/.env.local instead */ }
 }
 
+// A local preview needs no secret to be chosen: in development the website signs its cookies with a fixed throw-away one when .env leaves NEXTAUTH_SECRET blank (as
+// .env.example ships it), the way the API falls back for JWT_SECRET. Production never gets one: with a blank secret nobody can sign in, on purpose.
+if (process.env.NODE_ENV === 'development' && !process.env.NEXTAUTH_SECRET?.trim()) process.env.NEXTAUTH_SECRET = 'dev-only-nextauth-secret-change-me-0123456789abcdef';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,

@@ -204,8 +204,15 @@ export type Env = z.infer<typeof schema> & {
   require2faPlans: string[];
 };
 
-function load(): Env {
-  const parsed = schema.safeParse(process.env);
+/**
+ * A setting left blank in .env (the way .env.example ships the optional ones) is a setting that is not there: its default applies. Without this a blank was an empty
+ * value: EMAIL_PROVIDER= and WHATSAPP_PLATFORM_PHONE= stopped the API from starting, and PUBLIC_WEB_URL= gave e-mails links without an address.
+ */
+export const withoutBlanks = (source: Record<string, string | undefined>): Record<string, string> =>
+  Object.fromEntries(Object.entries(source).filter((e): e is [string, string] => typeof e[1] === 'string' && e[1].trim() !== ''));
+
+export function loadEnv(source: Record<string, string | undefined> = process.env): Env {
+  const parsed = schema.safeParse(withoutBlanks(source));
   if (!parsed.success) {
     console.error('Invalid environment:\n' + parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n'));
     process.exit(1);
@@ -282,4 +289,10 @@ function load(): Env {
   };
 }
 
-export const env = load();
+/** What is wrong with a set of environment variables (nothing when the list is empty). Exported so that a test can hold `.env.example` itself to the schema. */
+export function envIssues(source: Record<string, string | undefined>): string[] {
+  const parsed = schema.safeParse(withoutBlanks(source));
+  return parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+}
+
+export const env = loadEnv();
