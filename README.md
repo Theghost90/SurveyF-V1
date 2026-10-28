@@ -27,7 +27,7 @@ then billed in FCFA (MTN MoMo, Orange Money, card) or, in Nigeria, Kenya and Gha
 Needs **Node.js 22.12 or newer** (puppeteer 25 and the Prisma 7 tools require it; `node -v`), npm, and Postgres 16 and Redis 7 (`docker compose up -d` starts both).
 
 ```bash
-cp .env.example .env            # then set the secrets (see below); defaults are fine for a local preview
+cp .env.example .env            # Windows PowerShell: copy .env.example .env.  Nothing to edit for a local preview: a setting left blank is a setting that is not there (its default applies) and development fills in its own throw-away secrets. Production does not: the API refuses to start without real ones and the website cannot sign anyone in
 docker compose up -d            # Postgres + Redis   (or use your own and edit DATABASE_URL / REDIS_URL)
 npm install
 npm run db:push                 # create the schema  (production uses `prisma migrate deploy`, see below). Run it yourself: the Prisma 7 command line refuses destructive commands from an AI agent
@@ -99,7 +99,7 @@ docs/META_CHECK.md  running the WhatsApp integration against a real Meta test ap
 ## Tests
 
 ```bash
-npm test                          # shared (71) + API (463) + website (14) tests, then the script tests (37) and the backlog check. Needs the local Postgres/Redis; the API tests use the `surveyflow_test` database
+npm test                          # shared (71) + API (465) + website (18) tests, then the script tests (37) and the backlog check. Needs the local Postgres/Redis; the API tests use the `surveyflow_test` database
 npm run typecheck                 # the three workspaces
 npm run audit:gate                # npm audit --omit=dev: fails on a high or critical advisory that is not written in docs/audit-allowlist.json with a reason and an end date
 npm run release:check             # typecheck + the website's lint + npm test + the audit gate: before every release

@@ -267,10 +267,12 @@ The request log keeps the **path without its query string** (search terms, token
 | `PUBLIC_WEB_URL`★ | https address used in e-mail links (never taken from a request header) |
 | `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`★ (or `CAPTCHA_DISABLED=true`) | CAPTCHA |
 | `CLIENT_IP_HEADER` or `TRUSTED_PROXY_HOPS` (website) | where the visitor's address comes from |
-| `NEXTAUTH_SECRET`, `NEXTAUTH_URL` (website) | cookie encryption; https in production |
+| `NEXTAUTH_SECRET`★, `NEXTAUTH_URL` (website) | cookie encryption; https in production. Blank in development gets a fixed throw-away secret (`apps/web/next.config.mjs`); **blank in production signs nobody in** |
 | `CSP_MODE`, `HIBP_CHECK`, `ARGON2_*`, `ACCESS_TOKEN_TTL_SECONDS`, `SESSION_TTL_HOURS`, `AUTH_MIN_RESPONSE_MS`, `SIGNUP_PER_IP_HOUR`, `EXPORT_*`, `STEP_UP_*`, `REVEAL_PER_DAY`, `REQUIRE_2FA_PLANS`, `AUDIT_RETENTION_DAYS`, `UNVERIFIED_PURGE_HOURS`, `RATE_LIMIT_SESSION_PER_MINUTE`, `RATE_LIMIT_IP_PER_MINUTE`, `CONFIRM_REQUIRES_PASSWORD`, `READ_SOFT_PEOPLE`, `READ_HARD_PEOPLE`, `SHEETS_AUTOSYNC_DAYS` | the tunable limits above |
 
 Generate secrets with `openssl rand -base64 32` (use `-base64 48` for `JWT_SECRET`).
+
+**A setting left blank in `.env` is the same as no setting**: its default applies (`apps/api/src/config/env.ts`, `withoutBlanks`; `tests/env-example.test.ts` holds `.env.example` itself to it). One consequence to know: `REQUIRE_2FA_PLANS=` (blank) now means the default `business`, no longer "no plan"; to require it for nobody, write `REQUIRE_2FA_PLANS=none`. In development a blank `JWT_SECRET` is the API's own throw-away one (before, it was an empty string); in production a blank one is refused, as before.
 
 ### 15.2 Rotation and incidents
 
@@ -295,7 +297,7 @@ setting, not code)** and one real confirmation e-mail received · Turnstile keys
 ## 16. What was verified, and what could not be
 
 **Verified in this environment** (real Postgres, Redis, headless Chromium):
-- **585 automated tests** (71 shared in 6 files, 463 API in 27 files, 14 website in 1 file, 37 script tests) and the backlog check, run together by `npm test`: sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed) and the password they ask for, purge, squatter replacement, aliases, password policy and hash upgrade,
+- **591 automated tests** (71 shared in 6 files, 465 API in 28 files, 18 website in 2 files, 37 script tests) and the backlog check, run together by `npm test`: sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed) and the password they ask for, purge, squatter replacement, aliases, password policy and hash upgrade,
   the three login counters and the CAPTCHA paths, sessions and refresh rotation (race, grace, reuse, revoke, expiry), JWT rotation, password reset/change, Google sign-in (stubbed JWKS: wrong audience/issuer/signature, unverified e-mail, linking, squatter), TOTP (RFC vectors, replay, recovery codes, disable),
   step-up (methods, window per session, limits), masking, reveal, export and bulk-delete controls, caps, the read caps, the Sheets re-confirmation, e-mails and audit rows, the rate limits per session and per address, key ring, rotation script (child process), blind index, parked payloads, production boot refusals, log hygiene,
   the append-only trigger, **every API route** against a second owner, the website proxy's rules, token renewal and cookie handling (14 tests), the post-sign-in redirect rule, the audit gate and the backlog checker.
