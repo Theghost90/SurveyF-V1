@@ -47,7 +47,8 @@ function findCloudflared() {
 }
 
 // ---- 1. prerequisites ----
-if (Number(process.versions.node.split('.')[0]) < 20) die(`Node 20 or newer is required (you have ${process.versions.node}).`);
+// puppeteer 25 (PDF export) needs Node 22.12 or newer, and Prisma 7 needs 20.19, 22.12 or 24 and up; Node 20 reached end of life in April 2026.
+{ const [maj, min] = process.versions.node.split('.').map(Number); if (maj < 22 || (maj === 22 && min < 12)) die(`Node 22.12 or newer is required (you have ${process.versions.node}). On Windows: winget install OpenJS.NodeJS.LTS, then close and reopen the terminal.`); }
 // A critical flaw in the website framework (CVE-2026-75604, GHSA-p293-qw3h-jr36): on a WINDOWS computer, anybody who can reach the site can run code on it, with no login and no
 // workaround but an upgrade (fixed in Next.js 15.5.24 and 16.3.3; 14.x never got a fix). A shared test site is exactly that situation, so this refuses to start there.
 const nextVersion = (() => { try { return JSON.parse(readFileSync(path.join(root, 'node_modules/next/package.json'), 'utf8')).version; } catch { return null; } })();

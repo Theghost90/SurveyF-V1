@@ -8,7 +8,7 @@ The one **in your folder when you run the command**. Always run `git pull origin
 
 ## What you need (once)
 
-1. Docker Desktop running (the database and cache), Node 20+, the repo installed (`npm ci`), a `.env` file (copy of `.env.example`).
+1. Docker Desktop running (the database and cache), Node 22.12 or newer (`node -v`; Windows: `winget install OpenJS.NodeJS.LTS`), the repo installed (`npm ci`), a `.env` file (copy of `.env.example`).
 2. **cloudflared**, the free tunnel tool (no account): `winget install --id Cloudflare.cloudflared`, then close and reopen the terminal.
 
 ## Each time
