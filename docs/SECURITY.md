@@ -1,7 +1,7 @@
 # SurveyFlow V1 — security: what is built, how it works, how to run it, what is not covered
 
 This is the reference for the sign-in and data-protection work (the 15 findings of the registration-and-login review, minus findings 11 and 13, and the matrix
-items SEC-01 to SEC-15). It says **what each protection does, where it lives, how it was tested, what it costs and what it does not stop**. Read §12 (what is
+items SEC-01 to SEC-20; SEC-16 to SEC-20 were added after the review, §1.1). Where each item stands, built or not, is kept in [`BACKLOG.md`](BACKLOG.md). It says **what each protection does, where it lives, how it was tested, what it costs and what it does not stop**. Read §12 (what is
 not covered) before telling anyone the product is "secure": it is hardened against the attacks the review named, not immune to attacks in general.
 
 Legend as in `DECISIONS.md`: ✅ done and tested here · ⚠️ built, but could not be verified against the real third-party service from the build environment · ❌ not built.
@@ -29,6 +29,16 @@ Legend as in `DECISIONS.md`: ✅ done and tested here · ⚠️ built, but could
 Not built, on purpose: **finding 11** and **finding 13** as such (they are the matrix items DAT-02 and DAT-01: encrypted disks and backups depend on the hosting choice,
 deletion and export need counsel's retention rules first); **Postgres row-level security** (§13 explains the choice); **any staff console or role system** (ADM-01 to ADM-06).
 
+### 1.1 Matrix items added after the review (SEC-16 to SEC-20)
+
+| Item | What | Status | Where |
+|---|---|---|---|
+| SEC-16 | The website framework upgraded (Next.js 14.2.35 to 15.5.28, React 19) | ✅ (⚠️ never run on a Windows host) | §18 |
+| SEC-17 | Dependency majors (zod 4, puppeteer 25, Prisma 7) and an `npm audit` gate before every release | ✅ | §18 |
+| SEC-18 | The general rate limit counts per verified session, with a ceiling per address | ✅ | §10.1 |
+| SEC-19 | The confirmation page asks for the password chosen at sign-up | ✅ | §3.1 |
+| SEC-20 | A cap on how many different participants one login can list in a day; Google Sheets auto-sync needs a fresh confirmation | ✅ | §8 |
+
 ## 2. What an attacker is assumed to be able to do
 
 Four attackers, in the order the design was tested against them:
@@ -48,6 +58,11 @@ Not assumed away: a compromised owner device (§12), staff misuse (there is no s
   participants answers `403 email_not_verified` (`authenticateVerified`): an unconfirmed account could belong to a squatter.
 - The confirmation link is **single-use, 24 hours, stored only as a SHA-256** (a database leak cannot confirm anybody). A new link of the same kind replaces older ones.
   Opening the link confirms nothing: the page asks for a click and the confirmation is a POST (mail scanners that open every link must not use it up).
+- **The page also asks for the password chosen at sign-up** (SEC-19; `CONFIRM_REQUIRES_PASSWORD`, on unless set to `false`). Whoever registers an address chooses the password; the person the address belongs to does not
+  know it. So somebody who clicks a confirmation e-mail they did not ask for cannot confirm a stranger's account: they cannot type its password. The link is looked at without being spent, the password is checked,
+  and only then is the link consumed (a wrong password does not cost the owner their link). A wrong password answers 401 `confirm_password_wrong` and is audited (`verify_password_failed`); **five wrong passwords in an hour burn the link**
+  (a new one is a click away). Accounts created with Google never go through this page. *Cost:* one more field for everybody; an owner who forgot the password they just chose uses "forgot password" (a reset also confirms the address).
+  *Test:* `security-auth.test.ts` (five tests: wrong password, the link survives it, five tries burn it, the switch, an unconfirmed account that cannot be hijacked).
 - An account never confirmed is **deleted after 24 hours** (`UNVERIFIED_PURGE_HOURS`) unless it somehow holds money, a WhatsApp number or a wallet entry.
 - **Registering again with an address whose account was never confirmed replaces that account**, so a squatter cannot keep a real person out; **signing in with Google**
   does the same (Google has just proved the address). Accounts that existed before this work are marked confirmed once (`Backfill`), everything after must confirm.
@@ -164,24 +179,29 @@ One stolen login must not carry away every contact. Phone numbers are **masked i
 **Confirm it is you** (`step-up.ts`): the authenticator code if there is one, else the password, else a code e-mailed to the owner (Google-only accounts). It lasts `STEP_UP_MINUTES` (15) **for that browser session only**;
 eight attempts per 15 minutes; the e-mailed code lives 10 minutes, three requests per 10 minutes, five wrong tries kill it. The website asks once in a dialog and repeats the call. Searching: an exact number works (a keyed index), a
 **fragment of a number does not** (it would let someone read numbers digit by digit through the search box); names are searched in memory.
-*What this does not protect:* **names and free-text answers** are visible in lists and can be paged through without a step-up (only numbers are masked); the prize-draw winner's number; and **Google Sheets auto-sync**, which keeps
-pushing *new* rows after the one confirmed enabling (the enabling is counted, capped, confirmed and e-mailed; later rows are not).
+**Names and free-text answers** are not masked, so how many *different* participants one login looks at in 24 hours is counted (SEC-20: the contacts list, the responses list and the not-started list; a distinct count kept in Redis, so
+looking at the same page again is free, and a search counts the people it returns, not the ones it looked through). Past `READ_SOFT_PEOPLE` (1,000) the owner is e-mailed once (a count and a time, no names) and a recent "confirm it is you" is needed;
+past `READ_HARD_PEOPLE` (20,000) the lists answer 429 `read_cap` until the 24 hours have passed (an export is the way to take more, and it is capped, confirmed and e-mailed too). Both are in the audit trail (`bulk_read`, `bulk_read_blocked`).
+**Google Sheets auto-sync** needs a fresh confirmation to be switched on, at any size, and **pauses itself `SHEETS_AUTOSYNC_DAYS` (30) days after the last confirmation** (checked when a response completes); the owner is e-mailed once per pause, and it
+resumes, sending the rows it missed, when the owner confirms again. *Test:* `security-reads.test.ts` (seven tests) and `exports.test.ts`.
+*What this does not protect:* the prize-draw winner's number (shown in full on purpose); **a slow scraper that stays under the soft number** (1,000 people a day is a judgement call: lower it if owners' lists are smaller); and names and answers stay unmasked to a login that has confirmed.
 
 ## 9. Audit log and e-mails to the owner (SEC-08)
 
 `AuditLog` records who did a security-relevant thing, when and from where: **ids, counts, a browser label and a coarse place (first three groups of the address), never a name, a number, a message or an answer**. It is
 **append-only**: a database trigger refuses any UPDATE and any DELETE except from the retention job (`sf.audit_purge`), which removes rows older than `AUDIT_RETENTION_DAYS` (400). Written *before* the action for reveals and exports
 (`auditStrict`: no record, no action); sign-in events use the lenient writer (the owner must still be able to sign in). Recorded: register, confirmation, sign-in and new device, blocked sign-ins, sign-out and revocations,
-refresh reuse, password reset/change, step-up success and failure, two-factor changes, recovery codes (used, regenerated), Google sign-in and link, exports, bulk deletes, reveals, prize-draw winners.
+refresh reuse, password reset/change, step-up success and failure, two-factor changes, recovery codes (used, regenerated), Google sign-in and link, exports, bulk deletes, reveals, prize-draw winners, a wrong password on a confirmation page (`verify_password_failed`), lists read past the soft or the hard number (`bulk_read`, `bulk_read_blocked`),
+Google Sheets auto-sync confirmed and paused (`sheets_autosync_confirmed`, `sheets_autosync_paused`).
 The owner sees their own trail in **Settings → Security → Activity**. E-mails go out for: confirmation, "you already have an account", reset, password changed, new device, repeated failed sign-ins, export, bulk delete,
-two-factor on/off, sign-out everywhere, Google link, and the step-up code. *Not recorded:* single-contact edits and deletes, survey changes, billing, anything done by staff (there is no staff console yet).
+two-factor on/off, sign-out everywhere, Google link, the step-up code, a list read past the soft number, and a paused Sheets sync. *Not recorded:* single-contact edits and deletes, survey changes, billing, anything done by staff (there is no staff console yet).
 
 ## 10. Trusted client address and browser protections (SEC-07, SEC-13; findings 8, 15)
 
 - **Client address.** The API's `trustProxy` is **off**. The website's server works out the visitor's address (`CLIENT_IP_HEADER`, a single header your CDN sets such as `cf-connecting-ip`, **or** `TRUSTED_PROXY_HOPS`, the Nth address from the right of
   `x-forwarded-for`) and sends it as `x-sf-client-ip` **together with the shared secret**; the API believes that header only on a request that carries the secret. A stray `X-Forwarded-For` changes nothing. With neither variable set
   in production the website warns once: every visitor looks like one address, so the per-connection limits cannot tell them apart. **Deployment requirement: the website must be reachable only through the CDN** (firewall to its address ranges),
-  otherwise a visitor who reaches the site directly can set the header themselves.
+  otherwise a visitor who reaches the site directly can set the header themselves. **This was shown, not assumed** (§19): sent straight to the origin, `cf-connecting-ip: 6.6.6.6` was believed; behind a proxy that sets the header itself the visitor's own value was discarded and the audit trail recorded the proxy's address.
 - **Content-Security-Policy** with a per-request nonce and `strict-dynamic` (middleware), `default-src 'self'`, third parties only Cloudflare Turnstile and the Meta SDK, `object-src 'none'`, `frame-ancestors 'self'`, `form-action` self and accounts.google.com,
   inline styles allowed (Radix and the charts need them; inline styles cannot run code). `CSP_MODE=enforce|report-only|off`. Also `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy: strict-origin-when-cross-origin`, a restrictive
   `Permissions-Policy`, and in production `Strict-Transport-Security: max-age=63072000; includeSubDomains` (no preload; **every sub-domain of the site's domain must then serve https for two years**: remove `includeSubDomains` in `next.config.mjs` if some do not). The browser run reports every violation: **zero** in the full security run (dev server) and in the production build (§15).
@@ -189,6 +209,15 @@ two-factor on/off, sign-out everywhere, Google link, and the step-up code. *Not 
   each one reached the API's sign-in route before**); calls another site caused (`Sec-Fetch-Site: cross-site`) and state-changing calls with a foreign `Origin`; bodies over 3 MB (read with a cap, whatever `Content-Length` says); and calls that hang (120 s; the refresh 15 s).
   The browser can reach only a short list without a session (`PUBLIC_PATHS`); everything else needs the cookie. API responses are `no-store`.
 - **After sign-in the browser only goes to a path on this site** (`safeRelativePath`: one leading slash, then not another slash or a backslash, no control characters): `/\evil.example` is `//evil.example` to a browser and used to send the owner off-site after a real sign-in.
+
+### 10.1 Rate limits (SEC-18)
+
+- **The general limit counts per verified session**, not per address (`RATE_LIMIT_SESSION_PER_MINUTE`, 300). On a mobile network many owners share one public address and a busy analytics page polls every 10 seconds, so a limit per address would throttle a crowd for nothing
+  (it was seen in the browser tests, which all come from one address). The key comes from a token this server signed, for a live session: signature, issuer, audience and expiry are checked first, so **a token this server did not sign cannot choose a session to land in a fresh allowance**,
+  it counts against the caller's address.
+- **A ceiling per address** on top of it (`RATE_LIMIT_IP_PER_MINUTE`, 3,000) stops one source from multiplying sessions; calls with no valid token (the public pages, sign-in) count per address. Meta's and the providers' webhooks are not counted against an address.
+- The website forwards the visitor's own address with the pricing call (`apps/web/src/lib/pricing.ts`), so the public pricing page is counted per visitor and not as "the website" for all of them.
+- The sign-in, sign-up, reset and confirmation routes keep their own, tighter limits (§3, §4). *Test:* `security-ratelimit.test.ts` (seven tests: two owners behind one address, the usual 429 answer, forged tokens, the ceiling, the webhook exemption).
 
 ## 11. Encryption of participants' names and numbers (SEC-15) and secrets at rest
 
@@ -204,15 +233,15 @@ two-factor on/off, sign-out everywhere, Google link, and the step-up code. *Not 
 ## 12. What is NOT covered (read this)
 
 1. **A compromised owner device, a phished owner who completes the code themselves, SIM-swap attacks on the owner's phone, a malicious browser extension.** The controls limit damage (caps, confirmations, alerts, session list); they do not remove it.
-2. **Pre-hijacking through an e-mail the owner did not ask for.** If a stranger starts a sign-up with someone's address and that person *clicks the confirmation e-mail anyway*, the account becomes confirmed with the stranger's password. The e-mail says to ignore it if
-   you did not sign up; the account is empty; "forgot password" by the real owner ends the stranger's sessions. A stricter option (ask for the password the registrant chose on the confirmation page) is **not built**: it adds a step for everybody. **Your decision.**
-3. **Names and answers** in lists are not masked and not capped (§8). A stolen session can read them page by page.
-4. **Google Sheets auto-sync** continues after its one confirmed enabling (§8).
+2. **Pre-hijacking through an e-mail the owner did not ask for** is closed by SEC-19 (§3.1): the confirmation page asks for the password the registrant chose, and the person whose address it is does not know it. It comes back if `CONFIRM_REQUIRES_PASSWORD=false`,
+   and a registrant who *tells* the mailbox's owner the password can still get them to confirm.
+3. **Names and answers** in lists are not masked. One login can list at most `READ_HARD_PEOPLE` different participants a day and needs a recent confirmation past `READ_SOFT_PEOPLE` (§8), but a stolen session can still read up to the soft number without any confirmation.
+4. **Google Sheets auto-sync** now needs a confirmation to be switched on and pauses itself after 30 days without a new one (§8); in between it keeps pushing new rows.
 5. **Staff and operators**: no console, no roles, no staff 2FA, no audit of staff actions; database access by the operator is unlogged. Matrix items ADM-01 to ADM-02 (Must for a public launch) cover this.
 6. **Account deletion, data export, retention beyond the table in `LEGAL_FACTS_SHEET.md`** (DAT-01), **encrypted disks and backups** (DAT-02), a **breach-notification procedure**.
 7. **Postgres row-level security**: owner separation is application code, guarded by a test over every route (§13). One forgotten filter in *new* code that the guard does not see would still leak.
-8. **Denial of service** beyond the rate limits (no WAF, no per-tenant quotas on CPU-heavy PDF exports other than the per-minute and daily caps). The **global limit of 300 API requests a minute is per client address**: on a mobile network many owners share one public address (carrier-grade NAT), and a busy analytics page polls every 10 seconds, so a crowd behind one address could be throttled (HTTP 429) while nothing is wrong. It was seen in the browser tests, which all come from one address. Key it by session instead of by address once real traffic shows the need.
-9. **Dependencies**: `npm audit` still reports 17 advisories (none critical, 14 high, 3 moderate) that are **not fixed**; none is reachable at run time as far as was checked (§18). **Secrets management** is the deployment's job (the application reads environment variables).
+8. **Denial of service** beyond the rate limits (no WAF, no per-tenant quotas on CPU-heavy PDF exports other than the per-minute and daily caps). The general limit counts per verified session with a ceiling per address (§10.1), so a crowd behind one carrier address is not throttled for nothing; the numbers are to be tuned with real traffic.
+9. **Dependencies**: `npm audit --omit=dev` reports **0 advisories** since 2026-10-28 and `npm run audit:gate` fails a release on any high or critical one that is not written in `docs/audit-allowlist.json` with a reason and an end date (§18); a new advisory can appear tomorrow. **Secrets management** is the deployment's job (the application reads environment variables).
 
 ## 13. Owner separation (SEC-12; finding 12)
 
@@ -239,7 +268,7 @@ The request log keeps the **path without its query string** (search terms, token
 | `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`★ (or `CAPTCHA_DISABLED=true`) | CAPTCHA |
 | `CLIENT_IP_HEADER` or `TRUSTED_PROXY_HOPS` (website) | where the visitor's address comes from |
 | `NEXTAUTH_SECRET`, `NEXTAUTH_URL` (website) | cookie encryption; https in production |
-| `CSP_MODE`, `HIBP_CHECK`, `ARGON2_*`, `ACCESS_TOKEN_TTL_SECONDS`, `SESSION_TTL_HOURS`, `AUTH_MIN_RESPONSE_MS`, `SIGNUP_PER_IP_HOUR`, `EXPORT_*`, `STEP_UP_*`, `REVEAL_PER_DAY`, `REQUIRE_2FA_PLANS`, `AUDIT_RETENTION_DAYS`, `UNVERIFIED_PURGE_HOURS` | the tunable limits above |
+| `CSP_MODE`, `HIBP_CHECK`, `ARGON2_*`, `ACCESS_TOKEN_TTL_SECONDS`, `SESSION_TTL_HOURS`, `AUTH_MIN_RESPONSE_MS`, `SIGNUP_PER_IP_HOUR`, `EXPORT_*`, `STEP_UP_*`, `REVEAL_PER_DAY`, `REQUIRE_2FA_PLANS`, `AUDIT_RETENTION_DAYS`, `UNVERIFIED_PURGE_HOURS`, `RATE_LIMIT_SESSION_PER_MINUTE`, `RATE_LIMIT_IP_PER_MINUTE`, `CONFIRM_REQUIRES_PASSWORD`, `READ_SOFT_PEOPLE`, `READ_HARD_PEOPLE`, `SHEETS_AUTOSYNC_DAYS` | the tunable limits above |
 
 Generate secrets with `openssl rand -base64 32` (use `-base64 48` for `JWT_SECRET`).
 
@@ -255,70 +284,92 @@ Generate secrets with `openssl rand -base64 32` (use `-base64 48` for `JWT_SECRE
 | `NEXTAUTH_SECRET` changed | every cookie becomes unreadable: everybody signs in again. |
 | `INTERNAL_API_SECRET` changed | change it on the API and the website together; calls fail in between. |
 | Look at one owner's trail | `SELECT "at","action","ipPrefix","userAgent","meta" FROM "AuditLog" WHERE "userId" = '<id>' ORDER BY "at" DESC LIMIT 100;` |
+| The API sits at start-up and never answers (no log line, no database session) | A start-up lock in Redis (`sf:lock:startup-backfills`, 10 minutes) left by an API that was killed (`kill -9`, a container stopped) in the middle of its start-up data fixes: the next one waits for it, up to 2 minutes. If no other API instance is starting, `redis-cli del sf:lock:startup-backfills` and start again. (Found while re-running the browser suites after stopping servers the hard way.) |
 | Things worth an alert | any `refresh_reuse`; many `login_blocked`; an `export` with a large `rows`; `step_up_failed` bursts; `prize_draw_winner_shown` outside a draw. |
 
 ### 15.3 Before the first real owner (security part of the go-live checklist)
 
 HTTPS and `NEXTAUTH_URL`/`PUBLIC_WEB_URL` https · website reachable **only through the CDN** and `CLIENT_IP_HEADER` set · API on a private network with `INTERNAL_API_SECRET` · e-mail provider with a **verified sender domain (SPF, DKIM, DMARC: a domain
-setting, not code)** and one real confirmation e-mail received · Turnstile keys · `ENCRYPTION_KEYS` and `BLIND_INDEX_KEY` set, **backed up apart from the database** · database backups with a tested restore (OPS-02) · one full run of `scripts/e2e-security.mjs` against the staging site.
+setting, not code)** and one real confirmation e-mail received · Turnstile keys · `ENCRYPTION_KEYS` and `BLIND_INDEX_KEY` set, **backed up apart from the database** · database backups with a tested restore (OPS-02) · one full run of `scripts/e2e-security.mjs` against the staging site · **`scripts/preflight.mts` run on the deployed site** (`npx tsx --env-file=.env scripts/preflight.mts --url https://<your site> --domain <sender domain> --mail-to <you>`: §19 says what it checks) · Node 22.12 or newer on the host · `npm run release:check` before every release.
 
 ## 16. What was verified, and what could not be
 
 **Verified in this environment** (real Postgres, Redis, headless Chromium):
-- **505 automated tests** (69 shared in 4 files, 436 API in 24 files): sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed), purge, squatter replacement, aliases, password policy and hash upgrade, the three login counters and
-  the CAPTCHA paths, sessions and refresh rotation (race, grace, reuse, revoke, expiry), JWT rotation, password reset/change, Google sign-in (stubbed JWKS: wrong audience/issuer/signature, unverified e-mail, linking, squatter), TOTP (RFC vectors, replay, recovery codes, disable),
-  step-up (methods, window per session, limits), masking, reveal, export and bulk-delete controls, caps, e-mails and audit rows, key ring, rotation script (child process), blind index, parked payloads, production boot refusals, log hygiene, the append-only trigger, **every API route**
-  against a second owner, the proxy rules and the post-sign-in redirect rule.
+- **581 automated tests** (71 shared in 6 files, 459 API in 26 files, 14 website in 1 file, 37 script tests) and the backlog check, run together by `npm test`: sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed) and the password they ask for, purge, squatter replacement, aliases, password policy and hash upgrade,
+  the three login counters and the CAPTCHA paths, sessions and refresh rotation (race, grace, reuse, revoke, expiry), JWT rotation, password reset/change, Google sign-in (stubbed JWKS: wrong audience/issuer/signature, unverified e-mail, linking, squatter), TOTP (RFC vectors, replay, recovery codes, disable),
+  step-up (methods, window per session, limits), masking, reveal, export and bulk-delete controls, caps, the read caps, the Sheets re-confirmation, e-mails and audit rows, the rate limits per session and per address, key ring, rotation script (child process), blind index, parked payloads, production boot refusals, log hygiene,
+  the append-only trigger, **every API route** against a second owner, the website proxy's rules, token renewal and cookie handling (14 tests), the post-sign-in redirect rule, the audit gate and the backlog checker.
 - **A 20-step real-browser run** (`scripts/e2e-security.mjs`, API token set to 30 s so the website must renew it all the time): sign-up with a weak password refused, demo mailbox, unconfirmed account banner and gated call, same screen for a duplicate, link needs a click, wrong-password
   countdown, forgot/reset, two-step verification set-up with recovery codes that cannot be dismissed unsaved, sign-in with a code (wrong, right, replayed), recovery code, sessions list and remote sign-out, new recovery codes, disabling, password change, masked numbers and reveal, the
   "confirm it is you" dialog on a 60-row export, the activity log, the proxy refusing smuggled routes / oversized bodies / cross-site calls, no open redirect, sign out everywhere, **silent renewal across two token lifetimes**, and **zero Content-Security-Policy violations**.
-  The other browser runs (`e2e-ui`, `-bot`, `-wallet`, `-payments`, `-currency`, `-responsive`, `-landscape`) use the new sign-up flow and pass. **All of them were run again on the Next.js 15.5.28 production build** (§18): security 19 of 19 (20 of 20 with 30-second API tokens, i.e. with the silent renewal running throughout), UI 29, bot 14, wallet 13, payments 8, currency 6, responsive and landscape sweeps in demo mode (with the Simulator link), the UI run also against the development server (no framework warning in its log), and a clean `npm ci` from the new lockfile.
+  The other browser runs (`e2e-ui`, `-bot`, `-wallet`, `-payments`, `-currency`, `-responsive`, `-landscape`) use the new sign-up flow and pass. **All of them were run again on the final stack** (the Next.js 15.5.28 production build with zod 4, Prisma 7 and puppeteer 25, §18): security 19 of 19 (20 of 20 with 30-second API tokens, i.e. with the silent renewal running throughout; the last step, the Content-Security-Policy check, is what found the zod problem), UI 29, bot 14, wallet 13, payments 8, currency 6, responsive and landscape sweeps in demo mode (with the Simulator link), and a clean `npm ci --dry-run` from the lockfile.
 - Several tests were **mutation-checked** (disabling the check makes them fail), among them the response-time floor, the cross-owner route guard, TOTP replay and the refresh reuse rule.
 
-**Written from documentation, never exercised against the real service ⚠️:**
-- **E-mail, for real**: the SMTP adapter was exercised against a local SMTP server (sender, recipient, subject, text and HTML parts arrive well formed) and the Resend and Brevo adapters against a replaced `fetch` (address, credentials header, JSON body); **no real provider was ever contacted**, so acceptance of the messages, deliverability, SPF/DKIM/DMARC and the sender domain are untested.
-- **Cloudflare Turnstile**: the widget under the Content-Security-Policy and the server-side `siteverify` (the script URL, frame and connect hosts follow Cloudflare's documentation).
-- **haveibeenpwned** (stubbed) and **Google's JWKS and a real ID token** (stubbed).
-- **A real CDN** header (`cf-connecting-ip`) and **https** (`__Secure-` cookies, HSTS, `upgrade-insecure-requests`): everything ran over http on localhost; the production build was run, not a TLS terminator.
-- **`@node-rs/argon2` on Windows, macOS and musl Linux**: the lockfile lists every platform's binary, but it was run on Linux only.
-- Real iPhone/Android browsers (the sweep is Chromium at those sizes).
+**What could not be verified against the real service ⚠️, after the pass of §19:** a real e-mail provider (acceptance, SPF, DKIM, DMARC), Cloudflare Turnstile and haveibeenpwned (their hosts are blocked in the build environment), a genuine Google ID token, a real CDN
+(the behaviour behind a local TLS proxy that sets Cloudflare's headers *was* seen), Windows and macOS (the binaries and the Windows path fix were checked, nothing was run there) and real phones. §19 says, item by item, what was done, what the result was and how you repeat it.
 
 ## 17. Decisions that are yours
 
-1. Pre-hijacking residual (§12.2): ask for the password on the confirmation page? (More friction for everybody; closes the last path.)
-2. Should an unconfirmed account be able to sign in at all, or only see "confirm your e-mail"? (Now it can browse; nothing that sends, pays, connects or exports works.)
-3. Thresholds (§8) are judgement calls: 50 rows, 20 deletes, 20 downloads and 50,000 rows a day, 300 reveals a day, 15-minute confirmations, Business plan must use an authenticator. Tune them with real use.
-4. Names and answers unmasked (§12.3): mask names too, or cap paging, once you know how owners really work?
-5. Sheets auto-sync (§8): require a fresh confirmation to turn it on at any size, and re-confirm periodically?
-6. RLS (§13): revisit before the admin console.
-7. Whether CAPTCHA may be disabled in production (`CAPTCHA_DISABLED`): the product allows it, the review recommends against.
-8. The global rate limit per client address (§12.8): leave it, raise it, or key it by session.
-9. **The website framework** (§18): upgraded to Next.js 15.5.28 and React 19 on 2026-10-28, in its own commit so that it can be reverted. Yours to decide later: Next.js 16 (`next lint` is already deprecated; nothing in it is needed for security today) and the majors listed in §18.
+**Decided and built since the first version of this list** (D-07 in [`BACKLOG.md`](BACKLOG.md)): the registrant's password on the confirmation page (SEC-19, §3.1) · a cap on paging through names and answers, and a fresh confirmation for Sheets auto-sync (SEC-20, §8) ·
+the general rate limit per session instead of per address (SEC-18, §10.1).
+
+**Still yours:**
+1. Should an unconfirmed account be able to sign in at all, or only see "confirm your e-mail"? (Now it can browse; nothing that sends, pays, connects or exports works.)
+2. Thresholds (§8) are judgement calls: 50 rows, 20 deletes, 20 downloads and 50,000 rows a day, 300 reveals a day, 1,000 and 20,000 different people a day, 15-minute confirmations, the Business plan must use an authenticator. Tune them with real use.
+3. Mask names too (§12.3), once you know how owners really work?
+4. RLS (§13): revisit before the admin console.
+5. Whether CAPTCHA may be disabled in production (`CAPTCHA_DISABLED`): the product allows it, the review recommends against.
+6. **The website framework** (§18): upgraded to Next.js 15.5.28 and React 19 on 2026-10-28, in its own commit so that it can be reverted. Yours to decide later: Next.js 16 (`next lint` is already deprecated; nothing in it is needed for security today).
+7. The launch definition and PAY-13 (`BACKLOG.md` section F).
 
 ## 18. Dependencies and the website framework (found by `npm audit`)
 
-`npm audit --omit=dev` was run on 2026-10-28 (the build environment can reach the npm registry; it cannot reach GitHub's advisory pages or nextjs.org, so the **text** of advisories was read through the registry's summaries and a few news
-sources, not the primary pages). It first reported **22 advisories**. After the changes made here (nodemailer 7 to 10, with an `overrides` entry so that next-auth's optional copy follows it; csv-parse 5 to 7; non-breaking transitive updates; **Next.js 14.2.35 to 15.5.28 with React 19**)
-**17 remain: 0 critical, 14 high, 3 moderate**. (The count did not move with the framework upgrade because the audit now lists `next` itself, as moderate, for the PostCSS copy it bundles: see the table.) The SMTP adapter was checked against a local SMTP server on the new nodemailer, and the CSV import tests pass on csv-parse 7 (`tests/mail-providers.test.ts`, `flow.test.ts`).
+`npm audit --omit=dev` was first run on 2026-10-28 and reported **22 advisories** in production dependencies (the build environment can reach the npm registry but not GitHub's advisory pages, so the **text** of an advisory was read through the registry's summaries
+and a few news sources, not the primary pages). All of them were then dealt with, in separate commits that can be reverted one by one. **It now reports 0** (SEC-16, SEC-17).
 
-| Package | Severity | What the advisory is about | Is it reachable here? | What to do |
-|---|---|---|---|---|
-| next 15.5.28 (and `postcss` 8.4.31 bundled inside it) | moderate (next), high (postcss) | PostCSS: `</style>` left unescaped in what it prints; a `sourceMappingURL` comment in the CSS it reads can name a `.map` file to disclose | no: PostCSS runs at build time on our own stylesheets, never on a visitor's input | nothing in the 15.x line (its `postcss` is pinned); the registry lists **no advisory of its own** for `next` 15.5.28 |
-| zod 3.25 | high | memory exhaustion when validating oversized constrained collections | bounded: every request body is capped (API 2 MB, website proxy 3 MB) | zod 4 is a major change in the API, website and shared package: planned, not urgent |
-| puppeteer 24, with `extract-zip`, `proxy-agent`, `basic-ftp`, `get-uri`, `pac-proxy-agent`, `chromium-bidi` | high | archive extraction and FTP/PAC helpers used **while downloading Chromium**; `chromium-bidi` pulls zod | no at run time: the PDF export drives a local Chromium and its renderer blocks all network requests | puppeteer 25 at the next maintenance |
-| prisma 6 via `@prisma/config`, `deepmerge-ts` | high | stack exhaustion when merging recursive objects in the Prisma **command-line** configuration | no: development and migration time only | Prisma 7 later |
-| exceljs via uuid | moderate | `uuid` v3/v5/v6 with a caller-supplied buffer | no: exceljs does not use it that way (audit's suggested "fix" is a 2019 exceljs: not taken) | none |
+| Step | What changed | What it fixed, and what it cost |
+|---|---|---|
+| nodemailer 7 → 10, csv-parse 5 → 7 | an `overrides` entry makes next-auth's optional copy of nodemailer follow | the first entries; the SMTP adapter was re-checked against a local SMTP server and the CSV import tests pass |
+| **Next.js 14.2.35 → 15.5.28 with React 19** (SEC-16, below) | about 15 files | 25 advisories, 12 of them high or critical |
+| **zod 3 → 4** (API, website, shared) | a nested `.default({})` became `.prefault({})` (zod 4 returns a default as given, without parsing it); `errorMap` became `error`. **zod 4 probes for `eval` (`new Function('')`) when it builds its first object schema; under the website's Content-Security-Policy (no `'unsafe-eval'`) the browser reports that as a violation although zod copes, which the browser run caught on `/register`, `/login` and `/check-email`.** Browsers now get zod's plain parser (`packages/shared/src/zod-setup.ts`, imported before the first schema is built); servers keep the fast one. The policy was not loosened | memory exhaustion when validating oversized collections (bounded anyway by the body caps) |
+| **puppeteer 24 → 25** | needs **Node 22.12 or newer**: the root `engines`, the Dockerfile and `deploy/*` say so and `npm run share` checks it | the helpers that download Chromium (`extract-zip`, `proxy-agent`, `basic-ftp`, `get-uri`, `pac-proxy-agent`, `chromium-bidi`) |
+| **Prisma 6 → 7** | the connection is a **driver adapter** (`@prisma/adapter-pg`, `apps/api/src/lib/prisma.ts`); the database address moved from the schema to `apps/api/prisma.config.ts`, which also loads the root `.env` (Prisma 7 no longer does); `prisma generate` runs after `db push` (the `--skip-generate` flag is gone); deploys run `npx prisma migrate deploy --config apps/api/prisma.config.ts` (Dockerfile, Fly and Railway files updated). **The Prisma command line refuses destructive commands (`db push --accept-data-loss`, `migrate reset`) when it detects an AI agent**: a person runs `npm run db:push` | the command-line configuration advisory (`deepmerge-ts`) |
+| `overrides` for `postcss` (the copy bundled in Next), `uuid` (exceljs) and `basic-ftp` (puppeteer's helper) | root `package.json`; one hoisted copy of each (`npm ls`) | the last three advisories, which had no fixed parent. The Excel export tests pass on uuid 11 |
 
-**Next.js 14.2.35 to 15.5.28 (done 2026-10-28, its own commit: `git revert` undoes it).** Why: 14.2.35 was the last 14.x release and the registry listed **25 advisories** for it, 12 of them high or critical. The one that mattered most is
+**Checks after the steps.** The typecheck, the unit and integration tests and the real-browser runs were repeated on the final stack. The first browser pass found one thing, in the zod step: zod 4's eval probe under the Content-Security-Policy (the zod row above), fixed in `packages/shared/src/zod-setup.ts` and covered by two tests. One test of the funnel (`explore.test.ts`) turned out to depend on a write that is deliberately off the payment's critical path; it now waits for it.
+
+**The gate (SEC-17).** `npm run audit:gate` runs `npm audit --omit=dev` and fails on any **high or critical** advisory that is not written in `docs/audit-allowlist.json` with a reason and an **end date**. An exception past its date counts for nothing; a live exception for an
+advisory that no longer appears is listed for removal; an entry without a reason is refused; moderate and low advisories are listed, not blocking. If the registry does not answer, it exits 2 and says so instead of passing. `npm run release:check` is the typecheck, the website's lint,
+every test and the gate: run it before every release. The decision logic is unit-tested (`scripts/tests/audit-gate.test.mjs`, 13 tests) and the command was run against a deliberately vulnerable project (it fails, lists the advisories, accepts them only with a reason and a future date).
+*Next step, not urgent:* `next lint` (the website's lint script) is deprecated and is removed in Next.js 16; Next.js 16 is current (16.4.3) and is yours to decide (§17).
+
+**Next.js 14.2.35 to 15.5.28 (SEC-16; done 2026-10-28, its own commit: `git revert` undoes it).** Why: 14.2.35 was the last 14.x release and the registry lists **25 advisories** for it (3 critical, 9 high, 11 moderate, 2 low). The one that mattered most is
 **CVE-2026-75604 (GHSA-p293-qw3h-jr36), CVSS 9.0, unauthenticated remote code execution on Windows-hosted servers**: backslashes in route segments were not consistently escaped before the incremental-cache path was built, so a request could write outside the cache directory. No workaround;
 fixed in 15.5.24 and 16.3.3. It affected a Windows computer running `next start`, which is **exactly what `npm run share` does from a Windows PC with a public tunnel** (Linux, macOS and managed hosts such as Vercel were not affected). The others (denial of service in Server Components and Server Actions,
-SSRF in Server Actions, rewrites and WebSocket upgrades, cache poisoning, a Pages Router i18n middleware bypass, XSS with `beforeInteractive` scripts and with CSP nonces, an image-optimizer remote code execution through AVIF files) mostly concern features this application does not use (no Server Actions, rewrites, Pages Router, `next/script` or custom server;
-the middleware sets its own nonce and overwrites any client-supplied policy header), but "denial of service through Server Components payloads" could have applied and had no mitigation. The registry's advisory service lists **none** for 15.5.28.
+SSRF in Server Actions, rewrites and WebSocket upgrades, cache poisoning, a Pages Router i18n middleware bypass, XSS with `beforeInteractive` scripts and with CSP nonces, two image-optimizer remote code executions) mostly concern features this application does not use (no Server Actions, rewrites, Pages Router,
+`next/script` or custom server; the middleware sets its own nonce and overwrites any client-supplied policy header; the image optimizer is switched off and `/_next/image` answers 404), but "denial of service through Server Components payloads" could have applied and had no mitigation.
+The registry lists **none** for 15.5.28, the newest 15.5 release.
 - **What changed in the code (about 15 files):** `cookies()`, `headers()` and the route `params` are promises in Next.js 15 and are now awaited (language and country helpers, the three dynamic pages, the API proxy route, the Google callback); React 19's types need an initial value for `useRef`. No behaviour was meant to change.
-  The lockfile was edited so that **one** copy of `next`, `react` and `react-dom` is installed (a second, nested copy next to an old hoisted one would have given next-auth a different `next` than the application runs on): `npm ls` shows next-auth deduped onto 15.5.28.
-- **How it was checked:** typecheck and lint clean; production build; the proxy's path-smuggling probe gives the same answers as on 14 (encoded slashes, `..`, backslashes, double encoding, trailing slash, too many pieces); every browser run listed in §16; the 505 unit and integration tests; a clean `npm ci` in a scratch folder (one copy of `next`, `react` and `react-dom`); `npm audit` (0 critical).
+  The lockfile holds **one** copy of `next`, `react` and `react-dom` (a second, nested copy next to an old hoisted one would have given next-auth a different `next` than the application runs on): `npm ls` shows next-auth deduped onto 15.5.28.
+- **How it was checked:** Next.js's own upgrade guide (nextjs.org is reachable with `curl`, not with the fetch tool) walked through against the application: asynchronous request APIs, the `useRef` initial value, nothing deprecated in the configuration; typecheck and lint; the production build; the proxy's path-smuggling probe gives the same answers as on 14
+  (encoded slashes, `..`, backslashes, double encoding, trailing slash, too many pieces); every browser run listed in §16; a clean `npm ci` in a scratch folder. The fix itself: §19.
 - **Still switched off:** the image optimizer (`images.unoptimized`; `/_next/image` answers 404 on the new build too). Next.js 15 lists `sharp` as an optional dependency; it is installed but never loaded.
 - **`scripts/share-demo.mjs`** keeps refusing to start on Windows **when the installed Next.js is in the affected range** (13.4.0 up to 15.5.23, and 16.0.0 up to 16.3.2); override `--i-accept-the-risk`. With 15.5.28 installed it starts.
-- **Not checked:** the fix itself on a Windows host (this environment is Linux; I verified the version, not the behaviour), and Next.js's own upgrade guide (nextjs.org is not reachable from here: the migration relied on the compiler, the production build and the browser suites).
 
-**Keeping it honest:** run `npm audit --omit=dev` on every release, expect only the entries in this table, and treat a new high or critical one as a release blocker unless it is added here with a reason. (`npm audit fix --omit=dev` also prunes development packages from `node_modules`: run `npm install` after it.)
+## 19. Verification log (2026-10-28): what was checked beyond the unit tests, and what could not be
+
+The list of things "never exercised against the real service" was worked through as far as the build environment allows: Linux, outbound access to the npm registry, Google and a few other hosts, no credentials, no Windows, macOS or phone. **`scripts/preflight.mts` is the part of it you can repeat**:
+it runs the production code against the real services, on the computer or host you point it at (`npx tsx --env-file=.env scripts/preflight.mts`; the header of the script lists the options). A WARN there is something that computer could not see: read it, it is not a pass.
+
+| Item | Checked here, and how | Result | Still open |
+|---|---|---|---|
+| Google's real keys (SEC-05) | `preflight --only google`: the key set fetched from www.googleapis.com (2 RS256 keys); five forged ID tokens through the production verifier: signed by my own key under one of Google's real key ids, under a key id Google does not have, unsigned, HS256 "signed" with Google's public key, garbage | all five refused (bad signature, no matching key, algorithm not allowed, malformed) | A genuine token: one real sign-in with your Google client id, then look for `google_login` in the audit trail |
+| argon2 (SEC-11) | `preflight --only argon2` with Python argon2-cffi (the reference C implementation): our hash verified by it; a hash it made with another set of parameters (3 passes, 64 MiB, 4 lanes) verified by us; non-ASCII passwords; wrong passwords refused; the cost measured (110 ms for one hash here) | interoperates in both directions | Never run on Windows or macOS. The lock carries every platform's binary of `@node-rs/argon2`, Next's SWC, esbuild, rollup, sharp and the resolver (win32-x64, win32-arm64, darwin-x64, darwin-arm64, linux); the Windows and macOS packages of argon2, Next and esbuild were downloaded: their integrity matches the lock and their headers read as PE (x64) and Mach-O (arm64, x86_64). Run `preflight --only argon2` on your own PC |
+| The Next.js fix (SEC-16) | The registry lists 25 advisories for 14.2.35 and none for 15.5.28. The code of 15.5.23 and 15.5.24 was compared: the Windows fix is a backslash now escaped in route segments, and a guard that refuses an incremental-cache path outside its folder. `preflight --only next` runs the **installed** code under Windows path rules (`path.win32`) | 9 of 9 hostile cache lookups refused on 15.5.28; on 15.5.23 0 of 9 are, and the check fails there | Not run on a Windows host. The advisory's own page could not be read (GitHub is blocked here): that this code change is the fix of GHSA-p293-qw3h-jr36 rests on the advisory's description in the registry's and news summaries, which matches it. Re-run the check after every Next.js upgrade |
+| https, HSTS, cookies, the CDN header (SEC-07, SEC-13) | The production build behind a local TLS proxy (self-signed certificate) that sets Cloudflare's headers and overwrites what a visitor sends for them: `preflight --only headers`, then a sign-in in a browser | HSTS for two years; every cookie `__Host-` or `__Secure-` with Secure, HttpOnly, SameSite=Lax; a fresh CSP nonce on every page and `upgrade-insecure-requests`; sign-in works; the audit trail recorded the proxy's address and not the visitor-typed `6.6.6.6`. The same proxy in front of a site that does not know it is served over https is **detected** (cookie names without the prefix: FAIL) | Not a real CDN. **Sent straight to the origin, `cf-connecting-ip: 6.6.6.6` was believed**: the origin must accept traffic only from the CDN (§10). On your PC `npm run share` goes through a real Cloudflare edge: run `preflight --only headers --url <the address it prints>`, sign in through it and read your address prefix in Settings → Security → Activity |
+| haveibeenpwned and Cloudflare Turnstile | Both hosts are blocked here (the names do not resolve), so the production checks ran their **fail-open** path, and the script says so (WARN). Their PASS paths were exercised against built-in fakes that follow each service's documentation (`--fake-services`; a mistyped Turnstile secret is reported as a FAIL there): a self-test of the script, not of the services | not verified | `preflight --only breach,captcha` on your PC (no key needed; with your own `TURNSTILE_SECRET_KEY` it also shows that Cloudflare accepts it), and the widget in a browser on your domain |
+| E-mail provider (SEC-01) | Not possible here: it needs your provider key and sending domain, and the provider hosts are blocked | not verified | `preflight --only mail --domain <yours> --mail-to <you>`: SPF, DKIM and DMARC of the domain and one real message through the production sender; then read the message's headers (dkim=pass, spf=pass, dmarc=pass) |
+| The proxy's token renewal (the "stale cookie" fix of the review, which had no test) | `apps/web/tests/proxy-renewal.test.ts`: the proxy route against a scripted API, 14 tests; ten of its protections were disabled one at a time and each made at least one test fail | now under test | none |
+| Chargeback terms (the PAY-13 pushback) | A web search (Flutterwave's and Notch Pay's own pages could not be opened here: what follows is what the search results quote, not your contract) | see `PAYMENTS.md`, "Chargebacks and the cash-out route" | Your providers' merchant agreements decide |
+| Real phones, Meta, the payment providers | not possible here | not verified | OPS-04, WA-01 (`scripts/meta-check.mts`), PAY-03 and PAY-04 |
+| PAY-02: whether the providers offer a balance API | left out of this pass at your request | not verified | |

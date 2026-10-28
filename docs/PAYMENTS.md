@@ -108,6 +108,23 @@ Every item was **reproduced against the old code first** (a throwaway test, sinc
 * **WhatsApp notices are best effort** (outside the 24 h window they are not delivered): the in-app banner and "Payments in progress" are what you can rely on.
 * The job is **single-leader**: one replica asks the providers; if jobs are disabled everywhere, late payments wait until they are enabled again.
 * Prices, fees and provider ranking were not changed by this pass.
+* **Chargebacks and the cash-out route**: a wallet topped up by card can be paid out to Mobile Money numbers, and there is no cap on payouts per account or per phone yet (PAY-13, counted in the backlog, not built). §5.1.
+
+### 5.1 Chargebacks and the cash-out route (researched 2026-10-28)
+
+**The route.** A wallet can be topped up by card and gifts can be paid out to Mobile Money numbers. With open sign-up that is the textbook cash-out path for a stolen card: the thief tops up, sends gifts to numbers they control, and the real cardholder's chargeback arrives later, after the money has left.
+Nothing but the wallet balance limits it today. **PAY-13** (a cap per account and per phone per day, and a hold on payouts for accounts only a few days old) is the row for it in `docs/BACKLOG.md`: counted, **not built**.
+
+**What is known about the window and who pays.** From a web search on 2026-10-28. The providers' own pages could not be opened from the build environment, so this is what the search results quote, not your contract:
+- *Card networks* (vendor guides, not the rulebooks): a cardholder can usually dispute within about **120 days** of the transaction (Mastercard: 120, or 540 for goods or services not delivered; Visa: up to 120, 75 for some fraud, up to 540 for some reason codes); the merchant has about 30 to 45 days per phase at the network.
+  A "card not present" fraud dispute is won by showing that the real cardholder bought: 3-D Secure, address checks, purchase history.
+- *Flutterwave* (its developer documentation, as the search engine quotes it): the merchant is told of a chargeback and is expected to answer within **48 hours**; a **lien** is placed on the disputed amount in the merchant's balance; with no answer the amount is debited automatically; an upheld chargeback is a permanent debit.
+  Blog posts quote longer windows; they conflict with the documentation and are not relied on here.
+- *Notch Pay* (its documentation, as quoted): disputes (fraudulent transaction, service not received, duplicate charge) are notified to the merchant, who answers with evidence in the dashboard or by API; what was found says nothing about who bears the loss.
+- *Campay and CinetPay:* **nothing was found.** Mobile Money has no card-style chargeback; what can happen there (a reversal asked of the operator, a transfer to a wrong number) is in the provider's merchant agreement, which is not public.
+
+**What it means.** The exposure is the card top-ups of the first months, and it lands on SurveyFlow's balance at the provider; a provider that places a lien on 48 hours' notice needs somebody watching its dispute notifications every day (the admin console, ADM-02, would make that a screen).
+The numbers of PAY-13 have to be sized against your providers' actual terms before the first real card top-up: ask each one for its chargeback window, its response time, whether it keeps a reserve, and whether it charges a fee per dispute.
 
 ## 6. How it is checked
 
