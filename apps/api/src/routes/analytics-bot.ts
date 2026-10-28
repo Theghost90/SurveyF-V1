@@ -24,7 +24,7 @@ export default async function analyticsBotRoutes(app: FastifyInstance) {
   });
 
   /** A one-time code (15 minutes). The owner sends `LINK <code>` to the SurveyFlow number from the phone to link. */
-  app.post('/api/analytics-bot/link-code', { ...auth, ...rl(10) }, async (req) => {
+  app.post('/api/analytics-bot/link-code', { preHandler: app.authenticateVerified, ...rl(10) }, async (req) => {
     assertFeature(await loadAccount(req.userId), 'analyticsBot', 'Analytics on WhatsApp');
     if (!platformPhone()) throw conflict('bot_unavailable', 'The Analytics Bot is not available on this deployment: SurveyFlow’s WhatsApp number is not configured.');
     if ((await linkedPhones(req.userId)).length >= MAX_LINKED_PHONES) throw conflict('link_limit', `You can link up to ${MAX_LINKED_PHONES} phones. Remove one first.`);

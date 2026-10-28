@@ -37,8 +37,8 @@ describe('the API is reachable only through the website', () => {
     expect((await call('GET', '/api/surveys', { 'x-internal-secret': SECRET })).status).toBe(401); // gate passed; no session token
     const reg = await call('POST', '/api/auth/register', { 'x-internal-secret': SECRET, 'x-sf-country': 'NG' },
       { businessName: 'Lagos Shop', name: 'Ngozi', email: 'ng-gate@example.com', phone: '0803 123 4567', password: 'correct-horse-battery' });
-    expect(reg.status).toBe(201);
-    expect(JSON.parse(reg.body).user).toMatchObject({ country: 'NG', preferredCurrency: 'NGN' }); // the website vouched for the country
+    expect(reg.status).toBe(202); // the same answer for every address: nothing about who is registered
+    expect(await prisma.user.findUnique({ where: { email: 'ng-gate@example.com' } })).toMatchObject({ country: 'NG', preferredCurrency: 'NGN' }); // the website vouched for the country
   });
 
   it('exactly four things stay public: health, the Meta webhook, the PSP webhooks and receipt links — and they do not need the secret', async () => {

@@ -1,6 +1,6 @@
 import type { Contact, Prisma, SurveyRecipient, WhatsAppAccount } from '@prisma/client';
 import { START_WORDS, STOP_WORDS, fromWaId, parseAnswerId, parseTemplatePayload, sys, type OutboundMessage, type SurveyLang } from '@surveyflow/shared';
-import { prisma } from '../../lib/prisma';
+import { phoneIndex, prisma } from '../../lib/prisma';
 import { redis, withLock } from '../../lib/redis';
 import { autoSyncCompleted } from '../exports/sheets';
 import { planGift, thankYouText } from '../gifts';
@@ -138,7 +138,7 @@ async function turn(phoneNumberId: string, msg: WaInboundMessage, log: Logger) {
     return;
   }
   // Only people the owner actually imported can interact: no walk-in sessions, no gift farming.
-  const contact = await prisma.contact.findUnique({ where: { userId_phone: { userId: account.userId, phone: fromWaId(msg.from) } } });
+  const contact = await prisma.contact.findUnique({ where: { userId_phoneHash: { userId: account.userId, phoneHash: phoneIndex(fromWaId(msg.from)) } } });
   if (!contact) return;
 
   const parsed = normalizeInbound(msg);

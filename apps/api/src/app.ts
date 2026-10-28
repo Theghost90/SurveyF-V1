@@ -8,6 +8,7 @@ import { Prisma } from '@prisma/client';
 import { env } from './config/env';
 import { AppError } from './lib/errors';
 import { prisma } from './lib/prisma';
+import { clientIp } from './lib/client-ip';
 import { registerInternalGate } from './lib/internal-gate';
 import { isRateLimitExempt } from './lib/ratelimit';
 import { redis } from './lib/redis';
@@ -27,22 +28,39 @@ import receiptRoutes from './routes/receipts';
 import pricingRoutes from './routes/pricing';
 import googleRoutes from './routes/google';
 import devRoutes from './routes/dev';
+import mailboxRoutes from './routes/mailbox';
 
-export async function buildApp(): Promise<FastifyInstance> {
+/** What the request log keeps of a request (SEC-14): the path WITHOUT its query string (a contact search, a token or a code can sit in a query), never a header. */
+export const requestForLog = (req: { method?: string; url?: string; id?: string }) => ({ method: req.method, url: String(req.url).split('?')[0], id: req.id });
+export const LOG_REDACT = ['req.headers.authorization', 'req.headers["x-hub-signature-256"]', 'req.headers["x-internal-secret"]', 'req.headers.cookie', 'req.headers["x-sf-client-ip"]'];
+
+export interface BuildOptions {
+  /** Tests only: capture the request log here (the app logs nothing under NODE_ENV=test otherwise). */
+  logStream?: { write: (line: string) => void };
+  /** Tests only: told about every route as it is registered (the route inventory that security-isolation.test.ts holds the whole API to). */
+  onRoute?: (route: { method: string | string[]; url: string }) => void;
+}
+
+export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
-    logger:
-      env.NODE_ENV === 'test'
+    logger: opts.logStream
+      ? { level: 'info', redact: LOG_REDACT, serializers: { req: requestForLog }, stream: opts.logStream }
+      : env.NODE_ENV === 'test'
         ? false
         : {
-            level: env.isProd ? 'info' : 'info',
-            // Never log credentials or participants' phone numbers in clear text.
-            redact: ['req.headers.authorization', 'req.headers["x-hub-signature-256"]', 'req.headers["x-internal-secret"]'],
+            level: 'info',
+            // Never log credentials or participants' phone numbers in clear text (finding 14).
+            redact: LOG_REDACT,
+            serializers: { req: requestForLog },
             transport: env.isProd ? undefined : { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } },
           },
     bodyLimit: 2 * 1024 * 1024,
-    trustProxy: true,
+    // Off on purpose: the visitor's address comes from the website's server (x-sf-client-ip, believed only with the shared secret), never from a header
+    // anybody could send (lib/client-ip.ts).
+    trustProxy: false,
   });
 
+  if (opts.onRoute) app.addHook('onRoute', (r) => opts.onRoute!({ method: r.method, url: r.url }));
   registerInternalGate(app); // before anything else: a call that did not come through the website never reaches a handler
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, {
@@ -50,7 +68,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: false,
   });
-  await app.register(rateLimit, { global: true, max: 300, timeWindow: '1 minute', allowList: (req) => isRateLimitExempt(req.url) });
+  await app.register(rateLimit, { global: true, max: 300, timeWindow: '1 minute', keyGenerator: (req) => clientIp(req), allowList: (req) => isRateLimitExempt(req.url) });
   await app.register(multipart, { limits: { fileSize: 2 * 1024 * 1024, files: 1 } });
 
   // Keep the raw bytes of JSON bodies: Meta's X-Hub-Signature-256 is computed over them.
@@ -120,6 +138,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(pricingRoutes);
   await app.register(googleRoutes);
   if (!env.isProd) await app.register(devRoutes);
+  // The demo mailbox: where the mock e-mail provider keeps what it "sent". Never registered in production.
+  if (!env.isProd && env.emailProvider === 'mock') await app.register(mailboxRoutes);
 
   return app;
 }

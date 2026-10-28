@@ -107,10 +107,22 @@ model User {
   // ADDED: prepaid gift wallet. The SURVEY OWNER funds gifts (airtime / Mobile Money), never SurveyFlow.
   // Only ever changed with a guarded UPDATE (see services/wallet.ts), so it cannot go negative.
   // Kept in the OWNER'S currency (whole units, `giftCurrency`); the database column keeps its historical name.
-  giftBalance  Int     @default(0) @map("giftBalanceFCFA")
-  giftCurrency String? // set by the first top-up and never changed afterwards; null = no wallet money yet
+  giftBalance       Int       @default(0) @map("giftBalanceFCFA")
+  giftCurrency      String? // set by the first top-up and never changed afterwards; null = no wallet money yet
   // ADDED: who the owner is (business | institution | academic), chosen in onboarding. Hook for segment-specific features.
-  segment String?
+  segment           String?
+
+  // ADDED (security): the address with its aliases folded (john.doe+x@gmail.com == johndoe@gmail.com) so one mailbox cannot open several accounts.
+  // Set by the Prisma extension in lib/prisma.ts on every write, never by hand; nullable only so `db push` can add it to a table that already has rows
+  // (the start-up backfill fills them).
+  emailCanonical    String?   @unique
+  // ADDED (security): null until the owner proved they can read mail sent to the address. An unverified account cannot send, pay, export or connect anything.
+  emailVerifiedAt   DateTime?
+  passwordChangedAt DateTime?
+  // ADDED (security): authenticator-app second factor. The secret is AES-GCM ciphertext (lib/crypto.ts); totpLastStep stops a code being used twice.
+  totpSecret        String?
+  totpEnabledAt     DateTime?
+  totpLastStep      Int?
 
   whatsappAccounts WhatsAppAccount[]
   surveys          Survey[]
@@ -122,8 +134,12 @@ model User {
   sheetSyncs       SheetSync[]
   walletEntries    WalletEntry[]
   funnelEvents     FunnelEvent[]
-  botAlerts BotAlert[]
+  botAlerts        BotAlert[]
   ownerPhones      OwnerPhone[]
+  authSessions     AuthSession[]
+  emailTokens      EmailToken[]
+  identities       AuthIdentity[]
+  recoveryCodes    RecoveryCode[]
 }
 
 model WhatsAppAccount {
@@ -175,10 +191,10 @@ model Survey {
   publishedAt      DateTime?
 
   // ADDED
-  language         String   @default("fr") // language of participant-facing messages
-  customThankYou   String? // referenced by the spec's gift code but missing from its schema
-  giftAmount       Int? @map("giftAmountFCFA") // numeric value for airtime / momo gifts, in whole units of the owner's wallet currency
-  giftMaxCount     Int? // hard cap on gifts, protects the owner's budget
+  language       String  @default("fr") // language of participant-facing messages
+  customThankYou String? // referenced by the spec's gift code but missing from its schema
+  giftAmount     Int?    @map("giftAmountFCFA") // numeric value for airtime / momo gifts, in whole units of the owner's wallet currency
+  giftMaxCount   Int? // hard cap on gifts, protects the owner's budget
 
   // ADDED (automatic reminders). `kind` = general | event; `deadlineAt` is required for events. The two switches are
   // independent and OFF by default: SurveyFlow, not the owner, decides when a reminder is polite (shared/reminders.ts).
@@ -186,18 +202,18 @@ model Survey {
   deadlineAt              DateTime?
   autoRemindNonResponders Boolean   @default(false)
   autoRemindAbandoners    Boolean   @default(false)
-  scheduledAt      DateTime?
-  closedAt         DateTime?
-  whatsappAccountId String?
+  scheduledAt             DateTime?
+  closedAt                DateTime?
+  whatsappAccountId       String?
 
-  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account    WhatsAppAccount? @relation(fields: [whatsappAccountId], references: [id], onDelete: SetNull)
-  questions  Question[]
-  recipients SurveyRecipient[]
-  responses  Response[]
-  gifts      GiftDelivery[]
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account     WhatsAppAccount?  @relation(fields: [whatsappAccountId], references: [id], onDelete: SetNull)
+  questions   Question[]
+  recipients  SurveyRecipient[]
+  responses   Response[]
+  gifts       GiftDelivery[]
   drawEntries PrizeDrawEntry[]
-  sheetSync  SheetSync?
+  sheetSync   SheetSync?
 
   @@index([userId, status])
 }
@@ -220,8 +236,12 @@ model Question {
 model Contact {
   id        String   @id @default(cuid())
   userId    String
+  // Both are AES-256-GCM CIPHERTEXT in the database (see lib/prisma.ts: the client encrypts on write and decrypts on read, so the rest of the code sees
+  // plain values). Plain, they are E.164 with a leading "+" (e.g. +237677123456) and the participant's name.
   name      String
-  phone     String // E.164 with leading "+", e.g. +237677123456
+  phone     String
+  // Keyed hash (HMAC-SHA256) of the normalised number: the only way to look a number up, and what keeps one number once per owner.
+  phoneHash String?
   tags      Json     @default("[]")
   createdAt DateTime @default(now())
 
@@ -236,7 +256,7 @@ model Contact {
   gifts       GiftDelivery[]
   drawEntries PrizeDrawEntry[]
 
-  @@unique([userId, phone])
+  @@unique([userId, phoneHash])
 }
 
 model SurveyRecipient {
@@ -255,7 +275,7 @@ model SurveyRecipient {
   lastError   String?
   waMessageId String? // id of the invitation message (delivery status webhooks)
   remindedAt  DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   // ADDED (automatic reminders): when the participant was flagged abandoned; which rule produced the reminder
   // (standard | event); whether it was automatic (only automatic reminders get a closing note); when the note went out.
@@ -324,7 +344,7 @@ model GiftDelivery {
   errorMessage String?
 
   // ADDED
-  amount       Int? @map("amountFCFA") // what the participant receives, in `currency`
+  amount       Int?     @map("amountFCFA") // what the participant receives, in `currency`
   currency     String   @default("XAF") // the owner's wallet currency when the gift was paid
   payoutXAF    Int? // the same amount in CFA francs at the live rate when it was debited: what the payout provider is asked to send
   code         String? // discount code
@@ -398,19 +418,19 @@ model PaymentTransaction {
   createdAt      DateTime          @default(now())
 
   // ADDED
-  userId      String
-  reference   String   @unique // our internal id sent to the PSP
-  purpose     String   @default("subscription") // subscription | gift_topup
-  plan        Plan? // null for gift top-ups
-  interval    String   @default("monthly")
-  method      String // mobile_money | card | bank_transfer
-  phone       String?
-  checkoutUrl String?
-  paidAt      DateTime?
-  failReason  String?
+  userId        String
+  reference     String    @unique // our internal id sent to the PSP
+  purpose       String    @default("subscription") // subscription | gift_topup
+  plan          Plan? // null for gift top-ups
+  interval      String    @default("monthly")
+  method        String // mobile_money | card | bank_transfer
+  phone         String?
+  checkoutUrl   String?
+  paidAt        DateTime?
+  failReason    String?
   // ADDED (multi-currency): the plan / top-up value in CFA francs at initiation, and the live rate used (null for CFA payments).
-  amountXAF Int?
-  fxRate    Float?
+  amountXAF     Int?
+  fxRate        Float?
   // ADDED (reconciliation): when the provider was last asked about this payment, and every provider we tried to start it at
   // ([{psp, at, ok, ambiguous?, error?}]) — the trail an operator needs when "did the customer pay?" is the question.
   lastCheckedAt DateTime?
@@ -430,7 +450,7 @@ model PaymentTransaction {
 model WalletEntry {
   id           String   @id @default(cuid())
   userId       String
-  delta        Int    @map("deltaFCFA") // + top-up / refund, − gift debit, in the owner's wallet currency
+  delta        Int      @map("deltaFCFA") // + top-up / refund, − gift debit, in the owner's wallet currency
   balanceAfter Int
   kind         String // topup | gift_debit | gift_refund
   refId        String? // PaymentTransaction.id or GiftDelivery.id
@@ -471,15 +491,15 @@ model GoogleConnection {
 }
 
 model SheetSync {
-  id            String    @id @default(cuid())
-  surveyId      String    @unique
-  userId        String
-  spreadsheetId String
+  id             String    @id @default(cuid())
+  surveyId       String    @unique
+  userId         String
+  spreadsheetId  String
   spreadsheetUrl String
-  autoSync      Boolean   @default(false)
-  lastSyncedAt  DateTime?
-  rowsSynced    Int       @default(0)
-  createdAt     DateTime  @default(now())
+  autoSync       Boolean   @default(false)
+  lastSyncedAt   DateTime?
+  rowsSynced     Int       @default(0)
+  createdAt      DateTime  @default(now())
 
   survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -498,10 +518,10 @@ model SheetRow {
 // ADDED: live exchange rates, XAF -> currency (units of the currency per 1 XAF). Redis is the hot cache; this table is the
 // last-known-good copy used when the rate source is down (and its age decides whether it may still be used).
 model FxRate {
-  currency        String   @id
+  currency        String    @id
   rate            Float
   sourceUpdatedAt DateTime? // when the rate source published it
-  fetchedAt       DateTime @default(now())
+  fetchedAt       DateTime  @default(now())
 }
 
 // ADDED (Explore/Activate): the first time each milestone happens for an owner, so the first weeks of real sign-ups show where people stop
@@ -522,14 +542,18 @@ model FunnelEvent {
 // ADDED (Analytics Bot): a phone that has been proven to belong to this owner by sending a one-time code (LINK <code>) to the SurveyFlow
 // number. Only linked phones may ask for numbers; a phone belongs to ONE account; at most 3 per account. `phone` is the WhatsApp id (digits).
 model OwnerPhone {
-  id        String   @id @default(cuid())
-  userId    String
-  phone     String   @unique
-  /** Milestone and slowdown alerts to this phone (MUTE / ALERTS ON, or the switch in Settings). */
-  alerts    Boolean  @default(true)
-  /** Last message this phone sent to SurveyFlow's number: an alert inside the following 24 h is a free reply, outside it needs a template. */
+  id            String    @id @default(cuid())
+  userId        String
+  phone         String    @unique
+  /**
+   * Milestone and slowdown alerts to this phone (MUTE / ALERTS ON, or the switch in Settings).
+   */
+  alerts        Boolean   @default(true)
+  /**
+   * Last message this phone sent to SurveyFlow's number: an alert inside the following 24 h is a free reply, outside it needs a template.
+   */
   lastInboundAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -541,18 +565,141 @@ model OwnerPhone {
  * and the rows are what the template caps (per day / per month) count.
  */
 model BotAlert {
-  id          String   @id @default(cuid())
-  userId      String
-  surveyId    String
-  kind        String
-  /** "100" for a milestone, "2026-W42" for a slowdown. */
-  key         String
-  /** 'window' (free reply), 'template' (billed to SurveyFlow), 'skipped' (muted / capped / no phone). */
-  channel     String
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  surveyId  String
+  kind      String
+  /**
+   * "100" for a milestone, "2026-W42" for a slowdown.
+   */
+  key       String
+  /**
+   * 'window' (free reply), 'template' (billed to SurveyFlow), 'skipped' (muted / capped / no phone).
+   */
+  channel   String
+  createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([surveyId, kind, key])
   @@index([userId, createdAt])
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// Security (sign-in, sessions, audit). See docs/SECURITY.md.
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+
+/**
+ * One signed-in browser. The API token carries the id of a row here and is refused the moment the row is revoked or expired, so a stolen token can be
+ * cut off ("sign out everywhere", a password change). `refreshHash` is the SHA-256 of the current refresh token; the previous one is kept for a few
+ * seconds so two parallel requests that refresh at once do not look like theft, and used again after that it ends the whole session.
+ */
+model AuthSession {
+  id              String    @id @default(cuid())
+  userId          String
+  refreshHash     String
+  prevRefreshHash String?
+  rotatedAt       DateTime?
+  method          String // password | google
+  mfa             Boolean   @default(false) // an authenticator code was given at sign-in
+  /**
+   * Coarse "browser · system · country" fingerprint used only to notice a sign-in from somewhere new. Not an identifier.
+   */
+  deviceKey       String
+  userAgent       String?
+  /**
+   * First three groups of the IP (41.202.207.x): enough to recognise a place, not enough to identify a person.
+   */
+  ipPrefix        String?
+  country         String?
+  stepUpUntil     DateTime? // exports and bulk actions need a recent "confirm it is you"
+  createdAt       DateTime  @default(now())
+  lastUsedAt      DateTime  @default(now())
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  revokedReason   String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
+/**
+ * One-time links sent by e-mail (verify the address, reset the password, confirm a Google link). Only the SHA-256 of the token is stored.
+ */
+model EmailToken {
+  id        String    @id @default(cuid())
+  userId    String
+  purpose   String // verify_email | reset_password | link_google
+  tokenHash String    @unique
+  meta      Json?
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+}
+
+/**
+ * "This Google account (provider + stable subject id) is this owner." Signing in is by this pair, never by e-mail address alone.
+ */
+model AuthIdentity {
+  id        String   @id @default(cuid())
+  userId    String
+  provider  String // google
+  subject   String
+  email     String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, subject])
+  @@index([userId])
+}
+
+/**
+ * Single-use recovery codes for the authenticator app. Stored as a keyed hash.
+ */
+model RecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/**
+ * Append-only trail of security-relevant events (sign-ins, password changes, exports, number reveals...). Minimal fields, never a phone number or a
+ * message body. No foreign key on purpose: the trail must outlive an account. Rows are never updated; the retention job is the only thing that deletes.
+ */
+model AuditLog {
+  id         String   @id @default(cuid())
+  at         DateTime @default(now())
+  userId     String?
+  action     String
+  targetType String?
+  targetId   String?
+  sessionId  String?
+  ipPrefix   String?
+  userAgent  String?
+  meta       Json?
+
+  @@index([userId, at])
+  @@index([action, at])
+}
+
+/**
+ * Which one-off data fixes have run (start-up backfills), so each runs once.
+ */
+model Backfill {
+  name  String   @id
+  ranAt DateTime @default(now())
 }

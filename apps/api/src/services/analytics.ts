@@ -217,7 +217,7 @@ export function displayAnswer(type: string, answer: string | undefined): string 
 // ---- who is in each group (the Analytics Bot's lists and the SaaS "haven't started" list) -------------------------------------------
 
 export type RecipientListKind = 'nonresp' | 'started' | 'completed';
-export interface RecipientListRow { recipientId: string; name: string; phone: string; status: string; sentAt: Date | null; completedAt: Date | null; /** started/abandoned: the question they are at or stopped at */ atQuestion: number | null }
+export interface RecipientListRow { recipientId: string; contactId: string; name: string; phone: string; status: string; sentAt: Date | null; completedAt: Date | null; /** started/abandoned: the question they are at or stopped at */ atQuestion: number | null }
 
 /**
  * The people behind a number on the card, newest first. `nonresp` = invited, never replied, not opted out (the same people as the
@@ -246,7 +246,7 @@ export async function listRecipientsByKind(surveyId: string, userId: string, kin
     answered = new Map(counts.map((c) => [c.contactId, c._count._all]));
   }
   const rows: RecipientListRow[] = recipients.map((r) => ({
-    recipientId: r.id, name: r.contact.name, phone: r.contact.phone, status: r.status, sentAt: r.sentAt, completedAt: r.completedAt,
+    recipientId: r.id, contactId: r.contactId, name: r.contact.name, phone: r.contact.phone, status: r.status, sentAt: r.sentAt, completedAt: r.completedAt,
     atQuestion: kind !== 'started' ? null : r.status === 'abandoned' ? r.abandonedAtQuestion : Math.min(survey.questions.length, (answered.get(r.contactId) ?? 0) + 1),
   }));
   return { survey, total, rows };

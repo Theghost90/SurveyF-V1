@@ -20,7 +20,7 @@ export default async function walletRoutes(app: FastifyInstance) {
    * Starts a top-up checkout through the same PSP layer as subscriptions (failover, verify-before-credit, idempotent
    * settlement). The balance is only credited after the PSP confirms the money — never on the redirect.
    */
-  app.post('/api/wallet/topup', { ...auth, ...rl(20) }, async (req, reply) => {
+  app.post('/api/wallet/topup', { preHandler: app.authenticateVerified, ...rl(20) }, async (req, reply) => {
     const body = z.object({
       /** Whole units of the wallet's currency; the allowed range depends on the currency and is checked against the live limits. */
       amount: z.number().int().min(1),

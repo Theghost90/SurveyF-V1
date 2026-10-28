@@ -2,10 +2,13 @@ import { buildApp } from './app';
 import { env } from './config/env';
 import { startJobs } from './jobs/scheduler';
 import { prisma } from './lib/prisma';
+import { prepareDatabase } from './services/startup';
 import { redis } from './lib/redis';
 import { closeBrowser } from './services/exports/pdf';
 
 const app = await buildApp();
+// Before the first request: one-off data fixes (encrypt existing contacts, fill new columns) and the append-only guard on the audit log.
+await prepareDatabase(app.log);
 const stopJobs = env.RUN_JOBS ? startJobs(app.log) : () => undefined;
 
 async function shutdown(signal: string) {

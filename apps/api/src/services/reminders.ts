@@ -3,7 +3,7 @@ import {
   COUNTRY_CONFIG, abandonerSlot, closingNoteFor, followupSlot, nonResponderSlot, supportedCountry,
   type ReminderProfile, type ReminderRule, type Slot,
 } from '@surveyflow/shared';
-import { prisma } from '../lib/prisma';
+import { prisma, type Tx } from '../lib/prisma';
 import { assertNotSuspended, loadAccount, messagesRemaining } from './subscription/limits';
 
 /**
@@ -32,7 +32,7 @@ export async function closeExpiredSurveys(now = new Date()): Promise<number> {
 type JobKind = 'nudge' | 'reminder' | 'deadline_note' | 'progress_saved' | 'progress_saved_deadline';
 
 async function queueOnce(
-  tx: Prisma.TransactionClient, userId: string, recipientId: string, statuses: Array<'sent' | 'delivered' | 'abandoned'>, kind: JobKind,
+  tx: Tx, userId: string, recipientId: string, statuses: Array<'sent' | 'delivered' | 'abandoned'>, kind: JobKind,
   mark: { field: 'remindedAt'; rule: ReminderRule; auto?: boolean } | { field: 'followupAt' }, now: Date,
 ): Promise<boolean> {
   const claimed = await tx.surveyRecipient.updateMany({

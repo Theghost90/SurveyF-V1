@@ -1,5 +1,6 @@
 import type { FastifyRequest } from 'fastify';
 import { env } from '../config/env';
+import { clientIp } from './client-ip';
 
 /** Per-route rate limit. Relaxed 1000x under NODE_ENV=test so integration tests can register many users. */
 export const rl = (max: number, timeWindow = '1 minute') => ({
@@ -18,7 +19,7 @@ export const rlCredentials = (max = 10, timeWindow = '1 minute') => ({
       max: env.NODE_ENV === 'test' ? max * 1000 : max,
       timeWindow,
       hook: 'preHandler' as const,
-      keyGenerator: (req: FastifyRequest) => `${String((req.body as { email?: unknown } | undefined)?.email ?? '').toLowerCase().slice(0, 254)}|${req.ip}`,
+      keyGenerator: (req: FastifyRequest) => `${String((req.body as { email?: unknown } | undefined)?.email ?? '').toLowerCase().slice(0, 254)}|${clientIp(req)}`,
     },
   },
 });

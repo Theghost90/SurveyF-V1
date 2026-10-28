@@ -7,6 +7,10 @@ import { redis } from '../src/lib/redis';
 import { runSendWorkerOnce } from '../src/services/whatsapp/sender';
 import { creditWallet } from '../src/services/wallet';
 import { encryptSecret } from '../src/lib/crypto';
+import { hashPassword } from '../src/lib/password';
+import { createUserExplore } from '../src/routes/auth';
+import { readMockMailbox } from '../src/services/mail';
+import { createSession } from '../src/services/security/sessions';
 
 export const APP_SECRET = 'test-app-secret';
 let counter = 0;
@@ -18,7 +22,7 @@ export async function makeApp(): Promise<FastifyInstance> {
 }
 
 export async function resetAll() {
-  await prisma.$executeRawUnsafe('TRUNCATE "User","SheetRow" RESTART IDENTITY CASCADE');
+  await prisma.$executeRawUnsafe('TRUNCATE "User","SheetRow","AuditLog" RESTART IDENTITY CASCADE');
   await redis.flushdb();
 }
 
@@ -53,19 +57,65 @@ export async function connectMockWhatsApp(userId: string) {
   return prisma.whatsAppAccount.create({ data: { userId, wabaId: `mock-waba-t${n}`, phoneNumberId: `mock-t${n}-${Date.now().toString(36)}`, displayPhone: '+237600000000', accessToken: encryptSecret('mock-token'), status: 'active' } });
 }
 
-/** `whatsapp: false` = a brand-new owner who has not connected their number yet (most of the product refuses to work then). */
-export async function registerOwner(app: FastifyInstance, over: Partial<{ email: string; plan: 'trial' | 'starter' | 'growth' | 'business'; whatsapp: boolean }> = {}): Promise<Client> {
+export const TEST_PASSWORD = 'correct-horse-battery';
+
+/**
+ * `whatsapp: false` = a brand-new owner who has not connected their number yet (most of the product refuses to work then).
+ * The owner is created already CONFIRMED and signed in, without going through the e-mail link: most tests are about something else. The real sign-up,
+ * confirmation and sign-in are covered by security-auth.test.ts (and `signUp` below does them end to end).
+ */
+export async function registerOwner(app: FastifyInstance, over: Partial<{ email: string; plan: 'trial' | 'starter' | 'growth' | 'business'; whatsapp: boolean; country: string; verified: boolean }> = {}): Promise<Client> {
   counter++;
-  const res = await app.inject({
-    method: 'POST', url: '/api/auth/register', headers: { 'content-type': 'application/json' },
-    payload: JSON.stringify({ businessName: 'Boulangerie Akwa', name: 'Jean-Paul', email: over.email ?? `owner${counter}@example.com`, phone: '+237 677 00 00 01', password: 'correct-horse-battery', locale: 'en' }),
+  const country = over.country ?? 'CM';
+  const user = await createUserExplore({
+    email: over.email ?? `owner${counter}@example.com`, name: 'Jean-Paul', businessName: 'Boulangerie Akwa', phone: '+237677000001', passwordHash: await hashPassword(TEST_PASSWORD),
+    country, locale: 'en', emailVerifiedAt: over.verified === false ? null : new Date(),
   });
-  const body = JSON.parse(res.body);
-  if (res.statusCode !== 201) throw new Error(`register failed: ${res.body}`);
-  if (over.plan && over.plan !== 'trial') await setPlan(body.user.id, over.plan);
-  if (over.whatsapp !== false) await connectMockWhatsApp(body.user.id);
-  return client(app, body.token, body.user.id);
+  const t = await createSession(user.id, 'password', false, { ip: '127.0.0.1', userAgent: 'vitest', country: null });
+  if (over.plan && over.plan !== 'trial') await setPlan(user.id, over.plan);
+  if (over.whatsapp !== false) await connectMockWhatsApp(user.id);
+  return client(app, t.accessToken, user.id);
 }
+
+export interface SignUpResult { status: number; email: string; client?: Client; verifyToken?: string; mails: Array<{ kind: string; links: string[] }> }
+
+/** The real thing: POST /register, read the confirmation link from the (mock) mailbox, confirm, sign in. Stops early where the flow does. */
+export async function signUp(app: FastifyInstance, over: Partial<{ email: string; country: string; locale: 'en' | 'fr'; password: string; headers: Record<string, string>; confirm: boolean }> = {}): Promise<SignUpResult> {
+  counter++;
+  const email = over.email ?? `signup${counter}-${Math.random().toString(36).slice(2, 7)}@example.com`;
+  const res = await app.inject({
+    method: 'POST', url: '/api/auth/register', headers: { 'content-type': 'application/json', ...(over.country ? { 'x-sf-country': over.country } : {}), ...(over.headers ?? {}) },
+    payload: JSON.stringify({ businessName: 'Biz', name: 'Ada', email, phone: '+237 677 00 00 02', password: over.password ?? TEST_PASSWORD, locale: over.locale ?? 'en' }),
+  });
+  const mails = await readMockMailbox(email);
+  const link = mails.find((m) => m.kind === 'verify_email')?.links.find((l) => l.includes('/verify-email?token='));
+  const verifyToken = link ? decodeURIComponent(new URL(link).searchParams.get('token')!) : undefined;
+  if (res.statusCode !== 202 || !verifyToken || over.confirm === false) return { status: res.statusCode, email, verifyToken, mails };
+  const ok = await app.inject({ method: 'POST', url: '/api/auth/verify-email', headers: { 'content-type': 'application/json', ...(over.headers ?? {}) }, payload: JSON.stringify({ token: verifyToken }) });
+  if (ok.statusCode !== 200) return { status: ok.statusCode, email, verifyToken, mails };
+  const login = await loginRaw(app, email, over.password ?? TEST_PASSWORD, over.headers);
+  const body = JSON.parse(login.body);
+  return { status: login.statusCode, email, verifyToken, mails, client: login.statusCode === 200 ? client(app, body.accessToken, body.user.id) : undefined };
+}
+
+/** Sign up FROM a country (the CDN header the website forwards), confirm the address, sign in: what a visitor in that country goes through. */
+export async function registerFrom(app: FastifyInstance, country: string | undefined, over: Record<string, unknown> = {}): Promise<{ status: number; body: { user: any; accessToken?: string }; c: Client }> {
+  counter++;
+  const email = `reg${counter}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+  const headers = { 'content-type': 'application/json', ...(country ? { 'x-sf-country': country } : {}) };
+  const res = await app.inject({ method: 'POST', url: '/api/auth/register', headers, payload: JSON.stringify({ businessName: 'Biz', name: 'Ada', email, phone: '677 12 34 56', password: TEST_PASSWORD, ...over }) });
+  const none = { status: res.statusCode, body: { user: undefined as any }, c: client(app, '', '') };
+  if (res.statusCode !== 202) return none;
+  const link = (await readMockMailbox(String(over.email ?? email))).find((m) => m.kind === 'verify_email')?.links[0];
+  if (!link) return none;
+  await app.inject({ method: 'POST', url: '/api/auth/verify-email', headers: { 'content-type': 'application/json' }, payload: JSON.stringify({ token: decodeURIComponent(new URL(link).searchParams.get('token')!) }) });
+  const login = await app.inject({ method: 'POST', url: '/api/auth/login', headers, payload: JSON.stringify({ email: String(over.email ?? email), password: String(over.password ?? TEST_PASSWORD) }) });
+  const body = JSON.parse(login.body);
+  return { status: login.statusCode, body, c: client(app, body.accessToken ?? '', body.user?.id ?? '') };
+}
+
+export const loginRaw = (app: FastifyInstance, email: string, password: string, headers: Record<string, string> = {}, extra: Record<string, unknown> = {}) =>
+  app.inject({ method: 'POST', url: '/api/auth/login', headers: { 'content-type': 'application/json', ...headers }, payload: JSON.stringify({ email, password, ...extra }) });
 
 export async function setPlan(userId: string, plan: 'trial' | 'starter' | 'growth' | 'business') {
   const now = new Date();

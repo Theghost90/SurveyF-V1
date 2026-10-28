@@ -36,7 +36,8 @@ async function addCompleted(w: World, count: number, completedAt = new Date()) {
   const owner = await prisma.user.findUniqueOrThrow({ where: { id: w.owner.userId } });
   const first = await prisma.contact.count({ where: { userId: owner.id } });
   await prisma.contact.createMany({ data: Array.from({ length: count }, (_, i) => ({ userId: owner.id, name: `Bulk ${first + i}`, phone: `+2375${String(first + i).padStart(8, '0')}`, consentAt: new Date() })) });
-  const contacts = await prisma.contact.findMany({ where: { userId: owner.id, name: { startsWith: 'Bulk' } }, select: { id: true } });
+  // Names are stored encrypted, so they cannot be filtered in SQL: take the newest `count` contacts instead.
+  const contacts = await prisma.contact.findMany({ where: { userId: owner.id }, orderBy: { createdAt: 'asc' }, select: { id: true } });
   await prisma.surveyRecipient.createMany({ data: contacts.slice(-count).map((c) => ({ surveyId: w.surveyId, contactId: c.id, status: 'completed' as const, sentAt: completedAt, startedAt: completedAt, completedAt })) });
 }
 const setInbound = (userId: string, at: Date | null) => prisma.ownerPhone.updateMany({ where: { userId }, data: { lastInboundAt: at } });

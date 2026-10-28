@@ -14,9 +14,9 @@ export default async function googleRoutes(app: FastifyInstance) {
     return { configured: googleConfigured(), connected: !!conn, email: conn?.email ?? null };
   });
 
-  app.get('/api/integrations/google/auth-url', auth, async (req) => ({ url: buildAuthUrl(await signState('google', req.userId)) }));
+  app.get('/api/integrations/google/auth-url', { preHandler: app.authenticateVerified }, async (req) => ({ url: buildAuthUrl(await signState('google', req.userId)) }));
 
-  app.post('/api/integrations/google/connect', auth, async (req) => {
+  app.post('/api/integrations/google/connect', { preHandler: app.authenticateVerified }, async (req) => {
     const { code, state } = z.object({ code: z.string().min(5), state: z.string().min(10) }).parse(req.body);
     let stateUser: string;
     try {

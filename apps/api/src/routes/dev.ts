@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
-import { toWaId } from '@surveyflow/shared';
+import { maskPhone, toWaId } from '@surveyflow/shared';
 import { env } from '../config/env';
 import { conflict, notFound } from '../lib/errors';
 import { prisma } from '../lib/prisma';
@@ -38,7 +38,7 @@ export default async function devRoutes(app: FastifyInstance) {
     const session = await getSession(account.phoneNumberId, waId);
     const recipients = await prisma.surveyRecipient.findMany({ where: { contactId: contact.id }, include: { survey: { select: { title: true, id: true } } }, orderBy: { createdAt: 'desc' }, take: 5 });
     return {
-      contact: { id: contact.id, name: contact.name, phone: contact.phone, optedOut: !!contact.optedOutAt },
+      contact: { id: contact.id, name: contact.name, phone: maskPhone(contact.phone), optedOut: !!contact.optedOutAt },
       chat: raw.map((r) => JSON.parse(r) as MockOutboxItem),
       session: session ? { surveyId: session.surveyId, currentIndex: session.currentIndex } : null,
       recipients: recipients.map((r) => ({ surveyId: r.surveyId, title: r.survey.title, status: r.status })),
@@ -96,7 +96,20 @@ export default async function devRoutes(app: FastifyInstance) {
     const linked = await prisma.ownerPhone.findUnique({ where: { phone: from } });
     return { from, platformPhone: platformPhone(), linked: linked?.userId === userId, chat: raw.map((r) => JSON.parse(r) as MockOutboxItem) };
   }
-  const ownerFrom = async (userId: string, from?: string) => from ?? toWaId((await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { phone: true } })).phone);
+  /**
+   * The phone the simulator speaks as. Default: the one in the owner's profile. Another phone is allowed only if it is not somebody else's: a phone linked to another
+   * owner, or in another owner's profile, is theirs (in live mode only Meta's signed webhook can speak as a phone; the simulator must not be a way round that to read
+   * another owner's bot chat or to send commands as them).
+   */
+  const ownerFrom = async (userId: string, from?: string) => {
+    if (!from) return toWaId((await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { phone: true } })).phone);
+    const [linked, profile] = await Promise.all([
+      prisma.ownerPhone.findUnique({ where: { phone: from }, select: { userId: true } }),
+      prisma.user.findFirst({ where: { phone: `+${from}`, NOT: { id: userId } }, select: { id: true } }),
+    ]);
+    if ((linked && linked.userId !== userId) || profile) throw notFound('Phone');
+    return from;
+  };
 
   app.get('/api/dev/owner', auth, async (req) => ownerSnapshot(req.userId, await ownerFrom(req.userId, (req.query as { from?: string }).from)));
 

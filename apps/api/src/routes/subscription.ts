@@ -37,7 +37,7 @@ export default async function subscriptionRoutes(app: FastifyInstance) {
    * PUT /api/subscription/upgrade — thin wrapper over payment initiation that also refuses downgrades
    * (V1 does not prorate or refund; a lower plan is chosen by cancelling and re-subscribing after the period ends).
    */
-  app.put('/api/subscription/upgrade', { ...auth, ...rl(20) }, async (req) => {
+  app.put('/api/subscription/upgrade', { preHandler: app.authenticateVerified, ...rl(20) }, async (req) => {
     const body = initiateSchema.parse(req.body);
     // The downgrade guard is inside initiatePayment, so POST /api/payments/initiate cannot bypass it.
     return txDto(await initiatePayment(req.userId, body as { plan: PaidPlanKey; interval: 'monthly' | 'annual'; method: 'mobile_money' | 'card' | 'bank_transfer'; phone?: string }));

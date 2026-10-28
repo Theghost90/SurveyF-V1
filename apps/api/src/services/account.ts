@@ -19,6 +19,10 @@ export function userDto(u: User) {
     trialEndsAt: u.trialEndsAt,
     onboardingDoneAt: u.onboardingDoneAt,
     createdAt: u.createdAt,
+    // Security state the web app needs to draw banners and the right sign-in prompts (never a hash, secret or code).
+    emailVerified: !!u.emailVerifiedAt,
+    twoFactorEnabled: !!u.totpEnabledAt,
+    hasPassword: !!u.passwordHash,
   };
 }
 

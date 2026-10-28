@@ -21,7 +21,7 @@ export default async function paymentRoutes(app: FastifyInstance) {
   const auth = { preHandler: app.authenticate };
 
   /** Unified payment initiation: server picks the PSP chain, computes the amount, never trusts the client for either. */
-  app.post('/api/payments/initiate', { ...auth, ...rl(20) }, async (req, reply) => {
+  app.post('/api/payments/initiate', { preHandler: app.authenticateVerified, ...rl(20) }, async (req, reply) => {
     const body = initiateSchema.parse(req.body);
     const tx = await initiatePayment(req.userId, body as never);
     reply.code(201);

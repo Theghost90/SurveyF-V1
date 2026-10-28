@@ -5,10 +5,11 @@
  * Everything here is fabricated for the demo (names, numbers, answers). Phone numbers use a reserved-looking
  * pattern and are never contacted: the WhatsApp gateway in demo mode only writes to a local outbox.
  */
-import bcrypt from 'bcryptjs';
 import { TEMPLATE_DEFS, giftFee } from '@surveyflow/shared';
 import { env } from '../src/config/env';
 import { encryptSecret } from '../src/lib/crypto';
+import { hashPassword } from '../src/lib/password';
+import { prepareDatabase } from '../src/services/startup';
 import { prisma } from '../src/lib/prisma';
 import { redis } from '../src/lib/redis';
 import { saveSession } from '../src/services/survey/sessions';
@@ -36,13 +37,14 @@ const SUGGESTIONS = [
 ];
 
 async function main() {
+  await prepareDatabase(); // the one-off data fixes (and the audit-log guard) a normal start would run, in case the API has not been started yet
   const email = 'demo@surveyflow.test';
   await prisma.user.deleteMany({ where: { email } });
 
   const now = new Date();
   const user = await prisma.user.create({
     data: {
-      email, passwordHash: await bcrypt.hash(DEMO_PASSWORD, 12), name: 'Jean-Paul Nkou', businessName: 'Boulangerie Akwa',
+      email, passwordHash: await hashPassword(DEMO_PASSWORD), emailVerifiedAt: now, name: 'Jean-Paul Nkou', businessName: 'Boulangerie Akwa',
       phone: '+237677000000', plan: 'growth', country: 'CM', locale: 'en', preferredCurrency: 'XAF', segment: 'business', onboardingDoneAt: now,
       subscription: { create: { plan: 'growth', status: 'active', currentPeriodStart: hoursAgo(24 * 10), currentPeriodEnd: new Date(now.getTime() + 20 * 86_400_000), amountFCFA: 39_000, paymentMethod: 'mobile_money', pspProvider: 'mock', interval: 'monthly' } },
     },

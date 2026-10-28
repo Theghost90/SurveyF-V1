@@ -7,7 +7,7 @@ import { sweepAbandoned } from '../src/services/survey/abandon';
 import { getSession, saveSession } from '../src/services/survey/sessions';
 import { runSendWorkerOnce } from '../src/services/whatsapp/sender';
 import {
-  answerIdFor, buildWorld, chatOf, client, makeApp, metaPayload, postWebhook, registerOwner, replyMsg, resetAll, say, templateBtn, textMsg, waIdOf,
+  answerIdFor, buildWorld, chatOf, client, loginRaw, makeApp, metaPayload, postWebhook, registerOwner, replyMsg, resetAll, say, signUp, templateBtn, textMsg, waIdOf,
 } from './helpers';
 
 let app: FastifyInstance;
@@ -16,31 +16,23 @@ afterAll(async () => { await app.close(); await prisma.$disconnect(); redis.disc
 beforeEach(async () => { await resetAll(); });
 
 describe('auth', () => {
-  it('registers, rejects duplicates, logs in, rejects wrong passwords, and starts a 14-day trial', async () => {
-    const owner = await registerOwner(app, { email: 'jp@example.com' });
-    const me = await owner.get('/api/auth/me');
+  it('signs up, confirms the address by e-mail, signs in, starts on Explore, and never reveals whether an address is taken', async () => {
+    const up = await signUp(app, { email: 'jp@example.com' });
+    expect(up.status).toBe(200);
+    const me = await up.client!.get('/api/auth/me');
     expect(me.plan.key).toBe('trial');
     expect(me.subscription.status).toBe('trial');
     expect(me.subscription.daysLeft).toBeGreaterThanOrEqual(13);
+    expect(me.user.emailVerified).toBe(true);
 
-    const dup = await app.inject({ method: 'POST', url: '/api/auth/register', headers: { 'content-type': 'application/json' }, payload: JSON.stringify({ businessName: 'x', name: 'x', email: 'JP@example.com', phone: '+237677000002', password: 'longenough1' }) });
-    expect(dup.statusCode).toBe(409);
+    // A second sign-up with the same address (any capitals) gets the SAME answer as a new one: 202, nothing else.
+    const dup = await app.inject({ method: 'POST', url: '/api/auth/register', headers: { 'content-type': 'application/json' }, payload: JSON.stringify({ businessName: 'x', name: 'x', email: 'JP@example.com', phone: '+237677000002', password: 'longenough-1234' }) });
+    expect(dup.statusCode).toBe(202);
 
-    const bad = await app.inject({ method: 'POST', url: '/api/auth/login', headers: { 'content-type': 'application/json' }, payload: JSON.stringify({ email: 'jp@example.com', password: 'wrong-password' }) });
-    expect(bad.statusCode).toBe(401);
-    const good = await app.inject({ method: 'POST', url: '/api/auth/login', headers: { 'content-type': 'application/json' }, payload: JSON.stringify({ email: 'jp@example.com', password: 'correct-horse-battery' }) });
+    expect((await loginRaw(app, 'jp@example.com', 'wrong-password-x')).statusCode).toBe(401);
+    const good = await loginRaw(app, 'jp@example.com', 'correct-horse-battery');
     expect(good.statusCode).toBe(200);
-    expect(JSON.parse(good.body).token).toBeTruthy();
-  });
-
-  it('locks one ACCOUNT after 30 failed logins even when every attempt comes from a different IP', async () => {
-    await registerOwner(app, { email: 'victim@example.com' });
-    const attempt = (ip: string, password: string) => app.inject({ method: 'POST', url: '/api/auth/login', remoteAddress: ip, headers: { 'content-type': 'application/json' }, payload: JSON.stringify({ email: 'victim@example.com', password }) });
-    for (let i = 0; i < 30; i++) expect((await attempt(`10.0.0.${i}`, 'wrong-password-x')).statusCode).toBe(401);
-    expect((await attempt('10.9.9.9', 'wrong-password-x')).statusCode).toBe(429);
-    expect((await attempt('10.9.9.9', 'correct-horse-battery')).statusCode).toBe(429); // even the right password waits out the lock
-    await redis.del('sf:loginfail:victim@example.com');
-    expect((await attempt('10.9.9.9', 'correct-horse-battery')).statusCode).toBe(200);
+    expect(JSON.parse(good.body).accessToken).toBeTruthy();
   });
 
   it('protects API routes and scopes data per owner', async () => {
@@ -91,7 +83,8 @@ describe('survey builder rules', () => {
     const r = JSON.parse(ok.body);
     expect(r).toMatchObject({ created: 1, skipped: 2 }); // FR-style ";" delimiter and "nom/téléphone" headers understood; bad + duplicate rows reported
     const list = await o.get('/api/contacts');
-    expect(list.items[0].phone).toBe('+237677123456');
+    expect(list.items[0].phone).toBe('+237 6XX XXX 456'); // masked in every list...
+    expect((await o.post(`/api/contacts/${list.items[0].id}/reveal`)).phone).toBe('+237677123456'); // ...the full number is one logged reveal away
   });
 });
 

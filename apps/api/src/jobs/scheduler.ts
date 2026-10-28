@@ -8,6 +8,7 @@ import { ensureOwnerAlertTemplates, sweepSlowdowns } from '../services/analytics
 import { runBillingLifecycle } from '../services/subscription/lifecycle';
 import { runRenewalNotices } from '../services/subscription/notices';
 import { runAutoReminders } from '../services/reminders';
+import { runRetention } from './retention';
 import { notifyEmptyWallets } from '../services/wallet';
 import { runSendWorkerOnce } from '../services/whatsapp/sender';
 
@@ -47,5 +48,7 @@ export function startJobs(log: Log): () => void {
   // Asks the payment providers about payments whose webhook never came (and expires an abandoned one only after a last look). Leader-only: one replica asks.
   every('payment-reconcile', 60_000, () => reconcilePayments(new Date(), pspRouter, { warn: (o, m) => log.info(o, m), error: (o, m) => log.error(o, m) }), { leader: true, initialDelay: 15_000 });
   every('renewal-notices', 6 * 3_600_000, () => runRenewalNotices(), { leader: true, initialDelay: 40_000 });
+  // Unconfirmed accounts, spent e-mail links, ended sessions and old audit rows (jobs/retention.ts).
+  every('retention', 3_600_000, () => runRetention(), { leader: true, initialDelay: 60_000 });
   return () => timers.forEach((t) => { clearTimeout(t); clearInterval(t); });
 }

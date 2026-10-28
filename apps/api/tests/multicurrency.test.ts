@@ -6,7 +6,7 @@ import { redis } from '../src/lib/redis';
 import { GiftError, setGiftProvider, type GiftProvider } from '../src/services/gifts/providers';
 import { processDueGifts } from '../src/services/gifts';
 import { buildReceiptHtml, loadReceipt } from '../src/services/receipts';
-import { buildWorld, client, makeApp, resetAll, say, setPlan, answerIdFor, replyMsg, templateBtn, textMsg, type World, connectMockWhatsApp } from './helpers';
+import { buildWorld, client, makeApp, resetAll, say, setPlan, answerIdFor, replyMsg, templateBtn, textMsg, type World, connectMockWhatsApp, registerFrom as signUpFrom } from './helpers';
 
 let app: FastifyInstance;
 beforeAll(async () => { app = await makeApp(); });
@@ -20,14 +20,11 @@ const fxUp = (rates?: Record<string, number>) => vi.stubGlobal('fetch', vi.fn(as
 const fxDown = async () => { vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); })); await redis.flushdb(); await prisma.fxRate.deleteMany(); };
 
 async function registerFrom(country: string, plan?: 'growth') {
-  const res = await app.inject({
-    method: 'POST', url: '/api/auth/register', headers: { 'content-type': 'application/json', 'x-sf-country': country },
-    payload: JSON.stringify({ businessName: 'Lagos Shop', name: 'Ngozi', email: `mc${Math.random().toString(36).slice(2)}@example.com`, phone: ({ NG: '0803 123 4567', KE: '0712 345 678', CM: '677 12 34 56' } as Record<string, string>)[country]!, password: 'correct-horse-battery' }),
-  });
-  const body = JSON.parse(res.body);
-  await connectMockWhatsApp(body.user.id);
-  if (plan) await setPlan(body.user.id, plan);
-  return client(app, body.token, body.user.id);
+  const phone = ({ NG: '0803 123 4567', KE: '0712 345 678', CM: '677 12 34 56' } as Record<string, string>)[country]!;
+  const r = await signUpFrom(app, country, { businessName: 'Lagos Shop', name: 'Ngozi', phone });
+  await connectMockWhatsApp(r.body.user.id);
+  if (plan) await setPlan(r.body.user.id, plan);
+  return r.c;
 }
 const settleMock = (c: ReturnType<typeof client>, ref: string, outcome: 'success' | 'failed' = 'success') => c.post(`/api/payments/mock/${ref}`, { outcome });
 

@@ -16,6 +16,8 @@ import { randomInt } from 'node:crypto';
 import { AppError } from '../lib/errors';
 import { track } from '../services/funnel';
 import { assertWhatsAppConnected } from '../services/whatsapp/require';
+import { maskPhone } from '@surveyflow/shared';
+import { auditContext, auditStrict } from '../services/audit';
 
 const GIFT_AUTOMATION = new Set(['airtime', 'momo', 'discount', 'prize_draw']);
 
@@ -87,6 +89,8 @@ function dto(s: Awaited<ReturnType<typeof owned>>) {
 
 export default async function surveyRoutes(app: FastifyInstance) {
   const auth = { preHandler: app.authenticate };
+  // Publishing, sending, reminding and paying out gifts act on other people and on money: they need a confirmed e-mail address.
+  const authVerified = { preHandler: app.authenticateVerified };
 
   app.get('/api/surveys', auth, async (req) => {
     const surveys = await prisma.survey.findMany({ where: { userId: req.userId }, orderBy: { createdAt: 'desc' }, include: { _count: { select: { questions: true } } } });
@@ -184,7 +188,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
 
   // ---- lifecycle -------------------------------------------------------------------------------
 
-  app.post('/api/surveys/:id/publish', auth, async (req) => {
+  app.post('/api/surveys/:id/publish', authVerified, async (req) => {
     await assertWhatsAppConnected(req.userId);
     const s = await owned(req.userId, (req.params as { id: string }).id);
     if (s.status !== 'draft') throw conflict('not_a_draft', 'Only drafts can be published');
@@ -222,7 +226,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
     scheduledAt: z.coerce.date().optional(),
   });
 
-  app.post('/api/surveys/:id/send', auth, async (req) => {
+  app.post('/api/surveys/:id/send', authVerified, async (req) => {
     await assertWhatsAppConnected(req.userId);
     const s = await owned(req.userId, (req.params as { id: string }).id);
     const body = sendSchema.parse(req.body ?? {});
@@ -266,7 +270,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
     return { eligible: eligible.length, totalContacts: total, optedOut, messagesRemaining: messagesRemaining(ctx), recipientsRemaining: recipientsRemaining(ctx), newPeople, gift: await giftReadiness(req.userId, s, eligible.length) };
   });
 
-  app.post('/api/surveys/:id/remind', auth, async (req) => {
+  app.post('/api/surveys/:id/remind', authVerified, async (req) => {
     await assertWhatsAppConnected(req.userId);
     const s = await owned(req.userId, (req.params as { id: string }).id);
     const { target } = z.object({ target: z.enum(['abandoned', 'no_reply']) }).parse(req.body);
@@ -318,13 +322,13 @@ export default async function surveyRoutes(app: FastifyInstance) {
   });
 
   /** Re-queue definitely-failed gifts (re-debits the wallet; stops being possible when the balance cannot cover them). */
-  app.post('/api/surveys/:id/gifts/retry', auth, async (req) => {
+  app.post('/api/surveys/:id/gifts/retry', authVerified, async (req) => {
     const s = await owned(req.userId, (req.params as { id: string }).id);
     return retryFailedGifts(s.id);
   });
 
   /** After a top-up: pay the backlog of participants who finished while the wallet was empty. Explicit, never automatic. */
-  app.post('/api/surveys/:id/gifts/release', auth, async (req) => {
+  app.post('/api/surveys/:id/gifts/release', authVerified, async (req) => {
     const s = await owned(req.userId, (req.params as { id: string }).id);
     return releaseUnfundedGifts(s.id);
   });
@@ -336,6 +340,8 @@ export default async function surveyRoutes(app: FastifyInstance) {
     const entries = await prisma.prizeDrawEntry.findMany({ where: { surveyId: s.id, isWinner: false }, include: { contact: { select: { name: true, phone: true } } } });
     if (!entries.length) throw badRequest('no_entries', 'No eligible entries');
     const winner = entries[randomInt(entries.length)]!;
+    // The winner's number is the one number shown in full without a reveal (the owner has to contact them): one person, and the trail says so.
+    await auditStrict(auditContext(req), { action: 'prize_draw_winner_shown', targetType: 'contact', targetId: winner.contactId });
     await prisma.prizeDrawEntry.update({ where: { id: winner.id }, data: { isWinner: true } });
     return { winner: { name: winner.contact.name, phone: winner.contact.phone } };
   });
@@ -350,7 +356,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
       prisma.surveyRecipient.findMany({ where, include: { contact: { select: { name: true, phone: true } } }, orderBy: { createdAt: 'desc' }, skip: (q.page - 1) * q.pageSize, take: q.pageSize }),
       prisma.surveyRecipient.count({ where }),
     ]);
-    return { total, items: items.map((r) => ({ id: r.id, status: r.status, name: r.contact.name, phone: r.contact.phone, sentAt: r.sentAt, completedAt: r.completedAt, abandonedAtQuestion: r.abandonedAtQuestion, lastError: r.lastError })) };
+    return { total, items: items.map((r) => ({ id: r.id, contactId: r.contactId, status: r.status, name: r.contact.name, phone: maskPhone(r.contact.phone), sentAt: r.sentAt, completedAt: r.completedAt, abandonedAtQuestion: r.abandonedAtQuestion, lastError: r.lastError })) };
   });
 }
 

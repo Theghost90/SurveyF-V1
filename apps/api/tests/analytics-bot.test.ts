@@ -333,13 +333,14 @@ describe('lists: names with MASKED numbers on WhatsApp, full numbers only in Sur
     expect(await lastBody(OWNER_PHONE)).toMatch(/no list to continue/);
   });
 
-  it('the SaaS list has the COMPLETE numbers, is paged, excludes STOP, and its CSV defuses spreadsheet formulas', async () => {
+  it('the SaaS list is paged, excludes STOP and shows MASKED numbers (a reveal away); the CSV holds the complete ones and defuses spreadsheet formulas', async () => {
     const w = await mixedWorld();
     await prisma.contact.update({ where: { id: w.contactIds[8]! }, data: { name: '=HYPERLINK("http://evil","click")' } });
     const page = await w.owner.get(`/api/surveys/${w.surveyId}/not-started?pageSize=2&page=1`);
     expect(page.total).toBe(4);
     expect(page.items).toHaveLength(2);
-    expect(page.items[0].phone).toMatch(/^\+2376771000\d\d$/); // complete, not masked
+    expect(page.items[0].phone).toMatch(/^\+237 6XX XXX \d{3}$/); // masked here too: only an export or a logged reveal gives the complete number
+    expect((await w.owner.post(`/api/contacts/${page.items[0].contactId}/reveal`)).phone).toMatch(/^\+2376771000\d\d$/);
     const all = await w.owner.get(`/api/surveys/${w.surveyId}/not-started?pageSize=100`);
     expect(all.items.map((i: { name: string }) => i.name)).not.toContain('Contact 8'); // contact index 7 = STOP
     const csv = await w.owner.raw('GET', `/api/surveys/${w.surveyId}/not-started.csv`);

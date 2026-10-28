@@ -1,6 +1,6 @@
 import { Prisma, type PaymentTransaction } from '@prisma/client';
 import { ANNUAL_MONTHS_CHARGED, PLANS, currencyLabel, type Currency, type PaidPlanKey } from '@surveyflow/shared';
-import { prisma } from '../../lib/prisma';
+import { prisma, type Tx } from '../../lib/prisma';
 import { notifyOwner } from '../notify';
 import { creditWallet } from '../wallet';
 import { track } from '../funnel';
@@ -61,7 +61,7 @@ async function parkForReview(tx: PaymentTransaction, reason: string, log: Settle
 }
 
 /** What a paid transaction does to the account. Runs inside the caller's database transaction: all of it happens or none of it. */
-async function applyPaid(db: Prisma.TransactionClient, tx: PaymentTransaction, pspTxId?: string) {
+async function applyPaid(db: Tx, tx: PaymentTransaction, pspTxId?: string) {
   if (tx.purpose === 'gift_topup') {
     // Credit what we ASKED for (tx.amount), not what the PSP says it collected: an overpayment must not mint wallet balance.
     await creditWallet(db, tx.userId, tx.amount, 'topup', tx.id, `Top-up (${tx.method === 'card' ? 'card' : 'Mobile Money'} · ${tx.pspProvider})`, tx.currency as Currency);
@@ -74,7 +74,7 @@ const paidText = (tx: PaymentTransaction) =>
   tx.purpose === 'gift_topup' ? `✅ SurveyFlow: ${tx.amount.toLocaleString('en')} ${currencyLabel(tx.currency)} added to your gift wallet.` : `✅ SurveyFlow: payment received. Your ${tx.plan} plan is active.`;
 
 /** One settlement at a time per subscription: two payments of one customer landing together must not read the same "current plan". */
-const lockSubscription = (db: Prisma.TransactionClient, subscriptionId: string) => db.$queryRaw`SELECT "id" FROM "Subscription" WHERE "id" = ${subscriptionId} FOR UPDATE`;
+const lockSubscription = (db: Tx, subscriptionId: string) => db.$queryRaw`SELECT "id" FROM "Subscription" WHERE "id" = ${subscriptionId} FOR UPDATE`;
 
 /**
  * Applies a PSP-VERIFIED result to a transaction. Idempotent: every transition is a compare-and-set, so however many times a provider retries
@@ -138,7 +138,7 @@ export async function settleTransaction(txId: string, v: VerifyResult, log: Sett
   return 'already_settled';
 }
 
-export async function activateSubscription(db: Prisma.TransactionClient, tx: PaymentTransaction, pspTxId?: string) {
+export async function activateSubscription(db: Tx, tx: PaymentTransaction, pspTxId?: string) {
   const sub = await db.subscription.findUniqueOrThrow({ where: { id: tx.subscriptionId } });
   const now = new Date();
   if (!tx.plan) throw new Error(`subscription payment ${tx.id} has no plan`);

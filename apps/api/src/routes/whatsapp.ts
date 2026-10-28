@@ -59,7 +59,7 @@ export default async function whatsappRoutes(app: FastifyInstance) {
     return account;
   }
 
-  app.post('/api/whatsapp/accounts', auth, async (req, reply) => {
+  app.post('/api/whatsapp/accounts', { preHandler: app.authenticateVerified }, async (req, reply) => {
     const body = z.object({ wabaId: z.string().trim().min(3).max(40), phoneNumberId: z.string().trim().min(3).max(40), accessToken: z.string().trim().min(10).max(1000) }).parse(req.body);
     await attach(req.userId, body);
     reply.code(201);
@@ -67,7 +67,7 @@ export default async function whatsappRoutes(app: FastifyInstance) {
   });
 
   /** Meta Embedded Signup: the browser hands us the OAuth `code` plus the ids from the popup's message event. */
-  app.post('/api/whatsapp/embedded-signup', auth, async (req, reply) => {
+  app.post('/api/whatsapp/embedded-signup', { preHandler: app.authenticateVerified }, async (req, reply) => {
     const body = z.object({ code: z.string().min(5), wabaId: z.string().min(3), phoneNumberId: z.string().min(3) }).parse(req.body);
     if (env.waMode !== 'live') throw badRequest('not_live', 'Embedded Signup needs WHATSAPP_MODE=live');
     let accessToken: string;
@@ -82,7 +82,7 @@ export default async function whatsappRoutes(app: FastifyInstance) {
   });
 
   /** Demo/dev only: a simulated number so the whole product can be explored without Meta credentials. */
-  app.post('/api/whatsapp/accounts/mock', auth, async (req, reply) => {
+  app.post('/api/whatsapp/accounts/mock', { preHandler: app.authenticateVerified }, async (req, reply) => {
     if (env.waMode !== 'mock') throw notFound('Route');
     await attach(req.userId, { wabaId: `mock-waba-${nanoid(6)}`, phoneNumberId: `mock-${nanoid(10)}`, accessToken: 'mock-token-for-local-development' });
     reply.code(201);

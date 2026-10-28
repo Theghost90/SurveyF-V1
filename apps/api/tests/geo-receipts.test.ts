@@ -6,7 +6,7 @@ import { GiftError, setGiftProvider } from '../src/services/gifts/providers';
 import { processDueGifts } from '../src/services/gifts';
 import { buildReceiptHtml, giftIdFromToken, loadReceipt, receiptToken, receiptUrl } from '../src/services/receipts';
 import { runSendWorkerOnce } from '../src/services/whatsapp/sender';
-import { answerIdFor, buildWorld, chatOf, client, makeApp, registerOwner, replyMsg, resetAll, say, templateBtn, textMsg, type World, connectMockWhatsApp } from './helpers';
+import { answerIdFor, buildWorld, chatOf, client, makeApp, registerOwner, replyMsg, resetAll, say, templateBtn, textMsg, type World, connectMockWhatsApp, registerFrom } from './helpers';
 
 let app: FastifyInstance;
 beforeAll(async () => { app = await makeApp(); });
@@ -16,13 +16,9 @@ beforeEach(async () => { setGiftProvider(null); await resetAll(); });
 // ---- geography ---------------------------------------------------------------------------------------------
 
 async function register(country: string | undefined, over: Record<string, unknown> = {}) {
-  const res = await app.inject({
-    method: 'POST', url: '/api/auth/register', payload: JSON.stringify({ businessName: 'Biz', name: 'Ada', email: `g${Math.random().toString(36).slice(2)}@example.com`, phone: '677 12 34 56', password: 'correct-horse-battery', ...over }),
-    headers: { 'content-type': 'application/json', ...(country ? { 'x-sf-country': country } : {}) },
-  });
-  const body = JSON.parse(res.body);
-  if (res.statusCode === 201) await connectMockWhatsApp(body.user.id);
-  return { status: res.statusCode, body, c: client(app, body.token, body.user?.id) };
+  const r = await registerFrom(app, country, over);
+  if (r.status === 200) await connectMockWhatsApp(r.body.user.id);
+  return r;
 }
 const meWith = (c: ReturnType<typeof client>, country?: string) =>
   app.inject({ method: 'GET', url: '/api/auth/me', headers: { authorization: `Bearer ${c.token}`, ...(country ? { 'x-sf-country': country } : {}) } }).then((r) => JSON.parse(r.body));
@@ -30,7 +26,7 @@ const meWith = (c: ReturnType<typeof client>, country?: string) =>
 describe('country and currency follow the visitor', () => {
   it('registration uses the detected country: its currency, and its phone format for local numbers', async () => {
     const ng = await register('NG', { phone: '0803 123 4567' });
-    expect(ng.status).toBe(201);
+    expect(ng.status).toBe(200);
     expect(ng.body.user).toMatchObject({ country: 'NG', preferredCurrency: 'NGN', phone: '+2348031234567' });
     const ci = await register('CI', { phone: '07 12 34 56 78' });
     expect(ci.body.user).toMatchObject({ country: 'CI', preferredCurrency: 'XOF', phone: '+2250712345678' });
