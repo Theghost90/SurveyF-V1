@@ -5,7 +5,7 @@
  *
  *   npx tsx --env-file=.env scripts/preflight.mts [options]
  *
- *   --only <list>       comma-separated subset of: google, breach, captcha, argon2, mail, headers (default: all that apply)
+ *   --only <list>       comma-separated subset of: google, breach, captcha, argon2, mail, headers, next (default: all that apply)
  *   --domain <domain>   mail: the domain of EMAIL_FROM; checks its SPF, DKIM and DMARC records in DNS
  *   --mail-to <address> mail: send ONE real e-mail through the configured provider (EMAIL_PROVIDER) to this address
  *   --url <https://...> headers: the address of the deployed website (or of the `npm run share` tunnel); checks https, HSTS, the CSP and the cookies
@@ -19,15 +19,21 @@
  *   argon2    hashes and verifies with the native module on THIS computer, times it, and cross-checks with the reference C implementation when Python's argon2-cffi is installed.
  *   mail      DNS records of the sending domain, and one real message. "Accepted" is not "delivered": look at the inbox, the spam folder and the message headers (dkim, spf, dmarc = pass).
  *   headers   what the deployed website sends: https redirect, HSTS, a fresh CSP nonce per page, the other headers, and the cookie names (a proxy that hides https turns
- *             `__Host-next-auth.csrf-token` into `next-auth.csrf-token`: that is the failure this finds).
+ *             `__Host-next-auth.csrf-token` into `next-auth.csrf-token`: that is the failure this finds). Against `npm run share` it is a check through a real Cloudflare edge.
+ *   next      offline: loads the INSTALLED Next.js, makes it behave as on a Windows host (path.win32) and checks that it refuses cache paths that climb out of its folder
+ *             and escapes the backslash in a path segment: the fix of the critical remote-code-execution advisory for Windows-hosted servers (15.5.24). Re-run it after every
+ *             Next.js upgrade; it SKIPs, never fails, when a later Next.js has moved the code it reads.
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { promises as dns } from 'node:dns';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import nodePath from 'node:path';
 
 const args = process.argv.slice(2);
 const opt = (n: string) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined; };
-const ALL = ['google', 'breach', 'captcha', 'argon2', 'mail', 'headers'];
+const ALL = ['google', 'breach', 'captcha', 'argon2', 'mail', 'headers', 'next'];
 const only = new Set((opt('only') ?? ALL.join(',')).split(',').map((s) => s.trim()).filter(Boolean));
 for (const o of only) if (!ALL.includes(o)) { console.error(`unknown check "${o}" (${ALL.join(', ')})`); process.exit(2); }
 
@@ -361,9 +367,47 @@ async function checkHeaders(): Promise<void> {
   if (probe) report(probe.status === 404 || probe.status === 400 ? 'PASS' : 'FAIL', '/_next/image', `answered ${probe.status}: the image optimizer that had critical advisories is ${probe.status === 404 || probe.status === 400 ? 'not serving' : 'STILL SERVING'}`);
 }
 
+// ---- next -----------------------------------------------------------------------------------------------------------------------
+
+async function checkNext(): Promise<void> {
+  section('next: the Windows path-escape fix in the installed Next.js');
+  const web = createRequire(new URL('../apps/web/package.json', import.meta.url));
+  let root: string, version: string;
+  try { root = nodePath.dirname(web.resolve('next/package.json')); version = JSON.parse(readFileSync(nodePath.join(root, 'package.json'), 'utf8')).version; } catch { report('SKIP', 'next', 'Next.js is not installed (npm ci first).'); return; }
+  let escapeSegment: (s: string, encoded: boolean) => string;
+  let cache: { prototype: { getFilePath(this: unknown, key: string, kind: unknown): string } };
+  let kinds: Record<string, unknown>;
+  try {
+    escapeSegment = web('next/dist/shared/lib/router/utils/escape-path-delimiters').default;
+    cache = web('next/dist/server/lib/incremental-cache/file-system-cache').default;
+    kinds = web('next/dist/server/response-cache/types').IncrementalCacheKind;
+    if (typeof escapeSegment !== 'function' || typeof cache?.prototype?.getFilePath !== 'function' || !kinds?.PAGES) throw new Error('shape');
+  } catch { report('SKIP', `next@${version}`, 'the files this check reads are not where Next.js 15.5 keeps them. Check by hand that the installed version is past the advisories: npm run audit:gate.'); return; }
+
+  const escaped = escapeSegment('a\\b', false);
+  const saved = { join: nodePath.join, sep: nodePath.sep };
+  const ctx = { serverDistDir: 'C:\\site\\.next\\server' };
+  const inside = (p: string) => ['C:\\site\\.next\\server\\pages\\', 'C:\\site\\.next\\server\\app\\', 'C:\\site\\.next\\cache\\fetch-cache\\'].some((d) => p.startsWith(d));
+  const hostile = ['..\\..\\..\\Windows\\win.ini', '..\\..\\evil', 'ok\\..\\..\\..\\evil'];
+  let escapedOut = 0, refused = 0, good = '';
+  Object.assign(nodePath, { join: nodePath.win32.join, sep: nodePath.win32.sep }); // as on a Windows host, for the length of the lookups only
+  try {
+    for (const kind of ['PAGES', 'FETCH', 'APP_PAGE']) {
+      for (const key of hostile) {
+        try { if (!inside(cache.prototype.getFilePath.call(ctx, key, kinds[kind]))) escapedOut++; } catch { refused++; }
+      }
+      good = cache.prototype.getFilePath.call(ctx, 'fine/page', kinds[kind]);
+    }
+  } finally { Object.assign(nodePath, saved); }
+  const total = hostile.length * 3;
+  if (escaped !== 'a%5Cb') report('FAIL', `next@${version}`, `a backslash in a path segment is not escaped (got ${JSON.stringify(escaped)}): this Next.js predates the Windows advisory fix (15.5.24)`);
+  else if (escapedOut || refused !== total) report('FAIL', `next@${version}`, `${escapedOut} of ${total} hostile cache lookups resolved outside the cache folder under Windows path rules: this Next.js predates the fix (15.5.24)`);
+  else report('PASS', `next@${version}`, `under Windows path rules all ${total} hostile cache lookups are refused, a plain one still resolves (${good}), and a backslash in a segment is escaped.\nThis is the code of the fix in 15.5.24, run on this computer's Node: it is not a run on a Windows host.`);
+}
+
 // ---- run ------------------------------------------------------------------------------------------------------------------------
 
-const runs: Record<string, () => Promise<void>> = { google: checkGoogle, breach: checkBreach, captcha: checkCaptcha, argon2: checkArgon2, mail: checkMail, headers: checkHeaders };
+const runs: Record<string, () => Promise<void>> = { google: checkGoogle, breach: checkBreach, captcha: checkCaptcha, argon2: checkArgon2, mail: checkMail, headers: checkHeaders, next: checkNext };
 for (const name of ALL) {
   if (!only.has(name)) continue;
   try { await runs[name]!(); } catch (e) { report('FAIL', `${name}: the check itself broke`, message(e)); }
