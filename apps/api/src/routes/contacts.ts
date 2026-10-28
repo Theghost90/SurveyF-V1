@@ -84,7 +84,7 @@ export default async function contactRoutes(app: FastifyInstance) {
   const createSchema = z.object({
     name: z.string().trim().min(1).max(120), phone: z.string().trim().min(6).max(30), tags: tagsSchema,
     // Manual entry still needs the owner to vouch for the contact's opt-in.
-    consent: z.literal(true, { errorMap: () => ({ message: 'Confirm that this person agreed to receive WhatsApp messages from you' }) }),
+    consent: z.literal(true, { error: 'Confirm that this person agreed to receive WhatsApp messages from you' }),
   });
 
   app.post('/api/contacts', authVerified, async (req, reply) => {

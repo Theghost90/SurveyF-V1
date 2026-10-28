@@ -105,7 +105,7 @@ export const surveyInputSchema = z.object({
   /** Automatic, single, polite reminders (rules in reminders.ts). Off unless the owner switches them on. */
   autoRemindNonResponders: z.boolean().default(false),
   autoRemindAbandoners: z.boolean().default(false),
-  gift: giftConfigSchema.default({}),
+  gift: giftConfigSchema.prefault({}), // zod 4: a default is the finished OUTPUT; prefault feeds {} through the schema so that its own defaults apply (what .default({}) did in zod 3)
   questions: z.array(questionInputSchema).max(WA_LIMITS.maxQuestions).default([]),
 }).superRefine((s, ctx) => {
   if (s.kind === 'event' && !s.deadlineAt) ctx.addIssue({ code: 'custom', message: 'Add the date of the event: it sets the deadline and the reminder timing', path: ['deadlineAt'] });
