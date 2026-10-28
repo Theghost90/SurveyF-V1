@@ -5,8 +5,10 @@ import { Suspense, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Captcha } from '@/components/captcha';
 import { Field, Input } from '@/components/ui/input';
 import { ApiError, api, errorMessage } from '@/lib/api';
+import { useAuthConfig } from '@/lib/auth-config';
 import { dialPrefix, phoneExampleFor } from '@surveyflow/shared';
 import { useGeo } from '@/lib/geo-context';
 import { useLocale, useT } from '@/lib/i18n/client';
@@ -16,12 +18,18 @@ function RegisterForm() {
   const locale = useLocale();
   const router = useRouter();
   const params = useSearchParams();
+  const config = useAuthConfig();
   const { country } = useGeo(); // from the visitor's location; Cameroon when unknown. The account's country is set server-side from the same signal.
   const [form, setForm] = useState({ businessName: '', name: '', email: '', phone: `${dialPrefix(country)} `, password: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaRound, setCaptchaRound] = useState(0);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  // The pricing page's chosen plan travels with the sign-up, through the confirmation e-mail, to the billing step of onboarding.
+  const plan = params.get('plan');
+  const interval = params.get('interval');
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -29,20 +37,17 @@ function RegisterForm() {
     setErrors({});
     setFormError(null);
     try {
-      await api('/auth/register', { body: { ...form, locale } });
-      const res = await signIn('credentials', { email: form.email, password: form.password, redirect: false });
-      if (res?.error) throw new Error('signin');
-      // The pricing page's chosen plan travels to the billing step of onboarding.
-      const plan = params.get('plan');
-      router.push(plan ? `/onboarding?plan=${encodeURIComponent(plan)}&interval=${params.get('interval') ?? 'monthly'}` : '/onboarding');
-      router.refresh();
+      await api('/auth/register', { body: { ...form, locale, ...(captchaToken ? { captchaToken } : {}), ...(plan && ['starter', 'growth', 'business'].includes(plan) ? { plan } : {}), ...(interval === 'annual' || interval === 'monthly' ? { interval } : {}) } });
+      // Always the same answer, whether or not the address already has an account: nobody is signed in yet, and the next step is the confirmation link.
+      router.push(`/check-email?email=${encodeURIComponent(form.email.trim().toLowerCase())}`);
     } catch (err) {
+      if (captchaToken) { setCaptchaToken(null); setCaptchaRound((n) => n + 1); }
       if (err instanceof ApiError && err.issues?.length) {
         setErrors(Object.fromEntries(err.issues.map((i) => [i.path, i.message])));
       } else if (err instanceof ApiError && err.code === 'invalid_phone') {
         setErrors({ phone: errorMessage(err, t) });
-      } else if (err instanceof ApiError && err.code === 'email_taken') {
-        setErrors({ email: errorMessage(err, t) });
+      } else if (err instanceof ApiError && err.code.startsWith('password_')) {
+        setErrors({ password: errorMessage(err, t) });
       } else {
         setFormError(errorMessage(err, t));
       }
@@ -54,6 +59,12 @@ function RegisterForm() {
     <Card className="w-full max-w-lg p-8">
       <h1 className="text-3xl font-extrabold tracking-[-0.03em]">{t('register.title')}</h1>
       <p className="mt-1.5 text-muted-foreground">{t('register.sub')}</p>
+      {config?.googleSignIn && (
+        <>
+          <Button type="button" variant="outline" size="lg" className="mt-6 h-12 w-full text-base" onClick={() => void signIn('google', { callbackUrl: '/onboarding' })}>{t('login.google')}</Button>
+          <div className="mt-5 flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><span className="h-px flex-1 bg-line" />{t('login.or')}<span className="h-px flex-1 bg-line" /></div>
+        </>
+      )}
       <form onSubmit={submit} className="mt-6 grid gap-4 sm:grid-cols-2" noValidate>
         <Field label={t('register.business')} htmlFor="businessName" error={errors.businessName} className="sm:col-span-2">
           <Input id="businessName" required autoComplete="organization" value={form.businessName} onChange={set('businessName')} aria-invalid={!!errors.businessName} />
@@ -67,11 +78,12 @@ function RegisterForm() {
         <Field label={t('register.email')} htmlFor="email" error={errors.email} className="sm:col-span-2">
           <Input id="email" type="email" required autoComplete="email" value={form.email} onChange={set('email')} aria-invalid={!!errors.email} />
         </Field>
-        <Field label={t('register.password')} htmlFor="password" hint={t('register.passwordHint')} error={errors.password} className="sm:col-span-2">
-          <Input id="password" type="password" required minLength={8} autoComplete="new-password" value={form.password} onChange={set('password')} aria-invalid={!!errors.password} />
+        <Field label={t('register.password')} htmlFor="password" hint={t('reg.rules')} error={errors.password} className="sm:col-span-2">
+          <Input id="password" type="password" required minLength={10} maxLength={128} autoComplete="new-password" value={form.password} onChange={set('password')} aria-invalid={!!errors.password} />
         </Field>
+        {config?.captcha && <div className="sm:col-span-2"><Captcha siteKey={config.captcha.siteKey} onToken={setCaptchaToken} resetKey={captchaRound} /></div>}
         {formError && <p role="alert" className="text-sm font-medium text-destructive sm:col-span-2">{formError}</p>}
-        <Button type="submit" size="lg" loading={busy} className="h-12 text-base sm:col-span-2">{t('register.submit')}</Button>
+        <Button type="submit" size="lg" loading={busy} disabled={!!config?.captcha && !captchaToken} className="h-12 text-base sm:col-span-2">{t('register.submit')}</Button>
         <p className="text-xs text-muted-foreground sm:col-span-2">{t('register.accept')}</p>
       </form>
       <p className="mt-5 text-center text-sm text-muted-foreground">

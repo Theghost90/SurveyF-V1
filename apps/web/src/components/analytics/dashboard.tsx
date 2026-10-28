@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowLeft, Download, Gift, Lightbulb, RefreshCw, Send, T
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { toast } from 'sonner';
 import { questionTypeLabel } from '@surveyflow/shared';
+import { RevealablePhone } from '@/components/phone-reveal';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,7 +38,7 @@ interface GiftMoney {
   currency: string;
   money: { sent: { count: number; amount: number }; inFlight: { count: number; amount: number }; unfunded: { count: number; amount: number }; failedRefunded: number; needsCheck: { count: number; amount: number } };
 }
-interface NotStartedPage { total: number; page: number; pageSize: number; items: Array<{ recipientId: string; name: string; phone: string; status: string; sentAt: string | null }> }
+interface NotStartedPage { total: number; page: number; pageSize: number; items: Array<{ recipientId: string; contactId: string; name: string; phone: string; status: string; sentAt: string | null }> }
 interface ResponsesPage { total: number; page: number; pageSize: number; questions: Array<{ id: string; number: number; text: string }>; items: Array<{ contactId: string; name: string; phone: string; status: string; completedAt: string | null; abandonedAtQuestion: number | null; answers: Record<string, string> }> }
 
 const COLORS = ['#0F7A40', '#2BD46E', '#E9A23B', '#4CC584', '#0B2B22', '#9FD9B4', '#6B4A10', '#7BE0A0', '#12392E', '#C9D3CC'];
@@ -195,12 +196,12 @@ export function AnalyticsDashboard({ id }: { id: string }) {
               ))}
               {!ns ? <Skeleton className="h-24" /> : ns.total === 0 ? <p className="text-sm text-muted-foreground">{t('a.everyoneReplied')}</p> : (
                 <>
-                  {/* The one place with the COMPLETE numbers; the WhatsApp bot shows names with masked numbers and links here. */}
+                  {/* Numbers are masked here too; one at a time can be shown (limited and logged), and the CSV below holds them all (capped, confirmed with "it is you", e-mailed). */}
                   <ul className="divide-y divide-line rounded-xl border border-line" data-testid="not-started-list">
                     {ns.items.map((n) => (
                       <li key={n.recipientId} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-0.5 px-3.5 py-2.5 text-sm">
                         <span className="font-semibold">{n.name}</span>
-                        <span className="tabular-nums text-muted-foreground">{n.phone}</span>
+                        <RevealablePhone contactId={n.contactId} masked={n.phone} className="text-muted-foreground" />
                       </li>
                     ))}
                   </ul>
@@ -313,7 +314,7 @@ export function AnalyticsDashboard({ id }: { id: string }) {
             <TBody>
               {rows.items.map((r) => (
                 <TR key={r.contactId}>
-                  <TD><div className="font-semibold">{r.name}</div><div className="text-xs text-muted-foreground">{r.phone}</div></TD>
+                  <TD><div className="font-semibold">{r.name}</div><RevealablePhone contactId={r.contactId} masked={r.phone} className="text-xs text-muted-foreground [&_button]:h-6 [&_button]:w-6" /></TD>
                   <TD><Badge variant={r.status === 'completed' ? 'brand' : r.status === 'abandoned' ? 'warn' : 'neutral'}>{t(`a.st.${r.status}` as 'a.st.completed')}{r.status === 'abandoned' && r.abandonedAtQuestion ? ` Q${r.abandonedAtQuestion}` : ''}</Badge></TD>
                   {rows.questions.map((q) => <TD key={q.id} className="max-w-[220px] truncate">{r.answers[q.id] || <span className="text-muted-foreground">—</span>}</TD>)}
                 </TR>

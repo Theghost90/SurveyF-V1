@@ -7,8 +7,27 @@ export class ApiError extends Error {
   }
 }
 
-/** Browser → Next proxy (/proxy/*) → API. The proxy attaches the bearer token server-side, so it never reaches page JS. */
-export async function api<T = any>(path: string, init: { method?: string; body?: unknown; form?: FormData; signal?: AbortSignal } = {}): Promise<T> {
+let stepUpHandler: ((methods: string[]) => Promise<boolean>) | null = null;
+/** The "confirm it is you" dialog registers itself here (components/step-up-dialog.tsx), so any call can ask for it without knowing about it. */
+export function setStepUpHandler(fn: typeof stepUpHandler) { stepUpHandler = fn; }
+
+/**
+ * Some calls (a large download, deleting many contacts) are answered "confirm it is you first". Ask the owner once, then repeat the call: the screen that
+ * made it never has to know.
+ */
+async function withStepUp<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    if (err instanceof ApiError && err.code === 'step_up_required' && stepUpHandler) {
+      const methods = Array.isArray(err.details?.methods) ? (err.details!.methods as string[]) : ['password'];
+      if (await stepUpHandler(methods)) return run();
+    }
+    throw err;
+  }
+}
+
+async function request<T>(path: string, init: { method?: string; body?: unknown; form?: FormData; signal?: AbortSignal }): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`/proxy${path}`, {
@@ -22,10 +41,6 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
     if ((err as Error).name === 'AbortError') throw err;
     throw new ApiError(0, 'network', 'network');
   }
-  if (res.status === 401 && !path.startsWith('/auth/')) {
-    void signOut({ callbackUrl: '/login' });
-    throw new ApiError(401, 'unauthorized', 'unauthorized');
-  }
   if (res.status === 204) return undefined as T;
   const ct = res.headers.get('content-type') ?? '';
   let data: any = null;
@@ -35,30 +50,46 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
     // callers and SWR caches would otherwise treat an empty object as a real answer and crash on `account.user.x`.
     catch { if (res.ok) throw new ApiError(0, 'network', 'network'); data = {}; }
   }
+  // "unauthorized" is the one 401 that means the sign-in is over (the proxy and the API both say it that way). Other 401s are answers: a wrong password, a wrong code.
+  if (res.status === 401 && data?.error === 'unauthorized') {
+    void signOut({ callbackUrl: '/login?expired=1' });
+    throw new ApiError(401, 'unauthorized', 'unauthorized');
+  }
   if (!res.ok) {
     // One screen answers every "connect your WhatsApp number first" refusal, wherever it came from (see components/whatsapp-gate.tsx).
     if (data?.error === 'whatsapp_not_connected' && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(WHATSAPP_REQUIRED_EVENT));
+    if (data?.error === 'two_factor_required' && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(TWO_FACTOR_REQUIRED_EVENT));
     throw new ApiError(res.status, data?.error ?? 'error', data?.message ?? res.statusText, data?.details, data?.issues);
   }
   return (data ?? undefined) as T;
 }
 
+/** Browser → Next proxy (/proxy/*) → API. The proxy attaches the bearer token server-side, so it never reaches page JS. */
+export function api<T = any>(path: string, init: { method?: string; body?: unknown; form?: FormData; signal?: AbortSignal } = {}): Promise<T> {
+  return withStepUp(() => request<T>(path, init));
+}
+
 export const WHATSAPP_REQUIRED_EVENT = 'sf:whatsapp-required';
+export const TWO_FACTOR_REQUIRED_EVENT = 'sf:two-factor-required';
 
 /** Downloads a binary export through the proxy (keeps the filename the API chose). */
-export async function download(path: string, fallbackName: string) {
-  const res = await fetch(`/proxy${path}`, { cache: 'no-store' });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, data?.error ?? 'error', data?.message ?? res.statusText, data?.details);
-  }
-  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? fallbackName;
-  const url = URL.createObjectURL(await res.blob());
-  const a = Object.assign(document.createElement('a'), { href: url, download: name });
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 5_000);
+export function download(path: string, fallbackName: string) {
+  return withStepUp(async () => {
+    const res = await fetch(`/proxy${path}`, { cache: 'no-store' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401 && data?.error === 'unauthorized') void signOut({ callbackUrl: '/login?expired=1' });
+      if (data?.error === 'two_factor_required' && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(TWO_FACTOR_REQUIRED_EVENT));
+      throw new ApiError(res.status, data?.error ?? 'error', data?.message ?? res.statusText, data?.details);
+    }
+    const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? fallbackName;
+    const url = URL.createObjectURL(await res.blob());
+    const a = Object.assign(document.createElement('a'), { href: url, download: name });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5_000);
+  });
 }
 
 /** Human message for an error: translated by API error code when we have a string for it, else the API's own text. */

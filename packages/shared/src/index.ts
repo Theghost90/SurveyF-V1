@@ -9,3 +9,4 @@ export * from './reminders';
 export * from './fx';
 export * from './psp-fees';
 export * from './analytics-bot';
+export * from './web-guard';

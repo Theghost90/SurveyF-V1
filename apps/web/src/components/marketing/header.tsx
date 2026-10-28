@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
  */
 export async function MarketingHeader({ current }: { current?: 'pricing' }) {
   const { t } = getT();
-  const session = await getServerSession(authOptions);
+  const live = await getServerSession(authOptions).then((s) => !!s && !s.error); // a cookie that has run past its end is not a sign-in
   const link = 'text-[15px] font-medium text-ink no-underline hover:text-leaf';
   const links = [
     { href: '/#how', label: t('nav.how') },
@@ -37,7 +37,7 @@ export async function MarketingHeader({ current }: { current?: 'pricing' }) {
         </nav>
         <div className="ml-auto flex items-center gap-1.5 min-[360px]:gap-2 sm:ml-0 sm:gap-3 xl:gap-4">
           <LanguageToggle className="[&_button]:px-2 max-[299px]:[&_button]:px-1.5 min-[360px]:[&_button]:px-3" />
-          {session ? (
+          {live ? (
             <Link href="/dashboard" className={buttonVariants({ className: 'h-10 rounded-xl px-2.5 text-sm max-[299px]:px-1.5 max-[299px]:text-xs short:h-9 min-[360px]:px-3.5 sm:h-[42px] short:sm:h-9 sm:px-4 xl:px-5 xl:text-[15px]' })}>{t('nav.dashboard')}</Link>
           ) : (
             <>
@@ -50,7 +50,7 @@ export async function MarketingHeader({ current }: { current?: 'pricing' }) {
           )}
           <MobileMenu
             links={links}
-            signedIn={!!session}
+            signedIn={live}
             labels={{ open: t('nav.openMenu'), close: t('nav.closeMenu'), menu: t('nav.menu'), signin: t('nav.signin'), trial: t('nav.trial'), dashboard: t('nav.dashboard'), privacy: t('footer.privacy'), terms: t('footer.terms') }}
           />
         </div>

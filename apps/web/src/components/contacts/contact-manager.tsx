@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { Plus, Tag, Trash2, Upload, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatPhone } from '@surveyflow/shared';
+import { RevealablePhone } from '@/components/phone-reveal';
 import { Badge } from '@/components/ui/badge';
 import { useWhatsAppGate } from '@/components/whatsapp-gate';
 import { Button } from '@/components/ui/button';
@@ -93,6 +93,7 @@ export function ContactManager({ embedded = false }: { embedded?: boolean }) {
         )}
       </div>
 
+      {data && data.total > 0 && <p className="mb-2 text-xs text-muted-foreground">{t('c.numberMasked')}</p>}
       {!data ? <Skeleton className="h-64" /> : data.total === 0 && !q && tag === ALL ? (
         <Card className="flex flex-col items-center gap-3 p-12 text-center">
           <UserRound className="h-10 w-10 text-leaf" aria-hidden />
@@ -114,7 +115,7 @@ export function ContactManager({ embedded = false }: { embedded?: boolean }) {
                 <TR key={c.id}>
                   <TD><Checkbox checked={selected.has(c.id)} onCheckedChange={() => toggle(c.id)} aria-label={c.name} /></TD>
                   <TD className="font-semibold">{c.name}</TD>
-                  <TD className="whitespace-nowrap tabular-nums">{formatPhone(c.phone)}</TD>
+                  <TD><RevealablePhone contactId={c.id} masked={c.phone} /></TD>
                   <TD><div className="flex flex-wrap gap-1">{c.tags.map((x) => <Badge key={x} variant="default">{x}</Badge>)}</div></TD>
                   <TD>{c.optedOut ? <Badge variant="danger">{t('c.optedOut')}</Badge> : c.consentAt ? <Badge variant="neutral">{t('c.consented')}</Badge> : <Badge variant="warn">{t('c.noConsent')}</Badge>}</TD>
                   <TD className="whitespace-nowrap text-muted-foreground">{dateShort(c.createdAt, locale)}</TD>
