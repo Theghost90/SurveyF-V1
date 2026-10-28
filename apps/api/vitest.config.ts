@@ -54,6 +54,7 @@ export default defineConfig({
       ARGON2_MEMORY_KIB: '1024',
       ARGON2_TIME_COST: '1',
       ACCESS_TOKEN_TTL_SECONDS: '900',
+      RATE_LIMIT_IP_PER_MINUTE: '1000000', // the per-address ceiling has its own test (it lowers the value); the whole suite is one address
       REQUIRE_2FA_PLANS: 'business',
       WHATSAPP_PHONE_NUMBER_ID: '',
       WHATSAPP_ACCESS_TOKEN: '',

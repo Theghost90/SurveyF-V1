@@ -25,3 +25,12 @@ export async function within(key: string, limit: number, windowSeconds: number):
 export async function addRows(key: string, n: number, windowSeconds: number): Promise<number> {
   return Number(await redis.eval(`local v = redis.call('INCRBY', KEYS[1], ARGV[2]); if v == tonumber(ARGV[2]) then redis.call('EXPIRE', KEYS[1], ARGV[1]) end; return v`, 1, `sf:c:${key}`, String(windowSeconds), String(Math.max(0, Math.floor(n)))));
 }
+
+/**
+ * Counts DISTINCT ids seen under a key within a window (a HyperLogLog: a few kilobytes however many ids, about 1 % off) and returns the count after adding `ids`.
+ * Looking at the same id again does not raise it. The window starts with the first id and the key expires with it.
+ */
+export async function distinctAdd(key: string, ids: string[], windowSeconds: number): Promise<number> {
+  const script = `if #ARGV > 1 then redis.call('PFADD', KEYS[1], unpack(ARGV, 2)) end; if redis.call('TTL', KEYS[1]) < 0 and redis.call('EXISTS', KEYS[1]) == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end; return redis.call('PFCOUNT', KEYS[1])`;
+  return Number(await redis.eval(script, 1, `sf:c:${key}`, String(windowSeconds), ...ids));
+}

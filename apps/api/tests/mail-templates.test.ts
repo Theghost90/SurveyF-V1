@@ -38,3 +38,22 @@ describe('e-mail greetings', () => {
     expect(hostile.text + hostile.html).not.toContain('evil.example');
   });
 });
+
+describe('the e-mails about participant data (SEC-20) and the confirmation step (SEC-19)', () => {
+  it('say what happened in counts, in both languages, and escape a survey title typed by a person', () => {
+    for (const lang of ['en', 'fr'] as const) {
+      const read = renderMail('bulk_read_alert', lang, { name: 'Awa', count: 1000, when: '2026-10-28 10:00 UTC', place: 'Chrome · Windows' });
+      expect(read.text).toMatch(/1000/);
+      expect(read.text).toMatch(/Chrome/);
+      const paused = renderMail('sheets_sync_paused', lang, { name: 'Awa', what: '<script>alert(1)</script> Satisfaction', count: 30, url: 'https://app.example/surveys/s1/export' });
+      expect(paused.text).toMatch(/30/);
+      expect(paused.text).toContain('https://app.example/surveys/s1/export');
+      expect(paused.html).not.toContain('<script>');
+    }
+  });
+
+  it('the confirmation e-mail says that the password chosen at sign-up will be asked for', () => {
+    expect(renderMail('verify_email', 'en', { url: 'https://app.example/verify-email?token=t' }).text).toMatch(/password you chose/);
+    expect(renderMail('verify_email', 'fr', { url: 'https://app.example/verify-email?token=t' }).text).toMatch(/mot de passe choisi/);
+  });
+});

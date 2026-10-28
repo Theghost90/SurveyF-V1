@@ -7,7 +7,7 @@ import { normalizePhone, maskPhone, COUNTRY_CONFIG, DEFAULT_COUNTRY, phoneExampl
 import { badRequest, notFound } from '../lib/errors';
 import { rl } from '../lib/ratelimit';
 import { assertNoGiftsInFlight } from '../services/gifts';
-import { guardBulkDelete, guardReveal } from '../services/security/data-guard';
+import { guardBulkDelete, guardRead, guardReveal } from '../services/security/data-guard';
 import { phoneIndex, prisma } from '../lib/prisma';
 
 const MAX_IMPORT_ROWS = 5_000;
@@ -53,6 +53,7 @@ export default async function contactRoutes(app: FastifyInstance) {
         prisma.contact.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (q.page - 1) * q.pageSize, take: q.pageSize }),
         prisma.contact.count({ where }),
       ]);
+      await guardRead(req, items.map((c) => c.id)); // names are not masked: how many different people one login looks at in a day is limited (SEC-20)
       return { total, page: q.page, pageSize: q.pageSize, tags, items: items.map(dto) };
     }
     // Names and numbers are encrypted in the database, so the search happens here: a name containing the text (any case), or the WHOLE number
@@ -67,6 +68,7 @@ export default async function contactRoutes(app: FastifyInstance) {
     const rows = await prisma.contact.findMany({ where: { userId: req.userId, id: { in: pageIds } } });
     const order = new Map(pageIds.map((id, i) => [id, i]));
     rows.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+    await guardRead(req, rows.map((c) => c.id));
     return { total: hits.length, page: q.page, pageSize: q.pageSize, tags, items: rows.map(dto) };
   });
 

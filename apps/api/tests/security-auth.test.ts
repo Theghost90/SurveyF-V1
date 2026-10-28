@@ -28,7 +28,7 @@ const tokenIn = async (email: string, kind: string) => {
 };
 const register = (email: string, over: Record<string, unknown> = {}, headers: Record<string, string> = {}) =>
   call('POST', '/api/auth/register', { businessName: 'Biz', name: 'Ada', email, phone: '677 00 00 02', password: TEST_PASSWORD, locale: 'en', ...over }, headers);
-const confirm = async (email: string) => call('POST', '/api/auth/verify-email', { token: await tokenIn(email, 'verify_email') });
+const confirm = async (email: string, password = TEST_PASSWORD) => call('POST', '/api/auth/verify-email', { token: await tokenIn(email, 'verify_email'), password });
 const login = (email: string, password = TEST_PASSWORD, headers: Record<string, string> = {}, extra: Record<string, unknown> = {}) => loginRaw(app, email, password, headers, extra);
 const auditRows = (action: string, userId?: string) => prisma.auditLog.findMany({ where: { action, ...(userId ? { userId } : {}) } });
 
@@ -91,7 +91,7 @@ describe('sign-up (findings 1 and 9)', () => {
     await register('victim@example.com', { name: 'Victim', password: 'orchid-garden-seventy-72' });
     expect(await prisma.user.count({ where: { email: 'victim@example.com' } })).toBe(1);
     expect(json(await call('POST', '/api/auth/verify-email', { token: squatterToken })).error).toBe('invalid_token'); // the attacker's own link died with their row
-    expect((await confirm('victim@example.com')).statusCode).toBe(200);
+    expect((await confirm('victim@example.com', 'orchid-garden-seventy-72')).statusCode).toBe(200);
     expect((await login('victim@example.com', 'attacker-password-1234')).statusCode).toBe(401);
     expect((await login('victim@example.com', 'orchid-garden-seventy-72')).statusCode).toBe(200);
     expect((await prisma.user.findUniqueOrThrow({ where: { email: 'victim@example.com' } })).name).toBe('Victim');
@@ -154,8 +154,8 @@ describe('the confirmation link', () => {
   it('works once; a used, expired, foreign or invented link is refused with the same answer', async () => {
     await register('v@example.com');
     const token = (await tokenIn('v@example.com', 'verify_email'))!;
-    expect((await call('POST', '/api/auth/verify-email', { token })).statusCode).toBe(200);
-    const second = await call('POST', '/api/auth/verify-email', { token });
+    expect((await call('POST', '/api/auth/verify-email', { token, password: TEST_PASSWORD })).statusCode).toBe(200);
+    const second = await call('POST', '/api/auth/verify-email', { token, password: TEST_PASSWORD });
     expect(second.statusCode).toBe(400);
     expect(json(second).error).toBe('invalid_token');
     expect(json(await call('POST', '/api/auth/verify-email', { token: 'x'.repeat(43) })).error).toBe('invalid_token');
@@ -193,7 +193,7 @@ describe('the confirmation link', () => {
     const second = (await tokenIn('r@example.com', 'verify_email'))!;
     expect(second).not.toBe(first);
     expect(json(await call('POST', '/api/auth/verify-email', { token: first })).error).toBe('invalid_token');
-    expect((await call('POST', '/api/auth/verify-email', { token: second })).statusCode).toBe(200);
+    expect((await call('POST', '/api/auth/verify-email', { token: second, password: TEST_PASSWORD })).statusCode).toBe(200);
 
     expect((await call('POST', '/api/auth/verify-email/resend', { email: 'nobody@example.com' })).body).toBe('{"ok":true}');
     expect(await mailsOf('nobody@example.com')).toHaveLength(0);
@@ -731,6 +731,64 @@ describe('forgotten and changed passwords', () => {
     expect((await login('bc@example.com')).statusCode).toBe(200);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: o.userId } })).passwordHash).toMatch(/^\$argon2id\$/);
     expect((await login('bc@example.com')).statusCode).toBe(200);
+  });
+});
+
+describe('the confirmation page asks for the registrant\'s password (SEC-19)', () => {
+  it('somebody who signs up with another person\'s address cannot get it confirmed by that person\'s click', async () => {
+    await register('target@example.com', { name: 'Attacker', password: 'attacker-password-1234' });
+    const link = (await tokenIn('target@example.com', 'verify_email'))!; // sits in the TARGET's mailbox
+    // the target opens it, does not know the attacker's password, and types their own
+    const refused = await call('POST', '/api/auth/verify-email', { token: link, password: 'blue-heron-lantern-4821' });
+    expect(refused.statusCode).toBe(401);
+    expect(json(refused).error).toBe('confirm_password_wrong');
+    expect((await prisma.user.findUniqueOrThrow({ where: { email: 'target@example.com' } })).emailVerifiedAt).toBeNull();
+    // the attacker's account stays unconfirmed: it can sign in and look around, but nothing that sends, pays, connects or exports works
+    const stillUnconfirmed = await login('target@example.com', 'attacker-password-1234');
+    expect(stillUnconfirmed.statusCode).toBe(200);
+    expect(json(await call('POST', '/api/auth/2fa/setup', {}, asUser(json(stillUnconfirmed).accessToken))).error).toBe('email_not_verified');
+    // the target registers for themselves: that replaces the unconfirmed account and the new link works with THEIR password
+    await register('target@example.com', { name: 'Target', password: 'blue-heron-lantern-4821' });
+    expect((await confirm('target@example.com', 'blue-heron-lantern-4821')).statusCode).toBe(200);
+    expect((await prisma.user.findUniqueOrThrow({ where: { email: 'target@example.com' } })).name).toBe('Target');
+  });
+
+  it('a missing or wrong password does not spend the link; the right one still works afterwards', async () => {
+    await register('pw@example.com');
+    const token = (await tokenIn('pw@example.com', 'verify_email'))!;
+    const none = await call('POST', '/api/auth/verify-email', { token });
+    expect(none.statusCode).toBe(400);
+    expect(json(none).error).toBe('password_required');
+    expect(json(await call('POST', '/api/auth/verify-email', { token, password: 'not-the-password-xyz' })).error).toBe('confirm_password_wrong');
+    expect((await call('POST', '/api/auth/verify-email', { token, password: TEST_PASSWORD })).statusCode).toBe(200);
+  });
+
+  it('five wrong passwords burn the link (even the right password is then refused); a new link works', async () => {
+    await register('burn@example.com');
+    const token = (await tokenIn('burn@example.com', 'verify_email'))!;
+    const answers: string[] = [];
+    for (let i = 0; i < 5; i++) answers.push(json(await call('POST', '/api/auth/verify-email', { token, password: `wrong-guess-number-${i}` })).error);
+    expect(answers).toEqual(['confirm_password_wrong', 'confirm_password_wrong', 'confirm_password_wrong', 'confirm_password_wrong', 'invalid_token']);
+    expect(json(await call('POST', '/api/auth/verify-email', { token, password: TEST_PASSWORD })).error).toBe('invalid_token');
+    expect((await auditRows('verify_password_failed')).length).toBe(5);
+    expect((await call('POST', '/api/auth/verify-email/resend', { email: 'burn@example.com' })).statusCode).toBe(202);
+    expect((await confirm('burn@example.com')).statusCode).toBe(200);
+  });
+
+  it('can be switched off (CONFIRM_REQUIRES_PASSWORD=false): the link alone then confirms, as before', async () => {
+    env.CONFIRM_REQUIRES_PASSWORD = false;
+    try {
+      await register('off@example.com');
+      const token = (await tokenIn('off@example.com', 'verify_email'))!;
+      expect((await call('POST', '/api/auth/verify-email', { token })).statusCode).toBe(200);
+    } finally { env.CONFIRM_REQUIRES_PASSWORD = true; }
+  });
+
+  it('the website is told (public config), and the e-mail says what will be asked', async () => {
+    expect(json(await call('GET', '/api/auth/config')).confirmNeedsPassword).toBe(true);
+    await register('mail@example.com');
+    const mail = (await mailsOf('mail@example.com', 'verify_email'))[0]!;
+    expect(JSON.stringify(mail)).toMatch(/password/i);
   });
 });
 

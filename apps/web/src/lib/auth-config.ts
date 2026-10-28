@@ -7,6 +7,8 @@ export interface AuthConfig {
   /** `demo`: e-mails are not sent, the page shows them (test instances only). */
   emailMode: 'demo' | 'live';
   passwordMinLength: number;
+  /** The confirmation page asks for the password chosen at sign-up (SEC-19). */
+  confirmNeedsPassword: boolean;
   googleSignIn: boolean;
 }
 

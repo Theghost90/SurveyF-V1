@@ -3,7 +3,9 @@ import { decryptSecret, encryptSecret } from '../../lib/crypto';
 import { AppError, badRequest, conflict } from '../../lib/errors';
 import { prisma } from '../../lib/prisma';
 import { redis } from '../../lib/redis';
+import { audit } from '../audit';
 import { displayAnswer } from '../analytics';
+import { sendMailInBackground } from '../mail';
 
 /**
  * Google Sheets API v4 over plain REST (no heavy SDK).
@@ -119,10 +121,19 @@ async function appendRows(userId: string, spreadsheetId: string, values: string[
   await sheetsApi(userId, `spreadsheets/${spreadsheetId}/values/Responses!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, { method: 'POST', body: { values } });
 }
 
+/** SEC-20: auto-sync keeps copying new rows (names, numbers, answers) out of the account, so it lasts SHEETS_AUTOSYNC_DAYS after each confirmation and then pauses. */
+const confirmedNow = (autoSync: boolean) => (autoSync ? { autoSyncConfirmedAt: new Date(), autoSyncPausedAt: null } : {});
+export const autoSyncActive = (s: { autoSync: boolean; autoSyncConfirmedAt: Date | null }): boolean =>
+  s.autoSync && !!s.autoSyncConfirmedAt && s.autoSyncConfirmedAt.getTime() > Date.now() - env.SHEETS_AUTOSYNC_DAYS * 86_400_000;
+export const autoSyncConfirmedUntil = (s: { autoSync: boolean; autoSyncConfirmedAt: Date | null }): Date | null =>
+  s.autoSync && s.autoSyncConfirmedAt ? new Date(s.autoSyncConfirmedAt.getTime() + env.SHEETS_AUTOSYNC_DAYS * 86_400_000) : null;
+
 /** Creates the spreadsheet on first use, then appends every completed participant not yet written. */
-export async function syncSurveyToSheets(userId: string, surveyId: string, autoSync: boolean) {
+export async function syncSurveyToSheets(userId: string, surveyId: string, requested?: boolean) {
   const survey = await surveyForSync(surveyId, userId);
   let sync = await prisma.sheetSync.findUnique({ where: { surveyId } });
+  const confirm = requested === true; // asking for auto-sync is the owner confirming it (the caller has already required "confirm it is you")
+  const autoSync = requested ?? sync?.autoSync ?? false; // absent: a one-off sync that leaves the setting alone
 
   if (!sync) {
     const created = await sheetsApi<{ spreadsheetId: string; spreadsheetUrl: string }>(userId, 'spreadsheets', {
@@ -130,9 +141,10 @@ export async function syncSurveyToSheets(userId: string, surveyId: string, autoS
       body: { properties: { title: `SurveyFlow — ${survey.title}` }, sheets: [{ properties: { title: 'Responses', gridProperties: { frozenRowCount: 1 } } }] },
     });
     await appendRows(userId, created.spreadsheetId, [['Name', 'Phone', 'Completed at (UTC)', ...survey.questions.map((q, i) => `Q${i + 1}. ${q.text}`)]]);
-    sync = await prisma.sheetSync.create({ data: { surveyId, userId, spreadsheetId: created.spreadsheetId, spreadsheetUrl: created.spreadsheetUrl, autoSync } });
-  } else if (sync.autoSync !== autoSync) {
-    sync = await prisma.sheetSync.update({ where: { id: sync.id }, data: { autoSync } });
+    sync = await prisma.sheetSync.create({ data: { surveyId, userId, spreadsheetId: created.spreadsheetId, spreadsheetUrl: created.spreadsheetUrl, autoSync, ...confirmedNow(confirm) } });
+  } else if (sync.autoSync !== autoSync || confirm) {
+    // confirming again: the window starts over and a pause ends
+    sync = await prisma.sheetSync.update({ where: { id: sync.id }, data: { autoSync, ...confirmedNow(confirm) } });
   }
 
   const done = new Set((await prisma.sheetRow.findMany({ where: { surveyId }, select: { contactId: true } })).map((r) => r.contactId));
@@ -150,6 +162,7 @@ export async function syncSurveyToSheets(userId: string, surveyId: string, autoS
 export async function autoSyncCompleted(surveyId: string, contactId: string) {
   const sync = await prisma.sheetSync.findUnique({ where: { surveyId } });
   if (!sync?.autoSync) return;
+  if (!autoSyncActive(sync)) { await pauseAutoSync(sync); return; } // the owner has not confirmed lately: new rows wait for the next confirmed sync
   if (await prisma.sheetRow.findUnique({ where: { surveyId_contactId: { surveyId, contactId } } })) return;
   const survey = await surveyForSync(surveyId, sync.userId);
   const [row] = await rowsFor(survey, [contactId]);
@@ -157,4 +170,16 @@ export async function autoSyncCompleted(surveyId: string, contactId: string) {
   await appendRows(sync.userId, sync.spreadsheetId, [row.values]);
   await prisma.sheetRow.createMany({ data: [{ surveyId, contactId }], skipDuplicates: true });
   await prisma.sheetSync.update({ where: { id: sync.id }, data: { lastSyncedAt: new Date(), rowsSynced: { increment: 1 } } });
+}
+
+/** Notes the pause (once per pause) and tells the owner. Nothing is lost: the next confirmed sync appends every row that is still missing. */
+async function pauseAutoSync(sync: { id: string; surveyId: string; userId: string }) {
+  const first = await prisma.sheetSync.updateMany({ where: { id: sync.id, autoSyncPausedAt: null }, data: { autoSyncPausedAt: new Date() } });
+  if (first.count !== 1) return;
+  const [user, survey] = await Promise.all([
+    prisma.user.findUniqueOrThrow({ where: { id: sync.userId }, select: { email: true, name: true, locale: true } }),
+    prisma.survey.findUniqueOrThrow({ where: { id: sync.surveyId }, select: { title: true } }),
+  ]);
+  await audit({ userId: sync.userId }, { action: 'sheets_autosync_paused', targetType: 'survey', targetId: sync.surveyId });
+  sendMailInBackground(user.email, 'sheets_sync_paused', user.locale === 'en' ? 'en' : 'fr', { name: user.name, what: survey.title, count: env.SHEETS_AUTOSYNC_DAYS, url: `${env.webBaseUrl}/surveys/${sync.surveyId}/export` });
 }

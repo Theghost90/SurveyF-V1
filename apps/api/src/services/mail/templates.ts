@@ -8,7 +8,7 @@ export type Lang = 'en' | 'fr';
 
 export type MailKind =
   | 'verify_email' | 'register_existing' | 'reset_password' | 'password_changed' | 'new_device' | 'failed_logins'
-  | 'export_alert' | 'bulk_delete_alert' | 'two_factor_changed' | 'sessions_revoked' | 'link_google' | 'step_up_code';
+  | 'export_alert' | 'bulk_delete_alert' | 'bulk_read_alert' | 'sheets_sync_paused' | 'two_factor_changed' | 'sessions_revoked' | 'link_google' | 'step_up_code';
 
 export interface MailParams {
   url?: string;
@@ -53,8 +53,8 @@ function build(kind: MailKind, lang: Lang, p: MailParams): Body {
   switch (kind) {
     case 'verify_email':
       return fr
-        ? { subject: 'Confirmez votre adresse e-mail SurveyFlow', lines: [hi, 'Confirmez que cette adresse est bien la vôtre pour activer votre compte SurveyFlow. Le lien est valable 24 heures.'], button: { label: 'Confirmer mon adresse', url: p.url! }, foot: 'Si vous n’avez pas créé de compte, ignorez ce message : rien ne sera activé.' }
-        : { subject: 'Confirm your SurveyFlow e-mail address', lines: [hi, 'Confirm that this address is yours to activate your SurveyFlow account. The link is valid for 24 hours.'], button: { label: 'Confirm my address', url: p.url! }, foot: 'If you did not create an account, ignore this message: nothing will be activated.' };
+        ? { subject: 'Confirmez votre adresse e-mail SurveyFlow', lines: [hi, 'Confirmez que cette adresse est bien la vôtre pour activer votre compte SurveyFlow. Le lien est valable 24 heures.', ...(env.CONFIRM_REQUIRES_PASSWORD ? ['Il vous sera demandé le mot de passe choisi à l’inscription : c’est ce qui prouve que l’inscription était la vôtre.'] : [])], button: { label: 'Confirmer mon adresse', url: p.url! }, foot: 'Si vous n’avez pas créé de compte, ignorez ce message : rien ne sera activé.' }
+        : { subject: 'Confirm your SurveyFlow e-mail address', lines: [hi, 'Confirm that this address is yours to activate your SurveyFlow account. The link is valid for 24 hours.', ...(env.CONFIRM_REQUIRES_PASSWORD ? ['You will be asked for the password you chose when you signed up: that is what proves the sign-up was yours.'] : [])], button: { label: 'Confirm my address', url: p.url! }, foot: 'If you did not create an account, ignore this message: nothing will be activated.' };
     case 'register_existing':
       return fr
         ? { subject: 'Vous avez déjà un compte SurveyFlow', lines: [hi, 'Quelqu’un (peut-être vous) a essayé de créer un compte avec cette adresse, mais elle en a déjà un.', `Connectez-vous : ${loginUrl()}`, `Mot de passe oublié ? ${forgotUrl()}`], foot: 'Si ce n’était pas vous, vous n’avez rien à faire : votre compte n’a pas été modifié.' }
@@ -83,6 +83,14 @@ function build(kind: MailKind, lang: Lang, p: MailParams): Body {
       return fr
         ? { subject: 'Des contacts ont été supprimés en masse', lines: [hi, `${p.rows} contacts ont été supprimés de votre compte le ${p.when}, depuis ${p.place}.`, notYou] }
         : { subject: 'Contacts were deleted in bulk', lines: [hi, `${p.rows} contacts were deleted from your account on ${p.when}, from ${p.place}.`, notYou] };
+    case 'bulk_read_alert':
+      return fr
+        ? { subject: 'Beaucoup de participants consultés sur votre compte', lines: [hi, `Les noms et réponses de plus de ${p.count} participants ont été affichés en 24 heures depuis votre compte (dernier accès le ${p.when}, depuis ${p.place}).`, 'C’est bien vous ? On vous demandera de confirmer que c’est vous pour continuer : aucune autre action n’est nécessaire.', notYou] }
+        : { subject: 'A lot of participants were viewed on your account', lines: [hi, `The names and answers of more than ${p.count} participants were shown within 24 hours from your account (latest on ${p.when}, from ${p.place}).`, 'Was it you? You will be asked to confirm it is you to carry on: nothing else to do.', notYou] };
+    case 'sheets_sync_paused':
+      return fr
+        ? { subject: 'La synchronisation Google Sheets est en pause', lines: [hi, `La synchronisation automatique vers Google Sheets de « ${p.what} » est en pause : elle doit être confirmée de nouveau tous les ${p.count} jours. Les nouvelles réponses attendent, rien n’est perdu.`, `Pour reprendre : ouvrez l’export du sondage et confirmez : ${p.url ?? settingsUrl()}`], foot: 'Si vous ne reconnaissez pas cette synchronisation, déconnectez Google dans Paramètres, Intégrations.' }
+        : { subject: 'Google Sheets sync is paused', lines: [hi, `The automatic Google Sheets sync of “${p.what}” is paused: it has to be confirmed again every ${p.count} days. New answers are waiting, nothing is lost.`, `To resume: open the survey's export page and confirm: ${p.url ?? settingsUrl()}`], foot: 'If you do not recognise this sync, disconnect Google in Settings, Integrations.' };
     case 'two_factor_changed':
       return p.enabled
         ? (fr ? { subject: 'Double authentification activée', lines: [hi, `La double authentification a été activée sur votre compte le ${p.when}.`, notYou] }

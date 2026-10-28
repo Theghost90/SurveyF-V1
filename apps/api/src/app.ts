@@ -8,9 +8,8 @@ import { Prisma } from '@prisma/client';
 import { env } from './config/env';
 import { AppError } from './lib/errors';
 import { prisma } from './lib/prisma';
-import { clientIp } from './lib/client-ip';
 import { registerInternalGate } from './lib/internal-gate';
-import { isRateLimitExempt } from './lib/ratelimit';
+import { addressFloodGuard, generalRateKey, isRateLimitExempt } from './lib/ratelimit';
 import { redis } from './lib/redis';
 import authPlugin from './plugins/auth';
 import authRoutes from './routes/auth';
@@ -68,7 +67,15 @@ export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: false,
   });
-  await app.register(rateLimit, { global: true, max: 300, timeWindow: '1 minute', keyGenerator: (req) => clientIp(req), allowList: (req) => isRateLimitExempt(req.url) });
+  // SEC-18: the general limit counts per verified session (anonymous calls: per address), and a higher cap per address sits above it (lib/ratelimit.ts).
+  app.addHook('onRequest', addressFloodGuard);
+  await app.register(rateLimit, {
+    global: true,
+    max: () => env.RATE_LIMIT_SESSION_PER_MINUTE, // read per request, so that a test can lower it
+    timeWindow: '1 minute',
+    keyGenerator: generalRateKey,
+    allowList: (req) => isRateLimitExempt(req.url),
+  });
   await app.register(multipart, { limits: { fileSize: 2 * 1024 * 1024, files: 1 } });
 
   // Keep the raw bytes of JSON bodies: Meta's X-Hub-Signature-256 is computed over them.

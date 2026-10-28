@@ -22,6 +22,7 @@ function VerifyEmail() {
   const [state, setState] = useState<'idle' | 'busy' | 'done' | 'bad'>('idle');
   const [after, setAfter] = useState<string>('/onboarding');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [round, setRound] = useState(0);
@@ -29,7 +30,7 @@ function VerifyEmail() {
   async function confirm() {
     setState('busy');
     try {
-      const r = await api<{ plan: string | null; interval: string | null }>('/auth/verify-email', { body: { token } });
+      const r = await api<{ plan: string | null; interval: string | null }>('/auth/verify-email', { body: { token, ...(config?.confirmNeedsPassword ? { password } : {}) } });
       setAfter(r.plan ? `/onboarding?plan=${encodeURIComponent(r.plan)}&interval=${encodeURIComponent(r.interval ?? 'monthly')}` : '/onboarding');
       setState('done');
     } catch (err) {
@@ -70,12 +71,20 @@ function VerifyEmail() {
       </Card>
     );
   }
+  const needsPassword = !!config?.confirmNeedsPassword;
   return (
     <Card className="w-full max-w-md p-8 text-center">
       <MailCheck className="mx-auto h-10 w-10 text-leaf" aria-hidden />
       <h1 className="mt-3 text-3xl font-extrabold tracking-[-0.03em]">{t('ve.title')}</h1>
-      <p className="mt-2 text-muted-foreground">{t('ve.text')}</p>
-      <Button size="lg" className="mt-6 h-12 w-full text-base" loading={state === 'busy'} onClick={confirm} data-testid="confirm-email">{t('ve.button')}</Button>
+      <p className="mt-2 text-muted-foreground">{t(needsPassword ? 've.textPassword' : 've.text')}</p>
+      {needsPassword && (
+        <form className="mt-5 text-left" onSubmit={(e) => { e.preventDefault(); if (password && state !== 'busy') void confirm(); }}>
+          <Field label={t('ve.password')} htmlFor="ve-password" hint={t('ve.passwordHelp')}>
+            <Input id="ve-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} data-testid="confirm-password" />
+          </Field>
+        </form>
+      )}
+      <Button size="lg" className="mt-6 h-12 w-full text-base" loading={state === 'busy'} disabled={!config || (needsPassword && !password)} onClick={confirm} data-testid="confirm-email">{t('ve.button')}</Button>
       {msg && <p role="alert" className="mt-3 text-sm font-medium text-destructive">{msg}</p>}
     </Card>
   );

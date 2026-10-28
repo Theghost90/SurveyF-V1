@@ -1,7 +1,8 @@
 /**
  * Sign-up now ends with an e-mail link, not a session. These scripts run against an instance whose API uses the mock e-mail provider, whose mailbox the
  * "check your e-mail" page shows, so the whole path (form, link, confirmation, first sign-in) is driven through the real screens.
- * Call it right after pressing the register form's submit button. Ends on the page the sign-up leads to (onboarding), signed in.
+ * The confirmation page asks for the password chosen at sign-up, so it is typed there too. Call it right after pressing the register form's submit button.
+ * Ends on the page the sign-up leads to (onboarding), signed in.
  */
 export async function confirmAndSignIn(page, base, { email, password = 'a-long-test-password' }) {
   await page.waitForURL('**/check-email**', { timeout: 30000 });
@@ -9,6 +10,8 @@ export async function confirmAndSignIn(page, base, { email, password = 'a-long-t
   await link.waitFor({ timeout: 20000 });
   await link.click();
   await page.waitForURL('**/verify-email**', { timeout: 15000 });
+  // the confirmation page asks for the password chosen at sign-up (SEC-19)
+  await page.getByTestId('confirm-password').fill(password);
   await page.getByTestId('confirm-email').click();
   await page.getByRole('link', { name: /^sign in$/i }).waitFor({ timeout: 15000 });
   await page.getByRole('link', { name: /^sign in$/i }).click();

@@ -91,7 +91,7 @@ export async function signUp(app: FastifyInstance, over: Partial<{ email: string
   const link = mails.find((m) => m.kind === 'verify_email')?.links.find((l) => l.includes('/verify-email?token='));
   const verifyToken = link ? decodeURIComponent(new URL(link).searchParams.get('token')!) : undefined;
   if (res.statusCode !== 202 || !verifyToken || over.confirm === false) return { status: res.statusCode, email, verifyToken, mails };
-  const ok = await app.inject({ method: 'POST', url: '/api/auth/verify-email', headers: { 'content-type': 'application/json', ...(over.headers ?? {}) }, payload: JSON.stringify({ token: verifyToken }) });
+  const ok = await app.inject({ method: 'POST', url: '/api/auth/verify-email', headers: { 'content-type': 'application/json', ...(over.headers ?? {}) }, payload: JSON.stringify({ token: verifyToken, password: over.password ?? TEST_PASSWORD }) });
   if (ok.statusCode !== 200) return { status: ok.statusCode, email, verifyToken, mails };
   const login = await loginRaw(app, email, over.password ?? TEST_PASSWORD, over.headers);
   const body = JSON.parse(login.body);
@@ -108,7 +108,7 @@ export async function registerFrom(app: FastifyInstance, country: string | undef
   if (res.statusCode !== 202) return none;
   const link = (await readMockMailbox(String(over.email ?? email))).find((m) => m.kind === 'verify_email')?.links[0];
   if (!link) return none;
-  await app.inject({ method: 'POST', url: '/api/auth/verify-email', headers: { 'content-type': 'application/json' }, payload: JSON.stringify({ token: decodeURIComponent(new URL(link).searchParams.get('token')!) }) });
+  await app.inject({ method: 'POST', url: '/api/auth/verify-email', headers: { 'content-type': 'application/json' }, payload: JSON.stringify({ token: decodeURIComponent(new URL(link).searchParams.get('token')!), password: String(over.password ?? TEST_PASSWORD) }) });
   const login = await app.inject({ method: 'POST', url: '/api/auth/login', headers, payload: JSON.stringify({ email: String(over.email ?? email), password: String(over.password ?? TEST_PASSWORD) }) });
   const body = JSON.parse(login.body);
   return { status: login.statusCode, body, c: client(app, body.accessToken ?? '', body.user?.id ?? '') };

@@ -15,7 +15,7 @@ import { ApiError, api, download, errorMessage } from '@/lib/api';
 import { dateTime } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/client';
 
-interface Sync { enabled: boolean; autoSync?: boolean; spreadsheetUrl?: string; lastSyncedAt?: string | null; rowsSynced?: number }
+interface Sync { enabled: boolean; autoSync?: boolean; autoSyncActive?: boolean; autoSyncPaused?: boolean; autoSyncConfirmedUntil?: string | null; spreadsheetUrl?: string; lastSyncedAt?: string | null; rowsSynced?: number }
 
 export default function ExportPage({ params }: { params: Promise<{ id: string }> }) {
   const t = useT();
@@ -49,10 +49,11 @@ export default function ExportPage({ params }: { params: Promise<{ id: string }>
       setBusy(null);
     }
   }
-  async function runSync(autoSync: boolean) {
+  /** `autoSync` true = turn on or confirm again, false = turn off, undefined = sync once and leave the setting alone. */
+  async function runSync(autoSync?: boolean) {
     setBusy('sync');
     try {
-      await api(`/surveys/${id}/sync/google-sheets`, { body: { autoSync } });
+      await api(`/surveys/${id}/sync/google-sheets`, { body: autoSync === undefined ? {} : { autoSync } });
       await refreshSync();
       toast.success(t('x.synced'));
     } catch (err) {
@@ -102,13 +103,20 @@ export default function ExportPage({ params }: { params: Promise<{ id: string }>
               <>
                 <p className="text-sm text-muted-foreground">{t('x.connectedAs', { email: google.email ?? '' })}</p>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" loading={busy === 'sync'} onClick={() => runSync(!!sync.autoSync)}><RefreshCw className="h-4 w-4" aria-hidden />{sync.enabled ? t('x.syncNow') : t('x.copyToSheets')}</Button>
+                  <Button variant="outline" loading={busy === 'sync'} onClick={() => runSync()}><RefreshCw className="h-4 w-4" aria-hidden />{sync.enabled ? t('x.syncNow') : t('x.copyToSheets')}</Button>
                   {sync.spreadsheetUrl && <a href={sync.spreadsheetUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-xl px-4 text-[15px] font-semibold text-leaf hover:underline">{t('x.openSheet')}<ExternalLink className="h-4 w-4" aria-hidden /></a>}
                 </div>
                 <label className="flex items-center justify-between gap-4 rounded-xl border border-line p-4 text-sm font-semibold">
                   <span>{t('x.autoSync')}<span className="block text-xs font-normal text-muted-foreground">{sync.lastSyncedAt ? t('x.lastSync', { time: dateTime(sync.lastSyncedAt, locale), n: sync.rowsSynced ?? 0 }) : t('x.autoSyncHint')}</span></span>
                   <Switch checked={!!sync.autoSync} disabled={busy === 'sync'} onCheckedChange={(v) => runSync(v)} aria-label={t('x.autoSync')} />
                 </label>
+                {sync.autoSync && sync.autoSyncPaused && (
+                  <div role="status" data-testid="autosync-paused" className="rounded-xl bg-amber-soft p-4 text-sm text-amber-ink">
+                    <p className="font-semibold">{t('x.autoPaused')}</p>
+                    <Button className="mt-3" size="sm" loading={busy === 'sync'} onClick={() => runSync(true)}>{t('x.autoResume')}</Button>
+                  </div>
+                )}
+                {sync.autoSync && sync.autoSyncActive && sync.autoSyncConfirmedUntil && <p className="text-xs text-muted-foreground">{t('x.autoUntil', { date: dateTime(sync.autoSyncConfirmedUntil, locale) })}</p>}
               </>
             )}
           </CardContent>

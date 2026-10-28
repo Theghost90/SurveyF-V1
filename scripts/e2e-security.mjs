@@ -180,6 +180,14 @@ await step('the link: it asks for a click (opening it confirms nothing), then th
   await page.getByRole('heading', { name: /confirm your address/i }).waitFor();
   await sleep(1500);
   expect(await page.getByTestId('confirm-email').isVisible(), 'the page must wait for the click');
+  // SEC-19: the page asks for the password chosen at sign-up. The sign-up that owns this link now is the second one, so the FIRST registrant's password (the person this
+  // models is somebody whose address was used by a stranger) is refused, and the link is not spent by the attempt.
+  await page.getByTestId('confirm-password').fill(PASSWORD);
+  await page.getByTestId('confirm-email').click();
+  await page.getByText(/not the password you chose/i).waitFor({ timeout: 15000 });
+  expect(page.url().includes('/verify-email'), 'a wrong password must leave the page where it is, with the link still usable');
+  await shot(page, 'confirm-wrong-password');
+  await page.getByTestId('confirm-password').fill('intruder-long-password-1');
   await page.getByTestId('confirm-email').click();
   await page.getByRole('heading', { name: /address confirmed/i }).waitFor({ timeout: 15000 });
   await page.getByRole('link', { name: /^sign in$/i }).click();

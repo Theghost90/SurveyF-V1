@@ -491,15 +491,19 @@ model GoogleConnection {
 }
 
 model SheetSync {
-  id             String    @id @default(cuid())
-  surveyId       String    @unique
-  userId         String
-  spreadsheetId  String
-  spreadsheetUrl String
-  autoSync       Boolean   @default(false)
-  lastSyncedAt   DateTime?
-  rowsSynced     Int       @default(0)
-  createdAt      DateTime  @default(now())
+  id                  String    @id @default(cuid())
+  surveyId            String    @unique
+  userId              String
+  spreadsheetId       String
+  spreadsheetUrl      String
+  autoSync            Boolean   @default(false)
+  /// SEC-20: when the owner last confirmed (with "confirm it is you") that new rows may keep flowing to the sheet. Auto-sync pauses SHEETS_AUTOSYNC_DAYS after it.
+  autoSyncConfirmedAt DateTime?
+  /// When the pause was noticed and the owner e-mailed (once per pause).
+  autoSyncPausedAt    DateTime?
+  lastSyncedAt        DateTime?
+  rowsSynced          Int       @default(0)
+  createdAt           DateTime  @default(now())
 
   survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)

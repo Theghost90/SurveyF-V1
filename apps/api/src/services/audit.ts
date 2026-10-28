@@ -12,11 +12,12 @@ import { describeAgent } from '../lib/user-agent';
  * one exception, and it deletes only rows older than AUDIT_RETENTION_DAYS).
  */
 export type AuditAction =
-  | 'register' | 'email_verified' | 'verification_resent' | 'login' | 'login_failed' | 'login_blocked' | 'login_new_device' | 'logout' | 'sessions_revoked' | 'session_revoked'
+  | 'register' | 'email_verified' | 'verify_password_failed' | 'verification_resent' | 'login' | 'login_failed' | 'login_blocked' | 'login_new_device' | 'logout' | 'sessions_revoked' | 'session_revoked'
   | 'refresh_reuse' | 'password_reset_requested' | 'password_reset' | 'password_changed' | 'step_up' | 'step_up_failed'
   | 'two_factor_enabled' | 'two_factor_disabled' | 'recovery_codes_regenerated' | 'recovery_code_used'
   | 'google_login' | 'google_linked' | 'google_link_requested' | 'unverified_account_replaced'
-  | 'export' | 'export_blocked' | 'bulk_delete' | 'contact_reveal' | 'prize_draw_winner_shown';
+  | 'export' | 'export_blocked' | 'bulk_delete' | 'contact_reveal' | 'prize_draw_winner_shown'
+  | 'bulk_read' | 'bulk_read_blocked' | 'sheets_autosync_confirmed' | 'sheets_autosync_paused';
 
 export interface AuditContext { userId?: string | null; sessionId?: string | null; ip?: string | null; userAgent?: string | null }
 

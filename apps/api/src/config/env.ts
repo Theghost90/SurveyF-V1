@@ -6,6 +6,12 @@ const bool = z
   .optional()
   .transform((v) => v === 'true' || v === '1');
 
+/** A switch that is ON unless it is explicitly set to false or 0. */
+const onByDefault = z
+  .enum(['true', 'false', '1', '0', ''])
+  .optional()
+  .transform((v) => !(v === 'false' || v === '0'));
+
 /**
  * Provider fees used to pick the cheapest PSP: the contract-fee document's numbers (shared/psp-fees.ts) overridden by PSP_FEES
  * (JSON, per provider and method: a number = percent, or {percent, fixed, fixedCurrency}). Your negotiated rates win.
@@ -77,6 +83,15 @@ const schema = z.object({
   STEP_UP_BULK_ROWS: z.coerce.number().int().min(1).default(20),
   STEP_UP_MINUTES: z.coerce.number().int().min(1).max(120).default(15),
   REVEAL_PER_DAY: z.coerce.number().int().min(1).default(300),
+  /**
+   * SEC-20: names and free-text answers are visible in lists (a list is useless without them), so a stolen session could page through every participant. Distinct
+   * participants whose name or answers were listed in 24 hours are counted: past SOFT a recent "confirm it is you" is needed (and the owner is e-mailed once);
+   * past HARD the lists stop until the window has passed (an export, which is capped and confirmed too, is the way to take more). Viewing the same people again costs nothing.
+   */
+  READ_SOFT_PEOPLE: z.coerce.number().int().min(1).default(1000),
+  READ_HARD_PEOPLE: z.coerce.number().int().min(1).default(20_000),
+  /** SEC-20: Google Sheets auto-sync must be confirmed again after this many days ("confirm it is you" at any size when turning it on); until then new rows wait. */
+  SHEETS_AUTOSYNC_DAYS: z.coerce.number().int().min(1).max(365).default(30),
   /** Plans (comma-separated) whose owners must turn on two-factor authentication before exporting or deleting in bulk. */
   REQUIRE_2FA_PLANS: z.string().default('business'),
   AUDIT_RETENTION_DAYS: z.coerce.number().int().min(30).default(400),
@@ -88,10 +103,22 @@ const schema = z.object({
    */
   SIGNUP_PER_IP_HOUR: z.coerce.number().int().min(1).default(30),
   /**
+   * The general limit on API calls (SEC-18). It counts per SIGN-IN SESSION (the token must verify, so nobody can invent session ids) because many owners can sit behind
+   * one public address on a mobile network; calls with no valid token count per address. A separate, much higher cap per address stops one source from flooding the API
+   * with many sessions or none.
+   */
+  RATE_LIMIT_SESSION_PER_MINUTE: z.coerce.number().int().min(10).default(300),
+  RATE_LIMIT_IP_PER_MINUTE: z.coerce.number().int().min(10).default(3000),
+  /**
    * Sign-up, "resend the confirmation" and "forgot my password" answer the same whether or not the address has an account, and take the same time: a response is
    * held until at least this many milliseconds have passed, so that the few milliseconds of extra database work for a real address cannot be measured.
    */
   AUTH_MIN_RESPONSE_MS: z.coerce.number().int().min(0).max(5000).default(350),
+  /**
+   * SEC-19: the confirmation page asks for the password chosen at sign-up. Without it, a stranger who signs up with somebody else's address and a password only the
+   * stranger knows gets the account confirmed the moment that person clicks the e-mail they did not ask for. ON unless set to false.
+   */
+  CONFIRM_REQUIRES_PASSWORD: onByDefault,
 
   // --- WhatsApp ---
   WHATSAPP_MODE: z.enum(['mock', 'live']).optional(),

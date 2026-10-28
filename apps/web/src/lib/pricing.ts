@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 import { identityQuote, planPrices, overagePerBlock, type PaidPlanKey, type PlanPriceRow } from '@surveyflow/shared';
 import { API_URL, internalHeaders } from './auth';
-import { countryFromHeaders } from './geo';
+import { forwardedFrom } from './client-ip';
 
 /** What the public pages show: the FCFA prices converted at the live rate into the visitor's currency (computed by the API). */
 export interface PricingData {
@@ -20,10 +20,11 @@ export interface PricingData {
  * page still renders, in FCFA: the canonical prices need no exchange rate, so this fallback is exact, not a guess.
  */
 export async function getPricing(): Promise<PricingData> {
-  const country = countryFromHeaders(await headers());
+  // The visitor's own address and country travel with the call: counted per visitor (SEC-18), not as "the website's server" for all of them.
+  const visitor = forwardedFrom(await headers());
   try {
     const res = await fetch(`${API_URL}/api/pricing`, {
-      headers: { ...internalHeaders(), ...(country ? { 'x-sf-country': country } : {}) },
+      headers: { ...internalHeaders(), ...visitor },
       cache: 'no-store',
       signal: AbortSignal.timeout(3_000),
     });

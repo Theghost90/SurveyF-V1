@@ -6,7 +6,7 @@ import { env } from '../config/env';
 import { captchaEnabled, verifyCaptcha } from '../lib/captcha';
 import { clientIp } from '../lib/client-ip';
 import { hit } from '../lib/counters';
-import { decryptSecret, encryptSecret } from '../lib/crypto';
+import { decryptSecret, encryptSecret, sha256Hex } from '../lib/crypto';
 import { canonicalEmail } from '../lib/email';
 import { AppError, badRequest, notFound, unauthorized } from '../lib/errors';
 import { detectedCountry } from '../lib/geo';
@@ -20,7 +20,7 @@ import { accountSummary, userDto } from '../services/account';
 import { audit, auditContext, auditStrict, recentActivity } from '../services/audit';
 import { track } from '../services/funnel';
 import { sendMail, sendMailInBackground, type Lang } from '../services/mail';
-import { consumeEmailToken, createEmailToken, peekEmailToken } from '../services/security/email-tokens';
+import { consumeEmailToken, createEmailToken, invalidateEmailTokens, peekEmailToken } from '../services/security/email-tokens';
 import { ALERT_AT, checkLoginGuard, claimFailedLoginAlert, clearLoginFailures, recordLoginFailure } from '../services/security/login-guard';
 import { remainingRecoveryCodes, replaceRecoveryCodes, verifySecondFactor } from '../services/security/second-factor';
 import { createSession, isNewDevice, listSessions, refreshSession, revokeAllSessions, revokeByRefreshToken, revokeSession, type IssuedTokens, type RequestMeta } from '../services/security/sessions';
@@ -52,6 +52,8 @@ const loginSchema = z.object({
 });
 
 const lang = (l: string | null | undefined): Lang => (l === 'en' ? 'en' : 'fr');
+/** Wrong passwords on one confirmation link before the link is burned (SEC-19). */
+const CONFIRM_PASSWORD_TRIES = 5;
 const place = (meta: RequestMeta): string => `${describeAgent(meta.userAgent).label}${meta.ip && meta.ip !== 'unknown' ? `, ${meta.ip.includes(':') ? meta.ip.split(':').slice(0, 3).join(':') + '::' : meta.ip.split('.').slice(0, 3).join('.') + '.x'}` : ''}${meta.country ? ` (${meta.country})` : ''}`;
 const stamp = () => new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 
@@ -88,6 +90,8 @@ export default async function authRoutes(app: FastifyInstance) {
     captcha: captchaEnabled() ? { provider: 'turnstile', siteKey: env.TURNSTILE_SITE_KEY } : null,
     emailMode: env.emailProvider === 'mock' ? 'demo' : 'live',
     passwordMinLength: 10,
+    /** SEC-19: the confirmation page asks for the password chosen at sign-up. */
+    confirmNeedsPassword: env.CONFIRM_REQUIRES_PASSWORD,
     googleSignIn: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.INTERNAL_API_SECRET),
   }));
 
@@ -141,7 +145,23 @@ export default async function authRoutes(app: FastifyInstance) {
 
   /** Confirms the address behind a link from the e-mail. The link is opened in the browser, but the confirmation is a POST made by a click on the page. */
   app.post('/api/auth/verify-email', { ...rl(20) }, async (req) => {
-    const { token } = z.object({ token: z.string().min(10).max(200) }).parse(req.body);
+    const { token, password } = z.object({ token: z.string().min(10).max(200), password: z.string().max(128).optional() }).parse(req.body);
+    if (env.CONFIRM_REQUIRES_PASSWORD) {
+      // SEC-19: a link in somebody's mailbox proves the mailbox, not that the sign-up was theirs. The password chosen at sign-up is what only the registrant knows, so
+      // somebody who signed up with another person's address cannot get it confirmed by that person's click. Checked BEFORE the link is spent (a typing slip costs nothing).
+      const peeked = await peekEmailToken(token, 'verify_email');
+      if (!peeked) throw badRequest('invalid_token', 'This link has expired or was already used. If you already confirmed your address, sign in; otherwise ask for a new link.');
+      if (!password) throw badRequest('password_required', 'Enter the password you chose when you signed up to confirm your address');
+      const pending = await prisma.user.findUnique({ where: { id: peeked.userId }, select: { passwordHash: true } });
+      if (!(await verifyPassword(pending?.passwordHash ?? null, password)).ok) {
+        await audit(auditContext(req, peeked.userId), { action: 'verify_password_failed' });
+        if ((await hit(`verify:pw:${sha256Hex(token).slice(0, 24)}`, 3600)) >= CONFIRM_PASSWORD_TRIES) {
+          await invalidateEmailTokens(peeked.userId, 'verify_email'); // a link that keeps meeting wrong passwords is in the wrong hands or forgotten: it stops working, a new one is a click away
+          throw badRequest('invalid_token', 'Too many wrong passwords: this link no longer works. Ask for a new one.');
+        }
+        throw new AppError(401, 'confirm_password_wrong', 'That is not the password chosen when this account was created');
+      }
+    }
     const claimed = await consumeEmailToken(token, 'verify_email');
     if (!claimed) throw badRequest('invalid_token', 'This link has expired or was already used. If you already confirmed your address, sign in; otherwise ask for a new link.');
     const user = await prisma.user.update({ where: { id: claimed.userId }, data: { emailVerifiedAt: new Date() } });

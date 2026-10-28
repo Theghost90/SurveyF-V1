@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { rl } from '../lib/ratelimit';
 import { maskPhone } from '@surveyflow/shared';
 import { computeAnalytics, displayAnswer, getParticipantRows, listRecipientsByKind } from '../services/analytics';
-import { guardExport } from '../services/security/data-guard';
+import { guardExport, guardRead } from '../services/security/data-guard';
 
 export default async function analyticsRoutes(app: FastifyInstance) {
   const auth = { preHandler: app.authenticate };
@@ -14,6 +14,7 @@ export default async function analyticsRoutes(app: FastifyInstance) {
   app.get('/api/surveys/:id/responses', auth, async (req) => {
     const q = z.object({ page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(25) }).parse(req.query);
     const { survey, rows, total } = await getParticipantRows((req.params as { id: string }).id, req.userId, { skip: (q.page - 1) * q.pageSize, take: q.pageSize });
+    await guardRead(req, rows.map((r) => r.contactId)); // names and free-text answers: counted per person per day (SEC-20)
     return {
       total, page: q.page, pageSize: q.pageSize,
       questions: survey.questions.map((qu, i) => ({ id: qu.id, number: i + 1, text: qu.text, type: qu.type })),
@@ -31,6 +32,7 @@ export default async function analyticsRoutes(app: FastifyInstance) {
   app.get('/api/surveys/:id/not-started', auth, async (req) => {
     const q = z.object({ page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(25) }).parse(req.query);
     const { total, rows } = await listRecipientsByKind((req.params as { id: string }).id, req.userId, 'nonresp', { skip: (q.page - 1) * q.pageSize, take: q.pageSize });
+    await guardRead(req, rows.map((r) => r.contactId));
     return { total, page: q.page, pageSize: q.pageSize, items: rows.map((r) => ({ recipientId: r.recipientId, contactId: r.contactId, name: r.name, phone: maskPhone(r.phone), status: r.status, sentAt: r.sentAt })) };
   });
 
