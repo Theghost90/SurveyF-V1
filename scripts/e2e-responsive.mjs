@@ -51,14 +51,16 @@ const WIDTHS = [320, 360, 390, 430, 600, 639, 640, 768, 1024, 1280, 1440, 1920];
 // ---- A. the public site, logged out ----
 const pub = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-GB' });
 const pp = await pub.newPage();
-const publicRoutes = ['/', '/pricing', '/privacy', '/terms', '/login', '/register'];
+const publicRoutes = ['/', '/pricing', '/privacy', '/terms', '/login', '/register', '/forgot-password', '/check-email?email=owner%40example.com', '/verify-email?token=sample', '/reset-password?token=sample', '/link-google?token=sample'];
+// The sign-in family has no marketing header: only the overflow and sticky checks apply to it.
+const AUTH_ONLY = new Set(['/login', '/register', '/forgot-password', '/check-email?email=owner%40example.com', '/verify-email?token=sample', '/reset-password?token=sample', '/link-google?token=sample']);
 for (const w of WIDTHS) {
   await pp.setViewportSize({ width: w, height: 900 });
   for (const r of publicRoutes) {
     await pp.goto(`${base}${r}`, { waitUntil: 'load' });
     await pp.waitForTimeout(700);
     await checkOverflow(pp, w, r);
-    if (r === '/login' || r === '/register') continue;
+    if (AUTH_ONLY.has(r)) continue;
     const header = pp.locator('header').first();
     const phone = w < 640;
     const lang = pp.locator('header [role=group]').first();
@@ -132,7 +134,7 @@ await page.waitForURL('**/dashboard**', { timeout: 30000 });
 const call = (path) => page.evaluate(async (p) => (await (await fetch('/proxy' + p)).json()), path);
 const surveys = (await call('/surveys?pageSize=50')).items ?? [];
 const active = surveys.find((s) => s.status === 'active') ?? surveys[0];
-const routes = ['/dashboard', '/surveys', '/surveys/new', '/contacts', '/settings?tab=profile', '/settings?tab=whatsapp', '/settings?tab=analytics', '/settings?tab=integrations', '/billing', '/simulator', '/simulator?mode=owner',
+const routes = ['/dashboard', '/surveys', '/surveys/new', '/contacts', '/settings?tab=profile', '/settings?tab=whatsapp', '/settings?tab=analytics', '/settings?tab=security', '/settings?tab=integrations', '/billing', '/simulator', '/simulator?mode=owner',
   ...(active ? [`/surveys/${active.id}`, `/surveys/${active.id}/analytics`, `/surveys/${active.id}/export`] : []), '/pricing', '/'];
 const widths = [320, 360, 390, 600, 768, 1024, 1280, 1920];
 for (const w of widths) {

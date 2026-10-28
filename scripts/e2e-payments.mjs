@@ -5,6 +5,7 @@
 // Usage: node scripts/e2e-payments.mjs [outDir] [baseUrl]      (DATABASE_URL: the API's database; default = the dev database)
 import { chromium } from 'playwright-core';
 import { chromePath } from './lib/browser-path.mjs';
+import { confirmAndSignIn } from './lib/signup.mjs';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 
@@ -55,7 +56,7 @@ await step('register an owner (Cameroon, Mobile Money available)', async () => {
   await page.fill('#email', email);
   await page.fill('#password', 'a-long-test-password');
   await page.click('button[type=submit]');
-  await page.waitForURL('**/onboarding**', { timeout: 30000 });
+  await confirmAndSignIn(page, base, { email });
   await page.getByRole('radio', { name: /Businesses/ }).click();
   await page.getByRole('heading', { name: 'Connect WhatsApp' }).waitFor({ timeout: 10000 }); // choosing a segment moves on by itself
 });

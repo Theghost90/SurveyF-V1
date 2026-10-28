@@ -4,6 +4,7 @@
 // Usage: node scripts/e2e-currency.mjs [outDir] [baseUrl]
 import { chromium } from 'playwright-core';
 import { chromePath } from './lib/browser-path.mjs';
+import { confirmAndSignIn } from './lib/signup.mjs';
 import { mkdirSync } from 'node:fs';
 
 const exe = await chromePath();
@@ -53,7 +54,7 @@ await step('a Kenyan visitor sees shillings on the pricing page, with the rate a
   await page.fill('#businessName', 'Nairobi Shop'); await page.fill('#name', 'Wanjiru'); await page.fill('#phone', '+254 712 345 678');
   await page.fill('#email', email); await page.fill('#password', 'a-long-test-password');
   await page.click('button[type=submit]');
-  await page.waitForURL('**/onboarding**', { timeout: 30000 });
+  await confirmAndSignIn(page, base, { email });
   await page.getByRole('radio', { name: /Academics/ }).click();
   await page.getByRole('heading', { name: 'Connect WhatsApp' }).waitFor({ timeout: 10000 }); // choosing a segment moves on by itself
   await page.getByRole('button', { name: /use a simulated number/i }).click();

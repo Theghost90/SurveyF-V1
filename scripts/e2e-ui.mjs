@@ -2,6 +2,7 @@
 // Usage: node scripts/e2e-ui.mjs [outDir] [baseUrl]
 import { chromium } from 'playwright-core';
 import { chromePath } from './lib/browser-path.mjs';
+import { confirmAndSignIn } from './lib/signup.mjs';
 import { mkdirSync, statSync } from 'node:fs';
 
 const exe = await chromePath();
@@ -39,7 +40,7 @@ const email = `e2e${Date.now()}@example.com`;
 const shot = (name) => page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
 const toast = (text) => page.locator('[data-sonner-toast]', { hasText: text }).first().waitFor({ timeout: 10000 });
 
-await step('register a new account and land on onboarding', async () => {
+await step('register a new account, confirm the address from the e-mail link, sign in and land on onboarding', async () => {
   await page.goto(`${base}/register?plan=growth`);
   await page.fill('#businessName', 'Café Test');
   await page.fill('#name', 'Awa Test');
@@ -47,17 +48,21 @@ await step('register a new account and land on onboarding', async () => {
   await page.fill('#email', email);
   await page.fill('#password', 'a-long-test-password');
   await page.click('button[type=submit]');
-  await page.waitForURL('**/onboarding**', { timeout: 30000 });
-  expect(page.url().includes('plan=growth'), 'chosen plan should travel to onboarding');
+  await confirmAndSignIn(page, base, { email });
+  expect(page.url().includes('plan=growth'), 'chosen plan should travel through the confirmation e-mail to onboarding');
   await page.getByRole('heading', { name: /get you set up/i }).waitFor();
 });
 
-await step('registration rejects a duplicate email with a field error', async () => {
+await step('registering an address that already has an account gives the SAME screen as a new one (nobody can find out who is a customer)', async () => {
   const p2 = await ctx.newPage();
   await p2.goto(`${base}/register`);
   await p2.fill('#businessName', 'X'); await p2.fill('#name', 'X'); await p2.fill('#phone', '+237 677 11 22 34'); await p2.fill('#email', email); await p2.fill('#password', 'a-long-test-password');
   await p2.click('button[type=submit]');
-  await p2.getByText(/already exists/i).waitFor({ timeout: 10000 });
+  await p2.waitForURL('**/check-email**', { timeout: 15000 });
+  await p2.getByRole('heading', { name: /check your e-mail/i }).waitFor();
+  expect(!(await p2.locator('body').innerText()).match(/already (exists|have)/i), 'the screen must not say the address is taken');
+  const mail = await p2.evaluate(async (to) => (await (await fetch(`/proxy/dev/mailbox?to=${encodeURIComponent(to)}`)).json()).items.map((i) => i.kind), email);
+  expect(mail.includes('register_existing'), `the owner should have been told by e-mail, got ${JSON.stringify(mail)}`);
   await p2.close();
 });
 
@@ -415,9 +420,10 @@ await step('geo: a Nigerian visitor sees naira prices, the Nigerian number forma
   expect(await p.locator('#phone').inputValue() === '+234 ', 'register phone should start with +234');
   expect(await p.locator('#phone').getAttribute('placeholder') === '+234 803 123 4567', 'Nigerian example placeholder');
   await p.fill('#businessName', 'Lagos Shop'); await p.fill('#name', 'Ngozi'); await p.fill('#phone', '+234 803 123 4567');
-  await p.fill('#email', `ng${Date.now()}@example.com`); await p.fill('#password', 'a-long-test-password');
+  const ngEmail = `ng${Date.now()}@example.com`;
+  await p.fill('#email', ngEmail); await p.fill('#password', 'a-long-test-password');
   await p.click('button[type=submit]');
-  await p.waitForURL('**/onboarding**', { timeout: 30000 });
+  await confirmAndSignIn(p, base, { email: ngEmail });
   await p.getByRole('radio', { name: /Institutions/ }).click(); // the required question; without it the app keeps redirecting here
   await p.getByRole('heading', { name: 'Connect WhatsApp' }).waitFor({ timeout: 10000 }); // choosing a segment moves on by itself
   await p.goto(`${base}/settings`);

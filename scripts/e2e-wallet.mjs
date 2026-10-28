@@ -3,6 +3,7 @@
 // Usage: node scripts/e2e-wallet.mjs [outDir] [baseUrl]
 import { chromium } from 'playwright-core';
 import { chromePath } from './lib/browser-path.mjs';
+import { confirmAndSignIn } from './lib/signup.mjs';
 import { mkdirSync } from 'node:fs';
 
 const exe = await chromePath();
@@ -50,7 +51,7 @@ await step('register, upgrade to Growth (mock checkout), connect a simulated num
   await page.fill('#email', email);
   await page.fill('#password', 'a-long-test-password');
   await page.click('button[type=submit]');
-  await page.waitForURL('**/onboarding**', { timeout: 30000 });
+  await confirmAndSignIn(page, base, { email });
   await page.getByRole('radio', { name: /Businesses/ }).click(); // the one required onboarding answer; the app redirects here until it is given
   await page.getByRole('heading', { name: 'Connect WhatsApp' }).waitFor({ timeout: 10000 }); // choosing a segment moves on by itself
   const up = await call('PUT', '/subscription/upgrade', { plan: 'growth', interval: 'monthly', method: 'mobile_money', phone: '+237677112233' });

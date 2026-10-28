@@ -1,7 +1,7 @@
 // Let someone test SurveyFlow over the internet, from this computer, with ONE command:   npm run share
 //
 //   - builds the app and starts it the way a server would (production build of the website, built API);
-//   - forces demo mode: WhatsApp, payments and gifts are SIMULATED, whatever keys your .env holds (nothing real can be sent or charged);
+//   - forces demo mode: WhatsApp, payments, gifts and e-mail are SIMULATED, whatever keys your .env holds (nothing real can be sent or charged);
 //   - opens a public https address (a free Cloudflare "quick tunnel", no account) that points ONLY at the website;
 //     the API stays private on this computer, reachable only through the website.
 //
@@ -9,6 +9,7 @@
 //           --skip-build       reuse the last build (only if the code has not changed since)
 //           --no-docker        Postgres and Redis are already running (otherwise `docker compose up -d` is run)
 //           --public-url=URL   use your own public address (ngrok, a server...) instead of starting a Cloudflare tunnel
+//           --i-accept-the-risk  Windows only, while the website framework has its known critical flaw (see below): share anyway
 // Stop with Ctrl+C: the public address stops working immediately.
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
@@ -47,6 +48,24 @@ function findCloudflared() {
 
 // ---- 1. prerequisites ----
 if (Number(process.versions.node.split('.')[0]) < 20) die(`Node 20 or newer is required (you have ${process.versions.node}).`);
+// A critical flaw in the website framework (CVE-2026-75604, GHSA-p293-qw3h-jr36): on a WINDOWS computer, anybody who can reach the site can run code on it, with no login and no
+// workaround but an upgrade (fixed in Next.js 15.5.24 and 16.3.3; 14.x never got a fix). A shared test site is exactly that situation, so this refuses to start there.
+const nextVersion = (() => { try { return JSON.parse(readFileSync(path.join(root, 'node_modules/next/package.json'), 'utf8')).version; } catch { return null; } })();
+const nextHasWindowsRce = (v) => {
+  if (!v) return false;
+  const [maj, min, pat] = v.split('-')[0].split('.').map(Number);
+  if (maj < 13 || (maj === 13 && min < 4)) return false;
+  if (maj <= 14) return true;
+  if (maj === 15) return min < 5 || (min === 5 && pat < 24);
+  if (maj === 16) return min < 3 || (min === 3 && pat < 3);
+  return false;
+};
+if (win && nextHasWindowsRce(nextVersion) && !flag('i-accept-the-risk')) {
+  die(`Sharing is blocked on Windows: this project uses Next.js ${nextVersion}, which has a critical remote-code-execution flaw on Windows servers (CVE-2026-75604, fixed only in 15.5.24 / 16.3.3).
+  Anybody who found the address could run programs on this computer. Options: upgrade Next.js first (docs/SECURITY.md section 18), or run this command from WSL2 or a Linux machine,
+  or, if you accept the risk for a few minutes with people you trust, add --i-accept-the-risk.`);
+}
+if (win && nextHasWindowsRce(nextVersion)) say(`⚠ Next.js ${nextVersion} has a known critical flaw on Windows servers (CVE-2026-75604). You chose to continue: stop the share as soon as the test is over.\n`);
 const envFile = path.join(root, '.env');
 if (!existsSync(envFile)) die('No .env file. Copy .env.example to .env first (cp .env.example .env).');
 const readEnv = () => Object.fromEntries(readFileSync(envFile, 'utf8').split(/\r?\n/).map((l) => l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*(?:#.*)?$/)).filter(Boolean).map((m) => [m[1], m[2].replace(/^["']|["']$/g, '')]));
@@ -130,14 +149,16 @@ if (!publicUrl) {
 // ---- 7. API (private) and website ----
 const demoEnv = {
   // Everything simulated, regardless of the keys in .env: a shared test instance must never send a real message or take real money.
-  WHATSAPP_MODE: 'mock', PSP_MOCK: 'true', GIFT_PROVIDER: 'mock',
+  // E-mail too: the confirmation and reset messages are shown on the page (the mock mailbox) and nothing is ever sent to a real address.
+  WHATSAPP_MODE: 'mock', PSP_MOCK: 'true', GIFT_PROVIDER: 'mock', EMAIL_PROVIDER: 'mock',
   INTERNAL_API_SECRET: fileEnv.INTERNAL_API_SECRET, JWT_SECRET: fileEnv.JWT_SECRET, NEXTAUTH_SECRET: fileEnv.NEXTAUTH_SECRET,
   DEV_GEO_COUNTRY: '', SF_DEMO: '1',
 };
 const apiEnv = { ...process.env, ...demoEnv, NODE_ENV: 'development', HOST: '127.0.0.1', PORT: String(API_PORT), WEB_ORIGIN: publicUrl, PUBLIC_API_URL: publicUrl };
 start('api', process.execPath, ['--env-file-if-exists=../../.env', 'dist/server.js'], { cwd: path.join(root, 'apps/api'), env: apiEnv });
 const nextBin = createRequire(path.join(root, 'apps/web/package.json')).resolve('next/dist/bin/next');
-const webEnv = { ...process.env, ...demoEnv, NODE_ENV: 'production', NEXTAUTH_URL: publicUrl, API_URL: `http://127.0.0.1:${API_PORT}` };
+// CLIENT_IP_HEADER: Cloudflare's tunnel puts the visitor's real address in this header; the sign-in limits and the security log are about the visitor, not about the tunnel.
+const webEnv = { ...process.env, ...demoEnv, NODE_ENV: 'production', NEXTAUTH_URL: publicUrl, API_URL: `http://127.0.0.1:${API_PORT}`, CLIENT_IP_HEADER: 'cf-connecting-ip' };
 start('web', process.execPath, [nextBin, 'start', '-p', String(WEB_PORT)], { cwd: path.join(root, 'apps/web'), env: webEnv });
 
 const up = async (url, secs) => { for (let i = 0; i < secs; i++) { if (await fetch(url, { signal: AbortSignal.timeout(2500) }).then((r) => r.status < 500, () => false)) return true; await sleep(1000); } return false; };

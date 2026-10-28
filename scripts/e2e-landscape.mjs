@@ -92,7 +92,7 @@ for (const lang of ['en', 'fr']) {
 }
 
 // ---------- B. devices, portrait and landscape: all public and sign-in screens ----------
-const publicRoutes = ['/', '/pricing', '/privacy', '/terms', '/login', '/register'];
+const publicRoutes = ['/', '/pricing', '/privacy', '/terms', '/login', '/register', '/forgot-password', '/check-email?email=owner%40example.com', '/verify-email?token=sample', '/reset-password?token=sample', '/link-google?token=sample'];
 for (const lang of ['en', 'fr']) {
   await pub.addCookies([{ name: 'sf_lang', value: lang, url: base }]);
   for (const [name, w, h] of DEVICES) {
@@ -140,7 +140,7 @@ await page.click('button[type=submit]');
 await page.waitForURL('**/dashboard**', { timeout: 60000 });
 const call = (p) => page.evaluate(async (x) => (await (await fetch('/proxy' + x)).json()), p);
 const active = ((await call('/surveys?pageSize=50')).items ?? []).find((s) => s.status === 'active');
-const appRoutes = ['/dashboard', '/surveys', '/surveys/new', '/contacts', '/settings?tab=profile', '/settings?tab=whatsapp', '/settings?tab=analytics', '/settings?tab=integrations', '/billing', '/simulator', '/simulator?mode=owner',
+const appRoutes = ['/dashboard', '/surveys', '/surveys/new', '/contacts', '/settings?tab=profile', '/settings?tab=whatsapp', '/settings?tab=analytics', '/settings?tab=security', '/settings?tab=integrations', '/billing', '/simulator', '/simulator?mode=owner',
   ...(active ? [`/surveys/${active.id}`, `/surveys/${active.id}/analytics`, `/surveys/${active.id}/export`] : [])];
 
 for (const lang of ['en', 'fr']) {

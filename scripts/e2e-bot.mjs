@@ -4,6 +4,7 @@
 // Usage: node scripts/e2e-bot.mjs [outDir] [baseUrl]
 import { chromium } from 'playwright-core';
 import { chromePath } from './lib/browser-path.mjs';
+import { confirmAndSignIn } from './lib/signup.mjs';
 import { mkdirSync, readFileSync } from 'node:fs';
 
 const exe = await chromePath();
@@ -42,7 +43,7 @@ await step('register, pick a segment, connect the simulated number', async () =>
   await page.fill('#businessName', 'Boulangerie Bot'); await page.fill('#name', 'Awa Bot'); await page.fill('#phone', `+237 6${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`); // unique per run: a phone can be linked to ONE account only
   await page.fill('#email', email); await page.fill('#password', 'a-long-test-password');
   await page.click('button[type=submit]');
-  await page.waitForURL('**/onboarding**', { timeout: 30000 });
+  await confirmAndSignIn(page, base, { email });
   await page.getByRole('radio', { name: /Businesses/ }).click();
   await page.getByRole('button', { name: /use a simulated number/i }).click();
   await page.getByTestId('ob-connected').waitFor({ timeout: 15000 });
@@ -136,11 +137,14 @@ await step('ANALYTICS PAGE: the type is written next to every question title; th
   await shot('03-analytics');
 });
 
-await step('ANALYTICS PAGE: the "haven\'t replied" list shows COMPLETE numbers, is paged, excludes STOP and downloads as CSV', async () => {
+await step('ANALYTICS PAGE: the "haven\'t replied" list shows MASKED numbers (a full one is a reveal away), is paged, excludes STOP; the CSV has the complete numbers', async () => {
   const list = page.getByTestId('not-started-list');
   await list.waitFor({ timeout: 15000 });
-  expect(/\+237 ?677 ?2000\d\d|\+2376772000\d\d/.test((await list.innerText()).replace(/\s/g, ' ')), `complete numbers expected: ${await list.innerText()}`);
-  expect(!/X{2}/.test(await list.innerText()), 'never masked here');
+  const listText = (await list.innerText()).replace(/\s/g, ' ');
+  expect(/\+237 6XX XXX \d{3}/.test(listText), `masked numbers expected: ${listText}`);
+  expect(!/\+237 ?677 ?2000\d\d|\+2376772000\d\d/.test(listText), `no complete number in the list: ${listText}`);
+  await list.getByRole('button', { name: /show number/i }).first().click(); // one number, on request (limited and written to the owner's activity log)
+  await page.waitForFunction(() => /\+2376772000\d\d/.test((document.querySelector('[data-testid=not-started-list]')?.textContent ?? '').replace(/\s/g, '')), null, { timeout: 10000 });
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.getByRole('button', { name: 'Download CSV' }).click()]);
   await dl.saveAs(`${out}/not-started.csv`);
   const csv = readFileSync(`${out}/not-started.csv`, 'utf8');
