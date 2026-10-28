@@ -5,7 +5,8 @@ PDF / Excel / Google Sheets, reward participants with airtime, Mobile Money, cod
 then billed in FCFA (MTN MoMo, Orange Money, card) or, in Nigeria, Kenya and Ghana, in the local currency by card, through a multi-PSP orchestration layer.
 
 > **Read [`docs/DECISIONS.md`](docs/DECISIONS.md) first.** It lists where this build departs from the spec/design (and why),
-> the open business decisions, and exactly which integrations are verified vs. not.
+> the open business decisions, and exactly which integrations are verified vs. not. Sign-in and data protection (confirmed e-mail, sessions, authenticator app, masked numbers,
+> encryption of names and numbers, what is *not* covered, how to rotate keys) are in [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Stack
 
@@ -37,6 +38,8 @@ In demo mode (`WHATSAPP_MODE=mock`, `PSP_MOCK=true`, `GIFT_PROVIDER=mock`) nothi
 * **Settings → WhatsApp → "Use a simulated number"** connects a fake number; the **Simulator** page (`/simulator`) plays the
   *participant's phone* against the real, signature-checked webhook code path — tap buttons, answer, skip 25 h to trigger
   abandonment.
+* **Sign-up asks for a confirmed e-mail address.** In demo mode nothing is sent: the "check your e-mail" page shows the message with a button (the mock mailbox: **any visitor of a shared demo can read any test mailbox, so never use a real address**).
+  The seeded demo account is already confirmed.
 * Subscribing opens a **demo checkout** (`/billing/mock-checkout`) that exercises the real verification + activation path.
 * Gifts are "delivered" by a mock provider. **The survey owner pays for gifts** from a prepaid wallet (Billing → Gift wallet, topped up
   through the same mock checkout). The seeded demo account has a funded wallet; a fresh account starts at 0, so its participants get a plain
@@ -46,10 +49,12 @@ For a production-like preview: `npm run build && npm start` (the API reads the r
 
 ## Going live (checklist)
 
-1. Postgres + Redis; `npx prisma migrate deploy` (`apps/api/prisma/migrations`, nine: `init`, `gift_wallet`, `reminders_geo_segment`, `multicurrency_wallet`, `payments_notices`, `payments_reconcile`, `explore_activate`, `analytics_bot`, `analytics_alerts`; applied from scratch and diffed against the schema — no drift, checked 2026-10-27).
-2. Set **production** env: `NODE_ENV=production`, `JWT_SECRET`, `TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`), `NEXTAUTH_SECRET`,
+1. Postgres + Redis; `npx prisma migrate deploy` (`apps/api/prisma/migrations`, ten: `init`, `gift_wallet`, `reminders_geo_segment`, `multicurrency_wallet`, `payments_notices`, `payments_reconcile`, `explore_activate`, `analytics_bot`, `analytics_alerts`, `security_hardening`; applied from scratch and diffed against the schema — no drift, checked 2026-10-28).
+2. Set **production** env: `NODE_ENV=production`, `JWT_SECRET`, `ENCRYPTION_KEYS` (`k1:` + `openssl rand -base64 32`), `BLIND_INDEX_KEY` (`openssl rand -base64 32`), `NEXTAUTH_SECRET`, `NEXTAUTH_URL` and `PUBLIC_WEB_URL` (both https),
+   `EMAIL_PROVIDER` (`smtp`, `resend` or `brevo`) with its key and a verified `EMAIL_FROM`, `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY` (or `CAPTCHA_DISABLED=true`), and on the website `CLIENT_IP_HEADER` (e.g. `cf-connecting-ip`) or `TRUSTED_PROXY_HOPS`,
    `WHATSAPP_MODE=live`, `META_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, PSP keys, `GIFT_PROVIDER=campay`. **The API refuses to start**
-   in production with mock modes, a missing app secret, or weak secrets. Set `GIFT_FEE_PERCENT` from the real provider tariffs (default 5 is a
+   in production with mock modes (WhatsApp, payments, gifts, **e-mail**), a missing app secret, missing encryption keys, or weak secrets. **Back up `ENCRYPTION_KEYS` and `BLIND_INDEX_KEY` apart from the database: without them participants' names and numbers cannot be read.**
+   The website must be reachable only through your CDN, and the security part of the checklist is `docs/SECURITY.md` §15.3. Set `GIFT_FEE_PERCENT` from the real provider tariffs (default 5 is a
    placeholder) and settle the legal/treasury questions in `docs/DECISIONS.md` §3.1 **before accepting real wallet top-ups**.
    Also: set `INTERNAL_API_SECRET` (same value for the API and the website; the API refuses to start in production without it) so that only the website's server can call the API — the exceptions are Meta's
    webhook, the PSP webhooks and receipt links; `PUBLIC_API_URL` must be the API's public **https** address (checked at startup); the site must sit behind a platform that sets a country header (Vercel, Cloudflare,
@@ -73,9 +78,11 @@ apps/api            Fastify API, Prisma schema + migrations, workers (send queue
   src/services/{reminders,fx,wallet,receipts,funnel}.ts
 apps/web            Next.js app (marketing, auth, dashboard, builder, analytics, billing, simulator)
 packages/shared     plans & prices (single source of truth), phone normalisation, WhatsApp message builders
-scripts/            share-demo.mjs (npm run share), e2e-*.mjs browser tests (ui, bot, wallet, payments, currency, responsive, landscape), ui-tour.mjs and shoot.mjs (screenshots)
+scripts/            share-demo.mjs (npm run share), e2e-*.mjs browser tests (ui, bot, wallet, payments, currency, security, responsive, landscape), rotate-keys.mts (encryption key rotation), ui-tour.mjs and shoot.mjs (screenshots)
 surveyflow_design.md   design specification: tokens, layout and navigation, components, responsive rules
 docs/DECISIONS.md   spec/design deviations, open questions, verification status
+docs/SECURITY.md    sign-in and data protection: what is built, operations (keys, rotation, incidents), what is not covered
+docs/LEGAL_FACTS_SHEET.md (+ .docx)   one page for the lawyer: what the software does with data today
 docs/SHARE_DEMO.md, docs/TESTER_GUIDE.md   sharing a test instance over the internet; what to hand the tester
 docs/SurveyFlow_V1_Reverse_Engineered_Blueprint.docx   the build blueprint with the full testing plan
 docs/PAYMENTS.md    payment flow vs the PSP diagram, risk register, operations guide, what is not covered
@@ -85,7 +92,7 @@ docs/META_CHECK.md  running the WhatsApp integration against a real Meta test ap
 ## Tests
 
 ```bash
-npm test                          # shared (62) + API (264) tests (needs the local Postgres/Redis; uses the `surveyflow_test` database)
+npm test                          # shared (69) + API (436) tests (needs the local Postgres/Redis; uses the `surveyflow_test` database)
 node scripts/e2e-ui.mjs /tmp/e2e # real-browser end-to-end run against the running app on :4222 (reseed first: `npm run db:seed`)
 node scripts/e2e-wallet.mjs /tmp/e2e-wallet # wallet + gift receipt run
 node scripts/e2e-payments.mjs /tmp/e2e-payments # what a customer sees: still waiting, in progress, review, renewal banner
@@ -94,13 +101,15 @@ node scripts/e2e-bot.mjs /tmp/e2e-bot # Analytics Bot: link a phone, owner simul
 node scripts/e2e-responsive.mjs /tmp/e2e-resp # every screen from 320 to 1920 px, both menus: no horizontal overflow
 node scripts/e2e-landscape.mjs /tmp/e2e-land # menu bars at every width from 280 px and screens on 30 device orientations (portrait + landscape), English and French
 node scripts/e2e-currency.mjs /tmp/e2e-currency # a Kenyan owner: plan, wallet and gifts in shillings
+SF_SHORT_TOKENS=1 node scripts/e2e-security.mjs /tmp/e2e-sec # sign-up to sign-out, authenticator app, sessions, "confirm it is you"; start the API with ACCESS_TOKEN_TTL_SECONDS=30 so renewal is tested throughout
 ```
 
 ## API (all under `/api`)
 
-`POST auth/register` · `POST auth/login` · `GET|PATCH auth/me` · `GET|POST surveys` · `GET|PUT|DELETE surveys/:id` ·
+`POST auth/{register,verify-email[/resend],login,refresh,signout,logout}` · `POST auth/password/{forgot,reset,change}` · `POST auth/google[/link/confirm]` (Google sign-in; verified ID token) · `POST auth/2fa/{setup,enable,disable,recovery-codes}` ·
+`GET|POST auth/step-up[/email-code]` · `GET auth/{config,sessions,security,activity}` · `DELETE auth/sessions/:id` · `POST auth/sessions/revoke-all` · `POST contacts/:id/reveal` · `GET|PATCH auth/me` · `GET|POST surveys` · `GET|PUT|DELETE surveys/:id` ·
 `POST surveys/:id/{publish,pause,resume,close,duplicate,send,audience,remind,draw}` · `GET surveys/:id/{analytics,responses,recipients,gifts,sync}` ·
 `POST surveys/:id/gifts/{retry,release}` · `GET wallet` · `POST wallet/topup` ·
 `GET surveys/:id/export/{pdf,excel}` · `POST|DELETE surveys/:id/sync/google-sheets` · `GET contacts` · `POST contacts[/import|/bulk-delete|/bulk-tag]` ·
-`GET|POST|PATCH|DELETE analytics-bot…` (link a phone, list, mute) · `GET surveys/:id/not-started[.csv]` · `POST auth/oauth` (Google sign-in, server to server) · `GET|POST webhook/whatsapp` · `GET receipts/:token` (public PDF, delivered gifts only) · `GET pricing` (prices in the visitor's currency) · `POST payments/initiate` · `GET payments[/:id]` · `GET|POST payments/webhook/:psp` ·
+`GET|POST|PATCH|DELETE analytics-bot…` (link a phone, list, mute) · `GET surveys/:id/not-started[.csv]` · `GET|POST webhook/whatsapp` · `GET receipts/:token` (public PDF, delivered gifts only) · `GET pricing` (prices in the visitor's currency) · `POST payments/initiate` · `GET payments[/:id]` · `GET|POST payments/webhook/:psp` ·
 `GET subscription` · `PUT subscription/upgrade` · `POST subscription/{cancel,reactivate}` · `GET|POST whatsapp/{accounts…,embedded-signup,config}` · `GET integrations/google…`

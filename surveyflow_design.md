@@ -143,6 +143,18 @@ Metric tiles in an auto-fit grid (min 170 px), a footnote that shows the arithme
 - **Builder preview** has a Participant / Owner switch: Owner shows the bot's replies with example numbers; the **Simulator** has the same switch and answers for real on a paid plan. Replies use the same phone mock as the participant side (section 7, WhatsApp simulation).
 - Names appear with **masked numbers** in every bot reply; complete numbers live only in the web app ("haven't started" list and its CSV). The numbers in a reply always equal the Analytics page's.
 
+### Sign-in and security screens
+All of them are one centred card (max width 448 px) on the canvas, one primary button, messages in `role="alert"` / `role="status"`.
+- **Sign-up** asks for business name, name, phone (with the country's prefix and example), e-mail and a password with the hint "at least 10 characters" (the field enforces `minlength` 10 and the API refuses common and breached ones with a readable sentence). The plan picked on the pricing page travels with it. A CAPTCHA appears only when the API says one is configured.
+- **Check your e-mail** (envelope icon, the address, a spam hint, an outlined "Resend" button, a "wrong address?" link). In demo mode an amber-soft box says nothing was sent and offers the message's own button (`data-testid="demo-link"`); it is never rendered for a real e-mail provider.
+- **Confirmation page** never confirms on load: one primary button "Confirm my address". Three states: confirmed (check icon, "Sign in"), link expired or used (cross icon and a resend form), and the question itself.
+- **Sign-in** says "Invalid email or password" and never which one. After five failures the button area shows a **countdown** ("Try again in N seconds") and a CAPTCHA when needed. With two-step verification on, a second step asks for the 6-digit code (`autocomplete="one-time-code"`, numeric keypad) with a "Use a recovery code" link.
+- **Forgot password / reset**: the same confirmation sentence whatever the address; the reset page takes the new password twice, and a weak password shows an inline error without using up the link.
+- **Settings → Security** (four cards, in this order): *Password* (current, new, repeat); *Two-step verification* (off: a QR code, the secret as text, a 6-digit field; on: the number of recovery codes left, "New recovery codes", "Turn off"); *Signed-in devices* (browser and system, place, last used, a "This device" badge, "Sign out" per row, "Sign out everywhere"); *Activity* (the last 40 events in plain words, never a name or a number).
+  The **recovery-codes dialog cannot be dismissed** (an outside click, Escape and the close button do nothing) until the owner ticks "I saved them": the codes are never shown again.
+- **Confirm it is you** is a dialog the app opens when a call answers "confirm first" (a large download, a bulk delete): one field that matches what the owner has (authenticator code, password, or an e-mailed code with "Send me a code"), the note "this lasts 15 minutes on this device", and the interrupted action then repeats by itself.
+- **Phone numbers** are masked everywhere (`+237 6XX XXX 789`); a 32 px eye button (accessible name "Show number") reveals one for 30 seconds. **Unconfirmed e-mail**: an amber-soft strip under the header with "Resend the link"; the actions that need a confirmed address answer with the same words.
+
 ### Money and payment states
 Pending: "Still waiting for the provider", with the reference and "do not pay again". Review: calm wording, never "failed". Wallet: balance in a display number, limits, history list. Prices always show as "amount label" (for example `14,500 FCFA`), annual price under the monthly one.
 

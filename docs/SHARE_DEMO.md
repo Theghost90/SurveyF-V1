@@ -33,11 +33,14 @@ Other options: `--no-docker` (Postgres/Redis already running), `--public-url=htt
 |---|---|
 | Exposed to anyone who has the address | The website (home, sign-up, dashboard). Anyone with the address can create an account. |
 | Not exposed | The API (private, on your computer, answers only the website), the database, your files. |
-| Simulated, whatever your `.env` contains | WhatsApp (nothing is sent to a real number), payments (a demo checkout page, no money), gifts, the Meta and payment-provider keys (ignored). |
+| Simulated, whatever your `.env` contains | WhatsApp (nothing is sent to a real number), payments (a demo checkout page, no money), gifts, **e-mail** (the confirmation and password-reset messages are shown on the page; nothing is sent to anybody), the Meta, payment-provider and e-mail keys (ignored). |
+
+**Windows: sharing is blocked for now.** The website framework (Next.js 14.2.35) has a **critical flaw that lets anybody who can reach the site run programs on a Windows computer, with no login** (CVE-2026-75604, fixed only in Next.js 15.5.24 and later; Linux, macOS and managed hosts are not affected, and there is no workaround). A shared test site is exactly that situation, so `npm run share` **refuses to start on Windows** until Next.js is upgraded
+(`docs/SECURITY.md` §18). Options: upgrade Next.js first; or run the command from WSL2 or a Linux machine; or, for a few minutes with people you trust, add `--i-accept-the-risk`. If you shared from this Windows computer before, stop sharing, close the terminal, and treat the computer as exposed.
 
 **Is it safe for my computer?** Reasonably, if you follow these rules, but not risk-free. `cloudflared` only makes an outbound connection (no router setting, no open port, no firewall rule), and only the website is reachable. The real risk is a flaw in the website itself: if someone found one, they would be running code as *you* on your computer. So: run it from a **normal (non-administrator) terminal**, only while a test is going on, **not on public or shared Wi-Fi**, with Windows, Docker Desktop and Node up to date, and stop it afterwards. Postgres and Redis listen on this computer only (`docker-compose.yml`); run `docker compose up -d` once after pulling so that they are recreated that way. A hosted test site (see the end) isolates all of this from your personal computer.
 
-Rules of thumb: the address is long and random, but treat it like a password: send it only to the tester. Tell the tester **not to enter real personal data** (a notice says so on every page). Do not leave it running unattended. Sign-up has no email verification and no CAPTCHA yet (see the security review), which is acceptable for a short, private, simulated test and is **not** acceptable for a public launch.
+Rules of thumb: the address is long and random, but treat it like a password: send it only to the tester. Tell the tester **not to enter real personal data** (a notice says so on every page). Do not leave it running unattended. Sign-up now asks for a confirmed address, but in a shared test the confirmation message is **shown on the page** and **anyone who knows an address can read its test mailbox**: tell testers to use made-up addresses (the guide does). There is no CAPTCHA in a shared test, and the encryption keys are the development ones (they are in the repository), so this instance must hold test data only. That is acceptable for a short, private, simulated test and is **not** acceptable for a public launch (`docs/SECURITY.md` §15.3).
 
 ## What the tester can and cannot judge
 
@@ -58,7 +61,7 @@ Cannot: anything involving the real WhatsApp, a real phone, a real payment provi
 
 ## Not verified here
 
-I could test everything except the real tunnel tool: this was checked on Linux with a local forwarder standing in for the public address (the production build, the sign-up, all 29 browser steps, the private API and the secret gate). The first real run on Windows with cloudflared may need a small fix: send me the output if it stops.
+I could test everything except the real tunnel tool: this was checked on Linux with a local forwarder standing in for the public address (the production build, the sign-up with its confirmation step, the browser steps, the private API and the secret gate). The visitor's address is read from Cloudflare's `cf-connecting-ip` header (`CLIENT_IP_HEADER`); that header was never seen from a real tunnel, so if every sign-in limit seems shared between testers, that is the first place to look. The first real run on Windows with cloudflared may need a small fix: send me the output if it stops.
 
 ## Later: a permanent test site
 
