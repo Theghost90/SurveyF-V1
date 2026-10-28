@@ -11,6 +11,7 @@ import { hashPassword } from '../src/lib/password';
 import { createUserExplore } from '../src/routes/auth';
 import { readMockMailbox } from '../src/services/mail';
 import { createSession } from '../src/services/security/sessions';
+import { buildReceiptHtml, type ReceiptData } from '../src/services/receipts';
 
 export const APP_SECRET = 'test-app-secret';
 let counter = 0;
@@ -21,8 +22,25 @@ export async function makeApp(): Promise<FastifyInstance> {
   return app;
 }
 
+/** Runs a database statement again when Postgres ends it as the victim of a deadlock, which is the answer it documents for that error. Any other failure is thrown at once. */
+export async function retryOnDeadlock<T>(run: () => Promise<T>, attempts = 5): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await run();
+    } catch (err) {
+      if (attempt >= attempts || !/\b40P01\b|deadlock detected/.test(String(err))) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 25 * attempt));
+    }
+  }
+}
+
+/**
+ * A best-effort write the previous test left running (the funnel event "paid", say) locks its own table and then checks the User row it points at, while TRUNCATE locks
+ * User first and its table after: Postgres ends one of the two with a deadlock error, and the reset is the one that is run again. Production has no TRUNCATE, so this
+ * exists here only.
+ */
 export async function resetAll() {
-  await prisma.$executeRawUnsafe('TRUNCATE "User","SheetRow","AuditLog" RESTART IDENTITY CASCADE');
+  await retryOnDeadlock(() => prisma.$executeRawUnsafe('TRUNCATE "User","SheetRow","AuditLog" RESTART IDENTITY CASCADE'));
   await redis.flushdb();
 }
 
@@ -182,6 +200,12 @@ export async function buildWorld(app: FastifyInstance, opts: { country?: string;
   }
   return { owner, contactIds, surveyId: s.id, phoneNumberId, questions: pub.questions };
 }
+
+/**
+ * What a receipt says in words. Its number is the tail of a random id and its reference comes from the provider, so either can spell "fee" or "525" by chance
+ * (about one run in 4,000); a test that looks for those words on the page must not read them.
+ */
+export const receiptWords = (data: ReceiptData) => buildReceiptHtml(data).replaceAll(data.number, '').replaceAll(data.reference, '');
 
 // ---- Meta webhook helpers --------------------------------------------------------------------
 

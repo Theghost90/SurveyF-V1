@@ -4,9 +4,9 @@ import { prisma } from '../src/lib/prisma';
 import { redis } from '../src/lib/redis';
 import { GiftError, setGiftProvider } from '../src/services/gifts/providers';
 import { processDueGifts } from '../src/services/gifts';
-import { buildReceiptHtml, giftIdFromToken, loadReceipt, receiptToken, receiptUrl } from '../src/services/receipts';
+import { buildReceiptHtml, giftIdFromToken, loadReceipt, receiptToken, receiptUrl, type ReceiptData } from '../src/services/receipts';
 import { runSendWorkerOnce } from '../src/services/whatsapp/sender';
-import { answerIdFor, buildWorld, chatOf, client, makeApp, registerOwner, replyMsg, resetAll, say, templateBtn, textMsg, type World, connectMockWhatsApp, registerFrom } from './helpers';
+import { answerIdFor, buildWorld, chatOf, client, makeApp, receiptWords, registerOwner, replyMsg, resetAll, say, templateBtn, textMsg, type World, connectMockWhatsApp, registerFrom } from './helpers';
 
 let app: FastifyInstance;
 beforeAll(async () => { app = await makeApp(); });
@@ -198,8 +198,15 @@ describe('proof of gift (receipt)', () => {
     expect(html).toContain('500 FCFA');
     expect(html).toContain('+237 6XX XXX 000'); // masked, never the full number
     expect(html).not.toContain('2376771000');
-    expect(html).not.toMatch(/525|fee|frais/i); // the owner's cost is not the participant's business
+    expect(receiptWords(data)).not.toMatch(/525|fee|frais/i); // the owner's cost is not the participant's business
     expect(html).not.toContain('<img src=x');
     expect(html).toContain('&lt;img');
+  });
+
+  it('the "no fee on the receipt" check is not fooled by a random receipt number, and still finds a fee the page names', () => {
+    const data: ReceiptData = { number: 'SF-ZTQXIFEE', business: 'Akwa', survey: 'Survey', gift: '500 FCFA airtime', amount: 500, currency: 'XAF', deliveredXAF: null, phone: '+237 6XX XXX 000', deliveredAt: new Date(), reference: 'ref-525', lang: 'en' };
+    expect(buildReceiptHtml(data)).toMatch(/fee/i); // the number alone would trip a plain search of the page
+    expect(receiptWords(data)).not.toMatch(/525|fee|frais/i);
+    expect(receiptWords({ ...data, survey: 'Service fee survey' })).toMatch(/fee/i);
   });
 });

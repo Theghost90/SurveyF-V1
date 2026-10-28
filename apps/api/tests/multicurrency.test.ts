@@ -6,7 +6,7 @@ import { redis } from '../src/lib/redis';
 import { GiftError, setGiftProvider, type GiftProvider } from '../src/services/gifts/providers';
 import { processDueGifts } from '../src/services/gifts';
 import { buildReceiptHtml, loadReceipt } from '../src/services/receipts';
-import { buildWorld, client, makeApp, resetAll, say, setPlan, answerIdFor, replyMsg, templateBtn, textMsg, type World, connectMockWhatsApp, registerFrom as signUpFrom } from './helpers';
+import { buildWorld, client, makeApp, receiptWords, resetAll, say, setPlan, answerIdFor, replyMsg, templateBtn, textMsg, type World, connectMockWhatsApp, registerFrom as signUpFrom } from './helpers';
 
 let app: FastifyInstance;
 beforeAll(async () => { app = await makeApp(); });
@@ -231,10 +231,11 @@ describe('gifts in the owner\'s currency, paid out in CFA francs', () => {
     expect(list).toMatchObject({ currency: 'NGN', money: { sent: { count: 1, amount: 525 } } });
     expect(list.items[0]).toMatchObject({ cost: 525 });
 
-    const html = buildReceiptHtml((await loadReceipt(g.id))!);
+    const receipt = (await loadReceipt(g.id))!;
+    const html = buildReceiptHtml(receipt);
     expect(html).toContain('500 NGN');
     expect(html).toContain('208 FCFA');
-    expect(html).not.toMatch(/525|fee|frais/i);
+    expect(receiptWords(receipt)).not.toMatch(/525|fee|frais/i);
   });
 
   it('with no exchange rate at payout time the gift waits (still debited, provider not called) and goes out once the rate is back', async () => {
