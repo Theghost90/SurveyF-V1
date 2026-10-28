@@ -1,3 +1,4 @@
+import { PrismaPg } from '@prisma/adapter-pg';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { env } from '../config/env';
 import { blindIndex, decryptIfEncrypted, encryptSecret } from './crypto';
@@ -14,7 +15,8 @@ import { canonicalEmail } from './email';
  *     contacts list filters names in memory). A query that needs either throws instead of silently returning nothing.
  *  2. Every user write also stores `emailCanonical` (john.doe+x@gmail.com == johndoe@gmail.com), so one mailbox cannot open several accounts.
  */
-const base = new PrismaClient({ log: env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'] });
+// Prisma 7 talks to the database through a driver adapter (node-postgres here), not through its own engine.
+const base = new PrismaClient({ adapter: new PrismaPg({ connectionString: env.DATABASE_URL }), log: env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'] });
 
 /** The index of a phone number as it is stored (E.164, "+237677123456"). */
 export const phoneIndex = (phone: string): string => blindIndex('phone', phone);

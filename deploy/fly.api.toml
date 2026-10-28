@@ -15,7 +15,7 @@ primary_region = "cdg"
   dockerfile = "../apps/api/Dockerfile"
 
 [deploy]
-  release_command = "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma"
+  release_command = "npx prisma migrate deploy --config apps/api/prisma.config.ts"
 
 [http_service]
   internal_port = 4223

@@ -9,7 +9,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Prisma 7: the connection URL is no longer in this file. The command line reads it from prisma.config.ts, the application passes a driver adapter (src/lib/prisma.ts).
 }
 
 enum Plan {

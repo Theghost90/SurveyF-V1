@@ -17,5 +17,5 @@ ENV NODE_ENV=production PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium PORT=4223
 WORKDIR /app
 COPY --from=build /app /app
 EXPOSE 4223
-# Run `npx prisma migrate deploy --schema apps/api/prisma/schema.prisma` as the release/pre-deploy command.
+# Run `npx prisma migrate deploy --config apps/api/prisma.config.ts` as the release/pre-deploy command (Prisma 7 reads its settings from that file).
 CMD ["node", "apps/api/dist/server.js"]
