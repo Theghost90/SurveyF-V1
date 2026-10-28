@@ -295,7 +295,7 @@ setting, not code)** and one real confirmation e-mail received · Turnstile keys
 ## 16. What was verified, and what could not be
 
 **Verified in this environment** (real Postgres, Redis, headless Chromium):
-- **581 automated tests** (71 shared in 6 files, 459 API in 26 files, 14 website in 1 file, 37 script tests) and the backlog check, run together by `npm test`: sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed) and the password they ask for, purge, squatter replacement, aliases, password policy and hash upgrade,
+- **585 automated tests** (71 shared in 6 files, 463 API in 27 files, 14 website in 1 file, 37 script tests) and the backlog check, run together by `npm test`: sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed) and the password they ask for, purge, squatter replacement, aliases, password policy and hash upgrade,
   the three login counters and the CAPTCHA paths, sessions and refresh rotation (race, grace, reuse, revoke, expiry), JWT rotation, password reset/change, Google sign-in (stubbed JWKS: wrong audience/issuer/signature, unverified e-mail, linking, squatter), TOTP (RFC vectors, replay, recovery codes, disable),
   step-up (methods, window per session, limits), masking, reveal, export and bulk-delete controls, caps, the read caps, the Sheets re-confirmation, e-mails and audit rows, the rate limits per session and per address, key ring, rotation script (child process), blind index, parked payloads, production boot refusals, log hygiene,
   the append-only trigger, **every API route** against a second owner, the website proxy's rules, token renewal and cookie handling (14 tests), the post-sign-in redirect rule, the audit gate and the backlog checker.
@@ -373,3 +373,9 @@ it runs the production code against the real services, on the computer or host y
 | Chargeback terms (the PAY-13 pushback) | A web search (Flutterwave's and Notch Pay's own pages could not be opened here: what follows is what the search results quote, not your contract) | see `PAYMENTS.md`, "Chargebacks and the cash-out route" | Your providers' merchant agreements decide |
 | Real phones, Meta, the payment providers | not possible here | not verified | OPS-04, WA-01 (`scripts/meta-check.mts`), PAY-03 and PAY-04 |
 | PAY-02: whether the providers offer a balance API | left out of this pass at your request | not verified | |
+
+### What this pass found in our own work
+
+- **The strict Content-Security-Policy caught a defect that came with a dependency upgrade** (§18): zod 4 probes for `eval` when it builds its first schema, and the browser reported that as a policy violation on the sign-up, sign-in and check-your-mail pages although zod coped. Fixed by running zod in its plain mode in browsers (`packages/shared/src/zod-setup.ts`); the policy was not loosened.
+- **The first version of that fix did not type-check.** The shared package is compiled without the browser library, so the name `window` is unknown there. Only `npm run typecheck`, run at the end, found it: it was red on the pushed branch until the fix (`globalThis.window`). The browser check was then repeated on a fresh production build: the security run 19 of 19, including "the Content-Security-Policy blocked nothing the product does", and the interface run 29 of 29. The gate to trust is `npm run release:check` (typecheck, lint, tests and the audit gate together), not any one of them.
+- **Test flakes** are in `docs/DECISIONS.md` §4. None was a product bug; one (a deadlock between the test reset and a leftover best-effort write) could not be reproduced and is handled by a retry.
