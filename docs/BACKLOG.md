@@ -21,6 +21,7 @@ Newest first.
 <!-- backlog:table changelog -->
 | Date | Level | Change |
 | --- | --- | --- |
+| 2026-10-29 | minor | SEC-05 is fully built: the owner signed in with a genuine Google account on their own computer and it works; the open check is closed. |
 | 2026-10-28 | critical | File created from the approved matrix. SEC-08 and LEG-04 are Must (D-01, D-02); SEC-16 is a built Must; PAY-13 is a Must that is counted and not built (D-07); SEC-06b and LEG-02b are the two splits (D-02). |
 | 2026-10-28 | major | SEC-17 to SEC-20 added and built (D-07). The verification pass of the previously unchecked items is recorded in docs/SECURITY.md section 19; what it could not check stays in the Open check column. |
 | 2026-10-27 | major | The full admin backend with RBAC added as ADM-01 to ADM-06 (D-08). The first matrix preview, with the risk and containment columns. |
@@ -28,7 +29,7 @@ Newest first.
 ## At a glance
 
 <!-- backlog:summary:start -->
-**76 rows: 21 built, 55 not built.** Of the built ones, 7 still have a check open against a real service or device.
+**76 rows: 21 built, 55 not built.** Of the built ones, 6 still have a check open against a real service or device.
 
 | | ✅ Built | ⬜ Not built | Total |
 |---|---|---|---|
@@ -42,7 +43,7 @@ Each ID in the grid carries its state: ✅ built · ⚠️ built, a check is ope
 
 | | Smaller | Small | Big | Bigger |
 |---|---|---|---|---|
-| **MUST** (34) | ⚠️ SEC-07, ⬜ DAT-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01, 🧑 BIZ-02 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ⚠️ SEC-05, ✅ SEC-06, ✅ SEC-08, ⚠️ SEC-16, ⬜ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-01, 🧑 WA-04 | ⚠️ SEC-01, ⬜ DAT-01, ⬜ PAY-02, ⬜ PAY-07, ⬜ WA-03, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, 🧑 LEG-03, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
+| **MUST** (34) | ⚠️ SEC-07, ⬜ DAT-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01, 🧑 BIZ-02 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ⚠️ SEC-16, ⬜ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-01, 🧑 WA-04 | ⚠️ SEC-01, ⬜ DAT-01, ⬜ PAY-02, ⬜ PAY-07, ⬜ WA-03, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, 🧑 LEG-03, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
 | **SHOULD** (19) | ✅ SEC-10, ⚠️ SEC-11, ✅ SEC-14, ⬜ PAY-06 | ⚠️ SEC-13, ⬜ WA-06, ⬜ BIZ-03, 🧑 LEG-05, 🧑 OPS-04 | ✅ SEC-06b, ✅ SEC-09, ✅ SEC-12, ✅ SEC-17, ⬜ ADM-03, ⬜ ADM-04, ⬜ LEG-02b, ⬜ PAY-08b, ⬜ PAY-09, ⬜ WA-05 | none |
 | **COULD** (14) | ✅ SEC-18 | ✅ SEC-19, ✅ SEC-20 | ⬜ WA-07, ⬜ DSN-01, ⬜ ADM-06, ⬜ PAY-12, ⬜ OPS-05 | ✅ SEC-15, ⬜ BIZ-04, ⬜ BIZ-05, ⬜ BIZ-06, ⬜ ADM-05, ⬜ PAY-11 |
 | **WON'T THIS RELEASE** (9) | 🔭 FUT-05 | ⏸ DEF-01, ⏸ DEF-02 | 🔭 FUT-03 | ⏸ DEF-03, ⏸ DEF-04, 🔭 FUT-01, 🔭 FUT-02, 🔭 FUT-04 |
@@ -59,7 +60,7 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 | SEC-02 | Password reset (finding 2) | Must | Small | ✅ Built | `apps/api/tests/security-auth.test.ts` | — | none |
 | SEC-03 | Revocable sessions, sign out everywhere, rotating refresh tokens (finding 3) | Must | Small | ✅ Built | `apps/api/tests/security-auth.test.ts`, `apps/web/tests/proxy-renewal.test.ts`, `scripts/e2e-security.mjs` | — | none |
 | SEC-04 | Brute-force defence: rising delays, CAPTCHA after failures, alerts (findings 5 and 10) | Must | Small | ⚠️ Built, check open | `apps/api/tests/security-auth.test.ts`, `apps/api/src/lib/captcha.ts` | Cloudflare Turnstile has never been reached from the build environment (host blocked), and the check fails open when it cannot be reached: run `preflight --only captcha` on your machine, then the widget in a browser on your domain | 📄 CAPTCHA vendor |
-| SEC-05 | Lock down `/api/auth/oauth`: verify Google's ID token, link accounts by provider and subject (finding 6) | Must | Small | ⚠️ Built, check open | `apps/api/tests/security-google.test.ts` | Forged tokens are refused against Google's real keys (`preflight --only google`); a genuine Google token needs one real sign-in with your Google client id | none |
+| SEC-05 | Lock down `/api/auth/oauth`: verify Google's ID token, link accounts by provider and subject (finding 6) | Must | Small | ✅ Built | `apps/api/tests/security-google.test.ts` | Forged tokens are refused against Google's real keys (`preflight --only google`); a genuine sign-in with the owner's own Google client was done and works (owner's report, 2026-10-29) | none |
 | SEC-06 | Export and bulk-action protection: e-mail alert and a daily cap (finding 4; the step-up moved to SEC-06b, D-02) | Must | Small | ✅ Built | `apps/api/tests/security-2fa-stepup.test.ts`, `apps/api/tests/exports.test.ts` | — | none |
 | SEC-07 | Trusted client IP behind the proxy (finding 8) | Must | Smaller | ⚠️ Built, check open | `apps/api/tests/security-ops.test.ts`, `apps/web/src/lib/client-ip.ts` | Rehearsed behind a local TLS proxy that sets Cloudflare's headers (the log records the CDN's address, visitor-typed headers are ignored); not behind a real CDN. At deploy set CLIENT_IP_HEADER and let the origin accept traffic only from the CDN: sent straight to the origin, a spoofed header is believed. `npm run share` goes through a real Cloudflare edge | none |
 | SEC-08 | Audit log: the owner's own trail, append-only (D-01, was Should) | Must | Small | ✅ Built | `apps/api/tests/security-ops.test.ts`, `apps/api/prisma/migrations/20261020000000_security_hardening` | Limit: staff actions arrive with ADM-01 | none |

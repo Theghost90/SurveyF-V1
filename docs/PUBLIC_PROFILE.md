@@ -6,6 +6,7 @@ Profiles: `full` (staging and pilot, everything) and `public` (launch, nothing t
 
 | Feature | Backlog rows | `full` | `public` | Why |
 |---|---|---|---|---|
+| Sign-in and sign-up with Google (SEC-05; needs the owner's own Google OAuth client) | SEC-05 | on | **on** | no money; works, verified by the owner 2026-10-29 |
 | WhatsApp surveys, results, CSV and Sheets export | core | on | **on** | no money |
 | Subscriptions paid through the six providers (own fees) | core | on | **on** | SurveyFlow is the merchant for its own service |
 | Discount codes (no money issued) | core | on | **on** | a cash-equivalent code needs counsel |
@@ -25,3 +26,4 @@ Profiles: `full` (staging and pilot, everything) and `public` (launch, nothing t
 
 ## Log of changes to this list
 - 2026-10-29: first proposal.
+- 2026-10-29: Google sign-in added as a row (on in `public`): SEC-05 is built and verified.
