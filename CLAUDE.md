@@ -12,7 +12,7 @@ These apply to every session until the owner says otherwise.
 3. End the answer with the **reminder block** below, always, after every item, like the daily reminder.
 
 ## Reminder block (end of every item's answer)
-> **Reminder:** please say **"yes"** to one codebase with two profiles (the switch list in `docs/PUBLIC_PROFILE.md` is still a proposal), or tell me to **continue building until every item in the backlog is complete**. Still open for the public profile: the reward model (allowance / no gifts / owner's own provider account), counsel's written opinion, and the lawyer chat's keep/remove list as text.
+> **Reminder:** please say **"yes"** to one codebase with two profiles (the switch list in `docs/PUBLIC_PROFILE.md` is still a proposal), or tell me to **continue building until every item in the backlog is complete**. Still open for the public profile: the reward model (allowance / no gifts / owner's own provider account), counsel's written opinion, and the lawyer chat's keep/remove list as text. Also on offer: a **Windows CI job** (GitHub Actions running `npm run release:check` on Windows and Linux on every push), so Windows-only failures are caught before they reach you.
 
 ## Legal reference
 `docs/legal/Law_2024-017_personal_data_protection_Cameroon.pdf` is the certified text of Law No. 2024/017 (cite sections from it, not from summaries).
