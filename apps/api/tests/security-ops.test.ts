@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import path from 'node:path';
 import { createHmac, randomBytes, scryptSync } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -346,7 +347,8 @@ describe('production refuses to start with a protection missing (SEC-02, SEC-03,
 describe('key rotation (scripts/rotate-keys.mts)', () => {
   const root = fileURLToPath(new URL('../../../', import.meta.url));
   const run = (args: string[], over: Record<string, string>) =>
-    execFileSync(`${root}node_modules/.bin/tsx`, [`${root}scripts/rotate-keys.mts`, ...args], { env: { ...process.env, ...over }, encoding: 'utf8', timeout: 120_000, cwd: root });
+    // tsx's own entry run by node: `node_modules/.bin/tsx` is a .cmd shim on Windows, which execFileSync cannot start
+    execFileSync(process.execPath, [path.join(root, 'node_modules/tsx/dist/cli.mjs'), path.join(root, 'scripts/rotate-keys.mts'), ...args], { env: { ...process.env, ...over }, encoding: 'utf8', timeout: 120_000, cwd: root });
   const devKey = scryptSync('surveyflow-dev-only-encryption-key', 'sf-salt', 32).toString('base64');
 
   it('reports first, then moves everything onto the new key, and reports nothing left', async () => {
