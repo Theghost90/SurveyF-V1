@@ -112,14 +112,20 @@ export const authOptions: NextAuthOptions = {
     },
   },
   events: {
-    /** Signing out also ends the session at the API, so a copy of the cookie is useless from this moment. Best effort: signing out never waits on it. */
+    /**
+     * Signing out also ends the session at the API, so a copy of the cookie is useless from this moment. Best effort: signing out never waits on it.
+     * It runs inside the sign-out request, so the visitor's address and browser can be read here and are forwarded like on every other call (SEC-07); before,
+     * the security log recorded this server (127.0.0.1, "unknown system") for every sign-out. One call ends the session and writes one line: with a live API token
+     * the call is "logout", once that token has run out the refresh token proves whose session it is ("signout").
+     */
     async signOut({ token }) {
-      const calls: Promise<unknown>[] = [];
-      if (token?.refreshToken) {
-        calls.push(fetch(`${API_URL}/api/auth/signout`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...internalHeaders() }, body: JSON.stringify({ refreshToken: token.refreshToken }), cache: 'no-store' }));
-      }
-      if (token?.apiToken) calls.push(fetch(`${API_URL}/api/auth/logout`, { method: 'POST', headers: { ...internalHeaders(), authorization: `Bearer ${token.apiToken}` }, cache: 'no-store' }));
-      await Promise.allSettled(calls);
+      let visitor: Record<string, string> = {};
+      try { visitor = forwardedFrom(headerGetter(await nextHeaders())); } catch { /* no request around it: unknown, never a guess */ }
+      const live = !!token?.apiToken && (token.apiTokenExp ?? 0) > Date.now();
+      try {
+        if (live) await fetch(`${API_URL}/api/auth/logout`, { method: 'POST', headers: { ...internalHeaders(), ...visitor, authorization: `Bearer ${token!.apiToken}` }, cache: 'no-store' });
+        else if (token?.refreshToken) await fetch(`${API_URL}/api/auth/signout`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...internalHeaders(), ...visitor }, body: JSON.stringify({ refreshToken: token.refreshToken }), cache: 'no-store' });
+      } catch { /* the cookie is gone either way */ }
     },
   },
 };
