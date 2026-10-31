@@ -177,6 +177,15 @@ const schema = z.object({
   // provider tariffs are known — see docs/DECISIONS.md. 0 would make SurveyFlow absorb fees on every gift.
   GIFT_FEE_PERCENT: z.coerce.number().min(0).max(30).default(5),
 
+  // --- payout limits (PAY-13) ---
+  // A wallet topped up by card and paid out to Mobile Money numbers is the textbook cash-out route for a stolen card, and the chargeback arrives after the money has gone
+  // (docs/PAYMENTS.md section 5.1). These are the numbers that limit what can leave: per account and per phone number in any rolling 24 hours, and a hold on the payouts
+  // of an account that is only a few days old. THE DEFAULTS ARE MY SIZING, NOT YOUR PROVIDERS' TERMS: size them against each provider's dispute window before real money.
+  PAYOUT_ACCOUNT_MAX_XAF_PER_DAY: z.coerce.number().int().min(1).default(100_000), // all payouts of one account, in CFA francs
+  PAYOUT_PHONE_MAX_XAF_PER_DAY: z.coerce.number().int().min(1).default(5_000), // all payouts to one phone number, from every account together
+  PAYOUT_PHONE_MAX_COUNT_PER_DAY: z.coerce.number().int().min(1).default(3), // and how many
+  PAYOUT_HOLD_DAYS: z.coerce.number().int().min(0).max(60).optional(), // payouts of an account younger than this wait. Default 3; 0 with the mock gift provider (nothing real moves)
+
   // --- Google ---
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
@@ -200,6 +209,8 @@ export type Env = z.infer<typeof schema> & {
   jwtSecrets: string[];
   waMode: 'mock' | 'live';
   giftProvider: 'mock' | 'campay';
+  /** PAYOUT_HOLD_DAYS, or its default: 3 days, 0 while the gift provider is the mock one. */
+  payoutHoldDays: number;
   pspFees: PspFees;
   webOrigins: string[];
   emailProvider: 'mock' | 'smtp' | 'resend' | 'brevo';
@@ -285,6 +296,7 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     jwtSecrets: [jwtSecret, ...(e.JWT_SECRET_PREVIOUS ?? '').split(',').map((x) => x.trim()).filter((x) => x.length >= 32)],
     waMode,
     giftProvider,
+    payoutHoldDays: e.PAYOUT_HOLD_DAYS ?? (giftProvider === 'mock' ? 0 : 3),
     pspFees: parsePspFees(e.PSP_FEES, e.CAMERPAY_PLAN),
     webOrigins,
     emailProvider,

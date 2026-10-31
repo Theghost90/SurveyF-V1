@@ -101,7 +101,7 @@ docs/META_CHECK.md  running the WhatsApp integration against a real Meta test ap
 ## Tests
 
 ```bash
-npm test                          # shared (84) + API (492) + website (22) tests, then the script tests (57) and the backlog check. Needs the local Postgres/Redis (`docker compose up -d`); the API tests use their own `surveyflow_test` database, which `npm test` creates and migrates by itself first (`npm run test:db`, `scripts/test-db.mjs`)
+npm test                          # shared (84) + API (505) + website (22) tests, then the script tests (57) and the backlog check. Needs the local Postgres/Redis (`docker compose up -d`); the API tests use their own `surveyflow_test` database, which `npm test` creates and migrates by itself first (`npm run test:db`, `scripts/test-db.mjs`)
 npm run typecheck                 # the three workspaces
 npm run audit:gate                # npm audit --omit=dev: fails on a high or critical advisory that is not written in docs/audit-allowlist.json with a reason and an end date
 npm run release:check             # typecheck + the website's lint + npm test + the audit gate: before every release

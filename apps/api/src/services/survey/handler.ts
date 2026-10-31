@@ -3,7 +3,8 @@ import { START_WORDS, STOP_WORDS, fromWaId, parseAnswerId, parseTemplatePayload,
 import { phoneIndex, prisma } from '../../lib/prisma';
 import { redis, withLock } from '../../lib/redis';
 import { autoSyncCompleted } from '../exports/sheets';
-import { planGift, thankYouText } from '../gifts';
+import { planGift, thankYouText, type GiftPlan } from '../gifts';
+import { noteHeld } from '../payout-limits';
 import { sendInConversation, applyDeliveryStatus } from '../whatsapp/sender';
 import { step, type Inbound, type RuntimeSurvey, type SessionState } from './engine';
 import { deleteSession, getSession, saveSession } from './sessions';
@@ -172,7 +173,7 @@ type RecipientWithSurvey = SurveyRecipient & {
 async function loadSurvey(id: string) {
   return prisma.survey.findUnique({
     where: { id },
-    include: { questions: { orderBy: { order: 'asc' } }, user: { select: { plan: true, locale: true, giftCurrency: true, preferredCurrency: true, country: true } } },
+    include: { questions: { orderBy: { order: 'asc' } }, user: { select: { plan: true, locale: true, giftCurrency: true, preferredCurrency: true, country: true, createdAt: true } } },
   });
 }
 
@@ -263,6 +264,7 @@ async function turn(phoneNumberId: string, msg: WaInboundMessage, log: Logger) {
   // ---- persist (answer + funnel status + gift) atomically ---------------------------------------
   let completed = false;
   let completedRecipientId: string | null = null;
+  let heldGift: GiftPlan['held'];
   await prisma.$transaction(async (tx) => {
     if (result.saveAnswer) {
       await tx.response.upsert({
@@ -293,6 +295,7 @@ async function turn(phoneNumberId: string, msg: WaInboundMessage, log: Logger) {
         completed = true;
         completedRecipientId = recipient!.id;
         const gift = await planGift(tx, survey, contact);
+        heldGift = gift.held;
         messages.push({ kind: 'text', body: thankYouText(survey, gift) });
         break;
       }
@@ -308,6 +311,7 @@ async function turn(phoneNumberId: string, msg: WaInboundMessage, log: Logger) {
     autoSyncCompleted(survey.id, contact.id).catch((err) => log.warn({ err: (err as Error).message }, 'sheets auto-sync failed'));
     track(survey.userId, 'first_response').catch(() => {});
     checkMilestone(survey.id, log).catch((err) => log.warn({ err: (err as Error).message }, 'milestone alert failed'));
+    if (heldGift) await noteHeld(survey.userId, heldGift); // after the commit: a mail must not leave for a transaction that could have rolled back
   }
 }
 

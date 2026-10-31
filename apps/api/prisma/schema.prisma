@@ -69,6 +69,9 @@ enum GiftStatus {
   // ADDED: participant finished but the owner's wallet could not cover the gift. The participant got a plain
   // thank-you (never a promise we can't keep); the owner can top up and release these.
   unfunded
+  // ADDED (PAY-13): a payout stopped by a safety limit (a young account, a daily cap per account or per phone number). Not debited, not promised: the participant
+  // got a plain thank-you. Released automatically, oldest first, when the limit allows it (jobs: releaseHeldGifts).
+  held
 }
 
 enum SubscriptionStatus {
@@ -370,6 +373,12 @@ model GiftDelivery {
   refundedAt        DateTime? // set when a DEFINITE failure returned amount+fee to the wallet (ambiguous failures stay debited)
   notifyViaTemplate Boolean   @default(false) // released after a top-up: the 24h window is closed, so notify with a template
 
+  // ADDED (PAY-13). What the daily caps count: set when the payout is committed (debited and queued), in CFA francs at that moment. Null while held or unfunded.
+  committedAt  DateTime?
+  committedXAF Int?
+  heldReason   String? // young_account | account_daily_cap | phone_daily_cap | amount_above_cap | fx_unavailable
+  heldUntil    DateTime? // when the limit is looked at again; null = it will not clear by itself (a single gift above a cap)
+
   survey  Survey  @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
@@ -378,6 +387,8 @@ model GiftDelivery {
   @@unique([surveyId, contactId])
   @@unique([surveyId, code])
   @@index([status, scheduledFor])
+  @@index([committedAt])
+  @@index([status, heldUntil])
 }
 
 // ADDED: the spec's `db.addToDrawPool`.

@@ -321,12 +321,13 @@ export default async function surveyRoutes(app: FastifyInstance) {
       currency: walletCurrency(owner), // every amount below is in the owner's wallet currency
       money: {
         sent: cost(['sent']), inFlight: cost(['pending']), unfunded: cost(['unfunded']),
+        held: cost(['held']),                                        // stopped by a payout limit (PAY-13): not debited, released by itself
         failedRefunded: failed.count - needsCheck.count,            // definite failures: money went back to the wallet
         needsCheck,                                                  // unknown outcome: still debited, never auto-retried
       },
       items: items.map((g) => ({
         id: g.id, type: g.giftType, value: g.giftValue, status: g.status, sentAt: g.sentAt, error: g.errorMessage, contact: g.contact.name, code: g.code,
-        cost: g.amount ? g.amount + g.fee : null, refunded: !!g.refundedAt,
+        cost: g.amount ? g.amount + g.fee : null, refunded: !!g.refundedAt, heldReason: g.status === 'held' ? g.heldReason : null, heldUntil: g.status === 'held' ? g.heldUntil : null,
         // Only for a gift that was really delivered (the endpoint enforces the same rule).
         receiptUrl: g.status === 'sent' && g.amount && (PAID_GIFT_TYPES as readonly string[]).includes(g.giftType) ? receiptUrl(g.id) : null,
       })),

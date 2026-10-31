@@ -108,12 +108,12 @@ Every item was **reproduced against the old code first** (a throwaway test, sinc
 * **WhatsApp notices are best effort** (outside the 24 h window they are not delivered): the in-app banner and "Payments in progress" are what you can rely on.
 * The job is **single-leader**: one replica asks the providers; if jobs are disabled everywhere, late payments wait until they are enabled again.
 * Prices, fees and provider ranking were not changed by this pass.
-* **Chargebacks and the cash-out route**: a wallet topped up by card can be paid out to Mobile Money numbers, and there is no cap on payouts per account or per phone yet (PAY-13, counted in the backlog, not built). §5.1.
+* **Chargebacks and the cash-out route**: a wallet topped up by card can be paid out to Mobile Money numbers. Payouts are limited per account, per phone number and by the age of the account (PAY-13, built 2026-10-31, the numbers are a sizing of mine). §5.1 and §5.2.
 
 ### 5.1 Chargebacks and the cash-out route (researched 2026-10-28)
 
 **The route.** A wallet can be topped up by card and gifts can be paid out to Mobile Money numbers. With open sign-up that is the textbook cash-out path for a stolen card: the thief tops up, sends gifts to numbers they control, and the real cardholder's chargeback arrives later, after the money has left.
-Nothing but the wallet balance limits it today. **PAY-13** (a cap per account and per phone per day, and a hold on payouts for accounts only a few days old) is the row for it in `docs/BACKLOG.md`: counted, **not built**.
+Before PAY-13 nothing but the wallet balance limited it. **PAY-13** (a cap per account and per phone per day, and a hold on payouts for accounts only a few days old) was built on 2026-10-31: §5.2. What it does and does not close is written there.
 
 **What is known about the window and who pays.** From a web search on 2026-10-28. The providers' own pages could not be opened from the build environment, so this is what the search results quote, not your contract:
 - *Card networks* (vendor guides, not the rulebooks): a cardholder can usually dispute within about **120 days** of the transaction (Mastercard: 120, or 540 for goods or services not delivered; Visa: up to 120, 75 for some fraud, up to 540 for some reason codes); the merchant has about 30 to 45 days per phase at the network.
@@ -125,6 +125,19 @@ Nothing but the wallet balance limits it today. **PAY-13** (a cap per account an
 
 **What it means.** The exposure is the card top-ups of the first months, and it lands on SurveyFlow's balance at the provider; a provider that places a lien on 48 hours' notice needs somebody watching its dispute notifications every day (the admin console, ADM-02, would make that a screen).
 The numbers of PAY-13 have to be sized against your providers' actual terms before the first real card top-up: ask each one for its chargeback window, its response time, whether it keeps a reserve, and whether it charges a fee per dispute.
+
+### 5.2 The payout limits (PAY-13, built 2026-10-31)
+
+**What is limited**, at the moment a gift is planned (before the participant is told anything), in CFA francs over any rolling 24 hours:
+- **per account**: `PAYOUT_ACCOUNT_MAX_XAF_PER_DAY` (default 100,000);
+- **per phone number, from every account together**: `PAYOUT_PHONE_MAX_XAF_PER_DAY` (5,000) and `PAYOUT_PHONE_MAX_COUNT_PER_DAY` (3). The number is matched by its keyed hash, so the same number is the same number in every account;
+- **a hold on young accounts**: payouts of an account younger than `PAYOUT_HOLD_DAYS` wait (3 days; 0 while the gift provider is the mock one, nothing real moving).
+
+A gift a limit stops is **held**: not debited, not promised (the participant gets a plain thank-you, as for an empty wallet), shown to the owner with the reason, and released by itself, oldest first, by a job that runs every ten minutes, as soon as the limit allows; the participant is then told through the gift notice. The owner's own "release" and "retry" buttons go through the same check. Counted: gifts pending, sent, or failed with an unknown outcome (the money may have left); not counted: a gift definitely refunded. The caps are exact when participants finish at the same instant (advisory locks per account and per phone; a test runs five in parallel against room for three).
+
+**How to size the numbers.** The exposure per day of a fraudster who controls *k* phone numbers is about *k* × the phone cap, however many accounts they open: the phone cap is the tighter control, the account cap the backstop. Choose the phone cap so that *k* you consider plausible (ten? fifty?) times it is a loss you can absorb in a day, and the account cap so that an honest owner's biggest survey is not stopped for days. **My defaults (5,000 per number, 100,000 per account, 3 days) are a guess, not your providers' terms.**
+
+**What this does not close.** (a) A cardholder can dispute for about 120 days (§5.1); a hold of three days only stops the fastest cash-out, it does not outlast the dispute window. (b) A fraudster with many numbers and many accounts is slowed, not stopped. (c) Top-ups are not limited (the row is about payouts). (d) The sharper control, that money topped up by card cannot be paid out for N days while Mobile Money funds can (a Mobile Money push has no chargeback), is **not built**: it needs the wallet to remember how each franc arrived. It is the next thing to build if card top-ups go live. (e) An honest owner meets the limits: in the first days of an account, or with a very large survey, gifts are delayed, not lost. The owner is told by e-mail once a day, and sees the held gifts with the reason.
 
 ## 6. How it is checked
 

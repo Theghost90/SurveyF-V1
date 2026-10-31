@@ -9,7 +9,7 @@ export type Lang = 'en' | 'fr';
 export type MailKind =
   | 'verify_email' | 'register_existing' | 'reset_password' | 'password_changed' | 'new_device' | 'failed_logins'
   | 'export_alert' | 'bulk_delete_alert' | 'bulk_read_alert' | 'sheets_sync_paused' | 'two_factor_changed' | 'sessions_revoked' | 'link_google' | 'step_up_code'
-  | 'deletion_requested' | 'deletion_cancelled' | 'account_deleted' | 'template_recategorised';
+  | 'deletion_requested' | 'deletion_cancelled' | 'account_deleted' | 'template_recategorised' | 'payouts_held';
 
 export interface MailParams {
   url?: string;
@@ -134,6 +134,19 @@ function build(kind: MailKind, lang: Lang, p: MailParams): Body {
           ? `Meta announced that it will classify the template "${t}" of your WhatsApp account as ${p.to}${p.when ? ` around ${p.when}` : ''}. Messages sent with it will then be billed at the ${p.to} rate, which is higher than the ${p.from} rate.`
           : `Meta classified the template "${t}" of your WhatsApp account as ${p.to} (it was ${p.from}). Messages sent with it are billed at the ${p.to} rate.`,
         'What SurveyFlow does: a survey that was sent at the utility rate is now treated as a marketing survey, and you will be asked to accept that cost before each send. Invitations that were waiting to go out at the old rate are held back (status "failed"): send them again from the survey page once you accept the new cost.', 'The rates are Meta\'s, by country: see the billing of your WhatsApp Business account.'] };
+    }
+    case 'payouts_held': {
+      const why: Record<string, [string, string]> = {
+        young_account: ['votre compte a quelques jours seulement', 'your account is only a few days old'],
+        account_daily_cap: ['votre compte a atteint sa limite quotidienne de versements', 'your account reached its daily payout limit'],
+        phone_daily_cap: ['un numéro de téléphone a atteint sa limite quotidienne de cadeaux', 'a phone number reached its daily limit for gifts'],
+        amount_above_cap: ['le montant d’un cadeau dépasse la limite : il ne partira pas tout seul, contactez le support', 'the amount of a gift is above the limit, so it will not be sent by itself: contact support'],
+        fx_unavailable: ['le taux de change de la devise de votre porte-monnaie n’est pas disponible', 'the exchange rate for your wallet currency is not available'],
+      };
+      const [frWhy, enWhy] = why[p.what ?? ''] ?? ['une limite de sécurité', 'a safety limit'];
+      return fr
+        ? { subject: 'Des cadeaux attendent à cause d’une limite de sécurité', lines: [hi, `Certains cadeaux de participants n’ont pas encore été versés : ${frWhy}. Les participants ont reçu un simple remerciement. Les cadeaux partent automatiquement, du plus ancien au plus récent, dès que la limite le permet${p.when ? ` (vers le ${p.when})` : ''}, et les participants sont alors prévenus.`, 'Rien n’a été débité de votre porte-monnaie pour ces cadeaux. Ces limites protègent les porte-monnaie contre l’encaissement de cartes volées ; pour les faire changer, contactez le support.'] }
+        : { subject: 'Some gifts are waiting because of a safety limit', lines: [hi, `Some gifts for participants were not paid out yet: ${enWhy}. The participants received a plain thank-you. The gifts are sent automatically, oldest first, as soon as the limit allows${p.when ? ` (about ${p.when})` : ''}, and the participants are then told.`, 'Nothing was debited from your wallet for these gifts. These limits protect wallets from stolen cards being cashed out; to have them changed, contact support.'] };
     }
     case 'step_up_code':
       return fr

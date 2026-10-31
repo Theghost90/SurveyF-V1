@@ -28,7 +28,7 @@ export async function deletionBlockers(userId: string): Promise<DeletionBlocker[
   const [user, gifts, payments] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { giftBalance: true, giftCurrency: true } }),
     // pending = about to be paid out; unfunded = a promise the owner may still release; both are money decisions that belong to the owner.
-    prisma.giftDelivery.count({ where: { survey: { userId }, status: { in: ['pending', 'unfunded'] } } }),
+    prisma.giftDelivery.count({ where: { survey: { userId }, status: { in: ['pending', 'unfunded', 'held'] } } }),
     // pending = the customer may still be paying; review = money received that a person has not decided on yet.
     prisma.paymentTransaction.count({ where: { userId, status: { in: ['pending', 'review'] } } }),
   ]);

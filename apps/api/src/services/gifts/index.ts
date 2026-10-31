@@ -8,6 +8,7 @@ import { walletCurrency } from '../billing-currency';
 import { getQuote } from '../fx';
 import { receiptToken, receiptUrl } from '../receipts';
 import { creditWallet, debitWallet, heldByGift } from '../wallet';
+import { decidePayout, lockPayoutScope, noteHeld, xafEquivalent, type HoldReason } from '../payout-limits';
 import { credsFor } from '../whatsapp/accounts';
 import { getGateway } from '../whatsapp/gateway';
 import { enqueueGiftNotice } from '../whatsapp/sender';
@@ -30,9 +31,11 @@ export interface GiftPlan {
   type: 'airtime' | 'momo' | 'discount' | 'prize_draw' | 'none';
   value?: string | null;
   code?: string;
+  /** A payout that a safety limit stopped (PAY-13): the participant got a plain thank-you; the caller tells the owner once the transaction has committed. */
+  held?: { reason: HoldReason; until: Date | null };
 }
 
-type SurveyWithOwner = Survey & { user: Pick<User, 'plan' | 'giftCurrency' | 'preferredCurrency' | 'country'> };
+type SurveyWithOwner = Survey & { user: Pick<User, 'plan' | 'giftCurrency' | 'preferredCurrency' | 'country' | 'createdAt'> };
 
 const nextTopOfHour = () => {
   const d = new Date();
@@ -46,7 +49,7 @@ const nextTopOfHour = () => {
  * Falls back to "none" (plain thank-you) when the plan no longer includes gifts or the
  * survey's gift budget is exhausted — never promising something we will not deliver.
  */
-export async function planGift(tx: Tx, survey: SurveyWithOwner, contact: Pick<Contact, 'id'>): Promise<GiftPlan> {
+export async function planGift(tx: Tx, survey: SurveyWithOwner, contact: Pick<Contact, 'id' | 'phoneHash'>): Promise<GiftPlan> {
   const type = survey.giftType;
   if (type === 'none' || type === 'custom') return { type: 'none' };
   if (!getPlan(survey.user.plan).features.giftAutomation) return { type: 'none' };
@@ -63,16 +66,22 @@ export async function planGift(tx: Tx, survey: SurveyWithOwner, contact: Pick<Co
     case 'momo': {
       if (!survey.giftAmount) return { type: 'none' };
       const fee = giftFee(survey.giftAmount, env.GIFT_FEE_PERCENT);
-      const gift = await tx.giftDelivery.create({
-        data: {
-          surveyId: survey.id, contactId: contact.id, giftType: type, giftValue: survey.giftValue, amount: survey.giftAmount, fee, currency: walletCurrency(survey.user),
-          status: 'pending', scheduledFor: survey.giftDeliveryMode === 'batch' ? nextTopOfHour() : new Date(),
-        },
-      });
+      const currency = walletCurrency(survey.user);
+      const base = { surveyId: survey.id, contactId: contact.id, giftType: type, giftValue: survey.giftValue, amount: survey.giftAmount, fee, currency, scheduledFor: survey.giftDeliveryMode === 'batch' ? nextTopOfHour() : new Date() };
+      // PAY-13: may this payout be committed now? Decided before anything is promised or debited, under the locks that make the caps exact.
+      const amountXAF = await xafEquivalent(survey.giftAmount, currency);
+      await lockPayoutScope(tx, survey.userId, contact.phoneHash);
+      const decision = await decidePayout(tx, { userId: survey.userId, phoneHash: contact.phoneHash, amountXAF, accountCreatedAt: survey.user.createdAt });
+      if (!decision.allow) {
+        // Held: not debited, not promised. The participant gets a plain thank-you now and a gift notice (through the template: the 24 h window will be closed) when it is paid.
+        await tx.giftDelivery.create({ data: { ...base, status: 'held', heldReason: decision.reason, heldUntil: decision.until, notifyViaTemplate: true } });
+        return { type: 'none', held: { reason: decision.reason, until: decision.until } };
+      }
+      const gift = await tx.giftDelivery.create({ data: { ...base, status: 'pending', committedAt: new Date(), committedXAF: amountXAF } });
       const paid = await debitWallet(tx, survey.userId, survey.giftAmount + fee, gift.id, `Gift — ${survey.title}`);
       if (paid === null) {
         // Not enough prepaid balance: the participant must NOT be promised a gift. Keep the row so the owner can release it.
-        await tx.giftDelivery.update({ where: { id: gift.id }, data: { status: 'unfunded' } });
+        await tx.giftDelivery.update({ where: { id: gift.id }, data: { status: 'unfunded', committedAt: null, committedXAF: null } });
         return { type: 'none' };
       }
       return { type, value: survey.giftValue };
@@ -205,42 +214,86 @@ async function failAndRefund(id: string, message: string) {
   });
 }
 
-/** Re-activates one gift (failed→pending or unfunded→pending) and debits the wallet for it, atomically. false = wallet too low. */
-async function reactivate(from: 'failed' | 'unfunded', id: string): Promise<boolean> {
+/**
+ * Re-activates one gift (failed, unfunded or held, to pending) and debits the wallet for it, atomically. The payout limits (PAY-13) are checked FIRST, under the
+ * same locks as when a gift is planned: pressing "release" or "retry" cannot walk around a cap, it moves the gift to `held` instead. 'insufficient' = the wallet is too low.
+ */
+type Reactivation = 'ok' | 'insufficient' | 'held' | 'skipped';
+async function reactivate(from: 'failed' | 'unfunded' | 'held', id: string, now = new Date()): Promise<Reactivation> {
   try {
     return await prisma.$transaction(async (tx) => {
-      const g = await tx.giftDelivery.findUnique({ where: { id }, select: { amount: true, fee: true, survey: { select: { userId: true, title: true } } } });
-      if (!g?.amount) return false;
+      const g = await tx.giftDelivery.findUnique({
+        where: { id },
+        select: { amount: true, fee: true, currency: true, contact: { select: { phoneHash: true } }, survey: { select: { userId: true, title: true, user: { select: { createdAt: true } } } } },
+      });
+      if (!g?.amount) return 'skipped';
+      const amountXAF = await xafEquivalent(g.amount, g.currency);
+      await lockPayoutScope(tx, g.survey.userId, g.contact.phoneHash);
+      const decision = await decidePayout(tx, { userId: g.survey.userId, phoneHash: g.contact.phoneHash, amountXAF, accountCreatedAt: g.survey.user.createdAt, now });
+      const eligible = { id, status: from, ...(from === 'failed' ? { refundedAt: { not: null } } : {}) };
+      if (!decision.allow) {
+        const moved = await tx.giftDelivery.updateMany({
+          where: eligible,
+          data: { status: 'held', heldReason: decision.reason, heldUntil: decision.until, committedAt: null, committedXAF: null, errorMessage: null, notifyViaTemplate: true },
+        });
+        return moved.count ? 'held' : 'skipped';
+      }
       // The compare-and-set is what makes a double click / two tabs charge once.
       const claimed = await tx.giftDelivery.updateMany({
-        where: { id, status: from, ...(from === 'failed' ? { refundedAt: { not: null } } : {}) },
+        where: eligible,
         // The participant's 24h window is long closed by now: notify through the approved template instead of free text.
-        data: { status: 'pending', attempts: 0, errorMessage: null, refundedAt: null, scheduledFor: new Date(), notifyViaTemplate: true },
+        data: { status: 'pending', attempts: 0, errorMessage: null, refundedAt: null, scheduledFor: now, notifyViaTemplate: true, heldReason: null, heldUntil: null, committedAt: now, committedXAF: amountXAF },
       });
-      if (!claimed.count) return false;
+      if (!claimed.count) return 'skipped';
       const ok = await debitWallet(tx, g.survey.userId, g.amount + g.fee, id, `${from === 'failed' ? 'Retry' : 'Released'} — ${g.survey.title}`);
-      if (ok === null) throw new InsufficientFunds();
-      return true;
+      if (ok === null) {
+        // A held gift that is allowed out but cannot be paid waits for the owner like any unfunded one; the others are rolled back to where they were.
+        if (from !== 'held') throw new InsufficientFunds();
+        await tx.giftDelivery.update({ where: { id }, data: { status: 'unfunded', committedAt: null, committedXAF: null } });
+        return 'insufficient';
+      }
+      return 'ok';
     });
   } catch (err) {
-    if (err instanceof InsufficientFunds) return false;
+    if (err instanceof InsufficientFunds) return 'insufficient';
     throw err;
   }
 }
 class InsufficientFunds extends Error {}
 
 /**
+ * The job that lets held gifts go (PAY-13): every held gift whose time has come, oldest first, goes through the same check as a new one. Those the limits still stop
+ * are looked at again later; those the wallet can no longer pay become unfunded and wait for the owner. Participants are told through the gift notice once it is paid.
+ */
+export async function releaseHeldGifts(now = new Date(), limit = 200): Promise<{ released: number; stillHeld: number; unfunded: number }> {
+  const rows = await prisma.giftDelivery.findMany({ where: { status: 'held', heldUntil: { lte: now } }, orderBy: { createdAt: 'asc' }, take: limit, select: { id: true } });
+  const out = { released: 0, stillHeld: 0, unfunded: 0 };
+  for (const { id } of rows) {
+    const r = await reactivate('held', id, now);
+    if (r === 'ok') out.released++;
+    else if (r === 'held') out.stillHeld++;
+    else if (r === 'insufficient') out.unfunded++;
+  }
+  return out;
+}
+
+/**
  * Owner action: re-queue gifts the provider DEFINITELY rejected (their money was already refunded, so this debits again).
  * Gifts whose outcome is unknown (ambiguous / interrupted) are never retried — a retry could pay a participant twice.
  */
-export async function retryFailedGifts(surveyId: string): Promise<{ requeued: number; insufficient: number }> {
+export async function retryFailedGifts(surveyId: string): Promise<{ requeued: number; insufficient: number; held: number }> {
   const rows = await prisma.giftDelivery.findMany({
     where: { surveyId, status: 'failed', giftType: { in: [...PAID_GIFT_TYPES] }, refundedAt: { not: null } },
     orderBy: { createdAt: 'asc' }, select: { id: true },
   });
   let requeued = 0;
-  for (const { id } of rows) if (await reactivate('failed', id)) requeued++;
-  return { requeued, insufficient: rows.length - requeued };
+  let held = 0;
+  for (const { id } of rows) {
+    const r = await reactivate('failed', id);
+    if (r === 'ok') requeued++;
+    else if (r === 'held') held++;
+  }
+  return { requeued, insufficient: rows.length - requeued - held, held };
 }
 
 /**
@@ -248,17 +301,20 @@ export async function retryFailedGifts(surveyId: string): Promise<{ requeued: nu
  * Deliberately NOT automatic — a top-up meant for survey B must not be silently spent on survey A's backlog.
  * Oldest first; stops at the first gift the balance cannot cover.
  */
-export async function releaseUnfundedGifts(surveyId: string): Promise<{ released: number; remaining: number }> {
+export async function releaseUnfundedGifts(surveyId: string): Promise<{ released: number; remaining: number; held: number }> {
   const rows = await prisma.giftDelivery.findMany({
     where: { surveyId, status: 'unfunded', giftType: { in: [...PAID_GIFT_TYPES] } },
     orderBy: { createdAt: 'asc' }, select: { id: true },
   });
   let released = 0;
+  let held = 0;
   for (const { id } of rows) {
-    if (!(await reactivate('unfunded', id))) break;
-    released++;
+    const r = await reactivate('unfunded', id);
+    if (r === 'insufficient') break; // the balance cannot cover this one, nor the next ones
+    if (r === 'ok') released++;
+    else if (r === 'held') held++; // a limit stops it: it waits, and goes by itself
   }
-  return { released, remaining: rows.length - released };
+  return { released, remaining: rows.length - released - held, held };
 }
 
 /**

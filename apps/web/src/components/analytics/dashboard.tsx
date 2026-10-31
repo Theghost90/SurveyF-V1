@@ -36,7 +36,7 @@ interface GiftMoney {
   items: Array<{ id: string; value: string | null; status: string; sentAt: string | null; contact: string; receiptUrl: string | null }>;
   /** The owner's wallet currency: every amount in `money` and `items` is in it. */
   currency: string;
-  money: { sent: { count: number; amount: number }; inFlight: { count: number; amount: number }; unfunded: { count: number; amount: number }; failedRefunded: number; needsCheck: { count: number; amount: number } };
+  money: { sent: { count: number; amount: number }; inFlight: { count: number; amount: number }; unfunded: { count: number; amount: number }; held: { count: number; amount: number }; failedRefunded: number; needsCheck: { count: number; amount: number } };
 }
 interface NotStartedPage { total: number; page: number; pageSize: number; items: Array<{ recipientId: string; contactId: string; name: string; phone: string; status: string; sentAt: string | null }> }
 interface ResponsesPage { total: number; page: number; pageSize: number; questions: Array<{ id: string; number: number; text: string }>; items: Array<{ contactId: string; name: string; phone: string; status: string; completedAt: string | null; abandonedAtQuestion: number | null; answers: Record<string, string> }> }
@@ -259,6 +259,12 @@ export function AnalyticsDashboard({ id }: { id: string }) {
                     {canRelease
                       ? <Button size="sm" variant="brand" loading={busy === 'release'} onClick={releaseGifts}>{t('w.a.release', { amount: money(giftData.money.unfunded.amount, giftData.currency, locale) })}</Button>
                       : <Link href="/billing#wallet" className={buttonVariants({ size: 'sm', variant: 'brand' })}>{t('w.a.topupFirst')}</Link>}
+                  </div>
+                )}
+                {giftData && giftData.money.held.count > 0 && (
+                  <div role="status" className="flex basis-full items-start gap-3 rounded-xl bg-canvas px-4 py-3 text-sm text-body" data-testid="gift-held">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-ink" aria-hidden />
+                    <span className="flex-1">{t('w.a.held', { n: giftData.money.held.count })}</span>
                   </div>
                 )}
               </CardContent>
