@@ -42,7 +42,7 @@ export function planFeatures(plan: PaidPlanKey, t: TFn, locale: 'en' | 'fr') {
   list.push(p.features.giftAutomation ? { text: t('feat.gifts') } : { text: t('feat.noGifts') });
   if (p.features.googleSheets) list.push({ text: t('feat.sheets') });
   if (p.features.prioritySupport) list.push({ text: t('feat.support') });
-  if (p.limits.teamMembers > 1) list.push({ text: t('feat.team', { n: p.limits.teamMembers }), soon: true });
+  if (p.limits.teamMembers > 1) list.push({ text: t('feat.team', { n: p.limits.teamMembers }) });
   if (p.features.apiAccess) list.push({ text: t('feat.api'), soon: true });
   if (p.features.whiteLabel) list.push({ text: t('feat.whitelabel'), soon: true });
   return list;

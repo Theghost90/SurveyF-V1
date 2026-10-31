@@ -86,7 +86,7 @@ export const PLANS: Record<PlanKey, PlanDef> = {
 };
 
 /** Entitlements that are sold on the plan table but not built in V1. Shown as "Coming soon". */
-export const COMING_SOON: Array<keyof PlanFeatures | 'teamMembers'> = ['teamMembers', 'apiAccess', 'whiteLabel'];
+export const COMING_SOON: Array<keyof PlanFeatures | 'teamMembers'> = ['apiAccess', 'whiteLabel']; // team members are built (BIZ-04): the seats of a plan include the owner
 
 export const PAST_DUE_GRACE_DAYS = 3;
 /** Annual billing = 11 × monthly ("1 month free"). */

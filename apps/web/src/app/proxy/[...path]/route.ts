@@ -4,6 +4,7 @@ import { proxyVerdict } from '@surveyflow/shared';
 import { API_URL, internalHeaders } from '@/lib/auth';
 import { renewApiToken, type Renewed } from '@/lib/api-session';
 import { forwardedFrom } from '@/lib/client-ip';
+import { WORKSPACE_ID } from '@/lib/workspace';
 import { readCapped } from '@/lib/read-capped';
 import { SECURE_COOKIES, SESSION_COOKIE, SESSION_SECONDS } from '@/lib/session-cookie';
 
@@ -57,6 +58,13 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path: s
   if (ct) base.set('content-type', ct);
   base.set('accept', req.headers.get('accept') ?? 'application/json');
   for (const [k, v] of Object.entries(forwarded)) base.set(k, v);
+  // The workspace a team member is working on (BIZ-04): passed on as a request, which the API checks on every call. A value that is not an id is refused here: dropping
+  // it quietly would let somebody who believes they are in a colleague's workspace change their OWN data instead.
+  const workspace = req.headers.get('x-workspace');
+  if (workspace !== null) {
+    if (!WORKSPACE_ID.test(workspace)) return refuse(400, 'bad_request');
+    base.set('x-workspace', workspace);
+  }
 
   // The API token as it stands, and what happened when it had to be renewed during this request.
   const state: { apiToken: string | undefined; renewed: Renewed | null; ended: boolean } = { apiToken: isPublic ? undefined : cookie!.apiToken, renewed: null, ended: false };

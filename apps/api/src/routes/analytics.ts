@@ -8,7 +8,8 @@ import { guardExport, guardRead } from '../services/security/data-guard';
 export default async function analyticsRoutes(app: FastifyInstance) {
   const auth = { preHandler: app.authenticate };
 
-  app.get('/api/surveys/:id/analytics', auth, async (req) => computeAnalytics((req.params as { id: string }).id, req.userId));
+  // A team viewer gets the results without any participant (BIZ-04); the owner and editors get everything.
+  app.get('/api/surveys/:id/analytics', auth, async (req) => computeAnalytics((req.params as { id: string }).id, req.userId, { people: req.role !== 'viewer' }));
 
   /** "View all responses": one row per participant, answers keyed by question number. */
   app.get('/api/surveys/:id/responses', auth, async (req) => {

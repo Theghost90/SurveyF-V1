@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/page-header';
 import { AnalyticsBotCard } from '@/components/settings/analytics-bot-card';
 import { DataTab } from '@/components/settings/data-tab';
 import { SecurityTab } from '@/components/settings/security-tab';
+import { TeamTab } from '@/components/settings/team-tab';
 import { WhatsAppConnect } from '@/components/settings/whatsapp-connect';
 import { useAccount } from '@/lib/account';
 import { ApiError, api, errorMessage } from '@/lib/api';
@@ -100,17 +101,24 @@ function SettingsTabs() {
   const t = useT();
   const router = useRouter();
   const params = useSearchParams();
-  const tab = params.get('tab') ?? 'profile';
+  const { account } = useAccount();
+  // A team member inside an owner's workspace (BIZ-04) has their OWN security, data and teams here; the workspace's profile, WhatsApp, bot and integrations are the owner's.
+  const member = !!account?.member;
+  const tab = params.get('tab') ?? (member ? 'security' : 'profile');
   return (
     <>
       <PageHeader title={t('app.nav.settings')} />
       <Tabs value={tab} onValueChange={(v) => router.replace(`/settings?tab=${v}`)}>
-        <TabsList><TabsTrigger value="profile">{t('s.profile')}</TabsTrigger><TabsTrigger value="whatsapp">WhatsApp</TabsTrigger><TabsTrigger value="analytics">{t('ab.tab')}</TabsTrigger><TabsTrigger value="integrations">{t('s.integrations')}</TabsTrigger><TabsTrigger value="security">{t('s.security')}</TabsTrigger><TabsTrigger value="data">{t('dt.tab')}</TabsTrigger></TabsList>
+        <TabsList>
+          {!member && <><TabsTrigger value="profile">{t('s.profile')}</TabsTrigger><TabsTrigger value="whatsapp">WhatsApp</TabsTrigger><TabsTrigger value="analytics">{t('ab.tab')}</TabsTrigger><TabsTrigger value="integrations">{t('s.integrations')}</TabsTrigger></>}
+          <TabsTrigger value="security">{t('s.security')}</TabsTrigger><TabsTrigger value="team">{t('tm.tab')}</TabsTrigger><TabsTrigger value="data">{t('dt.tab')}</TabsTrigger>
+        </TabsList>
         <TabsContent value="profile"><Profile /></TabsContent>
         <TabsContent value="whatsapp"><Card><CardHeader><CardTitle>{t('w.title')}</CardTitle></CardHeader><CardContent><WhatsAppConnect /></CardContent></Card></TabsContent>
         <TabsContent value="analytics"><AnalyticsBotCard /></TabsContent>
         <TabsContent value="integrations"><Integrations /></TabsContent>
         <TabsContent value="security"><SecurityTab /></TabsContent>
+        <TabsContent value="team"><TeamTab /></TabsContent>
         <TabsContent value="data"><DataTab /></TabsContent>
       </Tabs>
     </>

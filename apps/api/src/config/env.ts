@@ -196,6 +196,9 @@ const schema = z.object({
   // Providers whose balance SurveyFlow may READ by itself, with the credentials it already has (comma-separated: flutterwave, campay). Empty = none: balances are typed in.
   BALANCE_SOURCES: z.string().default(''),
 
+  // --- team members (BIZ-04) ---
+  TEAM_INVITE_DAYS: z.coerce.number().int().min(1).max(30).default(7), // how long an invitation link works
+
   // --- Google ---
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),

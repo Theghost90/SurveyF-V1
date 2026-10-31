@@ -21,6 +21,7 @@ Newest first.
 <!-- backlog:table changelog -->
 | Date | Level | Change |
 | --- | --- | --- |
+| 2026-10-31 | major | BIZ-04 is built (Could): team members as viewer or editor with their own login and two-step verification, deny by default over every route, a per-member trail, invitations only the right confirmed person can accept, seats from the plan. Pricing no longer says "soon" for team members. Not driven in a real browser yet. |
 | 2026-10-31 | major | PAY-07 is built as the logic and a command line, without a screen (Must): unknown-outcome payouts and gifts held for good can now be settled by a person, with who, why, evidence, ledger amounts, one decision once, and a record for the operator and for the customer. The screen stays part of ADM-02 and waits for ADM-01. |
 | 2026-10-31 | major | PAY-02 is built (Must): the exact daily checks of the ledger, top-ups and payouts, the comparison with what the providers hold (typed in, or read from Flutterwave and Campay when switched on), thresholds, one alert a day per finding. The readers have never run against a real provider and the keys are not read-only. |
 | 2026-10-31 | major | PAY-13 is built (Must): a cap on payouts per account and per phone number in any 24 hours, a hold on payouts of young accounts, held gifts released by themselves, the owner's release and retry going through the same check. The numbers are my sizing, not your providers' terms. |
@@ -38,15 +39,15 @@ Newest first.
 ## At a glance
 
 <!-- backlog:summary:start -->
-**76 rows: 27 built, 49 not built.** Of the built ones, 10 still have a check open against a real service or device.
+**76 rows: 28 built, 48 not built.** Of the built ones, 11 still have a check open against a real service or device.
 
 | | ✅ Built | ⬜ Not built | Total |
 |---|---|---|---|
 | Must | 15 | 19 | 34 |
 | Should | 8 | 11 | 19 |
-| Could | 4 | 10 | 14 |
+| Could | 5 | 9 | 14 |
 | Won't this release | 0 | 9 | 9 |
-| **All** | **27** | **49** | **76** |
+| **All** | **28** | **48** | **76** |
 
 Each ID in the grid carries its state: ✅ built · ⚠️ built, a check is open · ⬜ not built · 🧑 your action, no code · ⏸ deferred by you · 🔭 next version.
 
@@ -54,7 +55,7 @@ Each ID in the grid carries its state: ✅ built · ⚠️ built, a check is ope
 |---|---|---|---|---|
 | **MUST** (34) | ⚠️ SEC-07, ⚠️ DAT-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01, 🧑 BIZ-02 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⚠️ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-01, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⚠️ WA-03, ⚠️ PAY-02, ⚠️ PAY-07, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, 🧑 LEG-03, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
 | **SHOULD** (19) | ✅ SEC-10, ⚠️ SEC-11, ✅ SEC-14, ⬜ PAY-06 | ⚠️ SEC-13, ⬜ WA-06, ⬜ BIZ-03, 🧑 LEG-05, 🧑 OPS-04 | ✅ SEC-06b, ✅ SEC-09, ✅ SEC-12, ✅ SEC-17, ⬜ ADM-03, ⬜ ADM-04, ⬜ LEG-02b, ⬜ PAY-08b, ⬜ PAY-09, ⬜ WA-05 | none |
-| **COULD** (14) | ✅ SEC-18 | ✅ SEC-19, ✅ SEC-20 | ⬜ WA-07, ⬜ DSN-01, ⬜ ADM-06, ⬜ PAY-12, ⬜ OPS-05 | ✅ SEC-15, ⬜ BIZ-04, ⬜ BIZ-05, ⬜ BIZ-06, ⬜ ADM-05, ⬜ PAY-11 |
+| **COULD** (14) | ✅ SEC-18 | ✅ SEC-19, ✅ SEC-20 | ⬜ WA-07, ⬜ DSN-01, ⬜ ADM-06, ⬜ PAY-12, ⬜ OPS-05 | ⚠️ BIZ-04, ✅ SEC-15, ⬜ BIZ-05, ⬜ BIZ-06, ⬜ ADM-05, ⬜ PAY-11 |
 | **WON'T THIS RELEASE** (9) | 🔭 FUT-05 | ⏸ DEF-01, ⏸ DEF-02 | 🔭 FUT-03 | ⏸ DEF-03, ⏸ DEF-04, 🔭 FUT-01, 🔭 FUT-02, 🔭 FUT-04 |
 <!-- backlog:summary:end -->
 
@@ -85,6 +86,7 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 | SEC-10 | Generic sign-up response, alias normalisation (findings 9 and 15) | Should | Smaller | ✅ Built | `apps/api/tests/security-auth.test.ts` | — | none |
 | SEC-11 | argon2id passwords, no 72-byte truncation (findings 10 and 15) | Should | Smaller | ⚠️ Built, check open | `apps/api/tests/security-crypto.test.ts`, `apps/api/src/lib/password.ts` | Interoperates with the reference C implementation in both directions on Linux (`preflight --only argon2`); on the owner's Windows PC (win32-x64, Node 24.21.0, 2026-10-31) it hashes in 26 ms and verifies, wrong and non-ASCII passwords included. Still open: macOS (the lock carries its binaries, integrity matches), and the comparison with the reference implementation on Windows (Python's argon2-cffi was not installed there) | none |
 | SEC-12 | Forced owner filter and a test of every route (finding 12) | Should | Big | ✅ Built | `apps/api/tests/security-isolation.test.ts` | Limit: Postgres row-level security is not built; the guard is the owner filter plus the all-routes test | none |
+| BIZ-04 | Team members (built 2026-10-31 on your instruction, D-10): viewer and editor, no admin role, seats from the plan | Could | Bigger | ⚠️ Built, check open | `apps/api/tests/team.test.ts`, `apps/api/src/services/team/access.ts`, `apps/web/tests/proxy-workspace.test.ts`, `apps/api/prisma/migrations/20261031040000_team_members` | The Team tab, the accept page and the workspace switcher have not been driven in a real browser. The invitation e-mail has not gone through a real provider (SEC-01). An editor sees participants' names and can send: the trail is evidence, not a barrier | ⚖ |
 | SEC-13 | Security headers and a nonce-based CSP (finding 15) | Should | Small | ⚠️ Built, check open | `apps/api/tests/security-ops.test.ts`, `apps/web/src/lib/csp.ts`, `scripts/e2e-security.mjs` | Seen behind a local TLS proxy (HSTS, a fresh nonce per page, `__Host-` cookies, zero CSP violations in the browser run); the Turnstile widget under the CSP and a real CDN are not: `preflight --only headers --url <your site>`, `npm run share` is a real Cloudflare edge | none |
 | SEC-14 | Search terms and credentials out of the logs (finding 14) | Should | Smaller | ✅ Built | `apps/api/tests/security-ops.test.ts` | — | none |
 | SEC-17 | Dependency majors (zod 4, puppeteer 25, Prisma 7) and an `npm audit` gate before every release (D-07) | Should | Big | ✅ Built | `scripts/audit-gate.mjs`, `scripts/tests/audit-gate.test.mjs`, `docs/audit-allowlist.json`, `apps/api/prisma.config.ts`, `packages/shared/src/zod-setup.test.ts` | Audit: 0 advisories. Needs Node 22.12 or newer; Prisma 7 refuses destructive commands from an AI agent, so the human runs `npm run db:push` | none |
@@ -108,7 +110,6 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 | ADM-03 | Platform analytics, aggregates only; needs ADM-01 (D-08) | Should | Big | ⬜ Not built | Code | none |
 | ADM-04 | Maintenance and health console; needs ADM-01 (D-08) | Should | Big | ⬜ Not built | Code | none |
 | WA-07 | Daily summary e-mail and a "50% completed" alert (SEC-01 now exists) | Could | Big | ⬜ Not built | Code | none |
-| BIZ-04 | Team members | Could | Bigger | ⬜ Not built | Code | ⚖ |
 | BIZ-05 | API access | Could | Bigger | ⬜ Not built | Code | ⚖ |
 | BIZ-06 | White-label | Could | Bigger | ⬜ Not built | Code | ⚖ |
 | DSN-01 | Dark theme, token export, Storybook | Could | Big | ⬜ Not built | Code | none |
@@ -188,6 +189,7 @@ For every row: what it fixes, the risks it brings (with a label), and how they a
 | SEC-10 | Probing and alias farming | UX: a confusing message and rare wrong merges | Clear wording, known patterns only |
 | SEC-11 | Weak hashing and 72-byte truncation | OPS: migration errors, and cost on a small host | Re-hash on sign-in, bcrypt still verifies, the cost is a setting, measured by the preflight |
 | SEC-12 | One forgotten filter leaks everything | OPS: broken queries | A forced owner filter, a test over every route, a route inventory guard |
+| BIZ-04 | Single-user accounts | SEC: privilege escalation. DATA: more people see contacts | Built: two roles and no admin (nobody inside can widen access, only the owner invites, after "confirm it is you"); a table of what each role may reach, deny by default and proven over every route of the API; exports, number reveals, bulk deletes, money and connections owner-only; a viewer's analytics are anonymised; the member's own two-step verification required on every request; every change recorded against the member, whatever the route; invitations single-use, expiring, acceptable only by the confirmed address they were sent to. Not done: per-survey permissions, a real-browser run |
 | SEC-13 | Weak browser protections | UX: the CSP breaks a script | A report-only mode, zero violations in the browser run, a nonce per page |
 | SEC-14 | Phone numbers and tokens in logs | none notable | Strip queries and credentials |
 | SEC-15 | Plain-text names and phones in the database | OPS: key management. UX: phone search breaks | A keyed hash index, a key ring, a rotation script |
@@ -230,7 +232,6 @@ For every row: what it fixes, the risks it brings (with a label), and how they a
 | WA-07 | No owner alerts by e-mail or WhatsApp | COST: billed to SurveyFlow. ABUSE: spam | Reuse the bot's caps and mute |
 | BIZ-01, BIZ-02, OPS-03 | Unpublished support, false "soon" claims, open pricing | LEGAL/UX: promising what does not exist | Publish only what you can honour |
 | BIZ-03, OPS-04 | A guessed cap, untested devices | none notable | Use the funnel events, test real devices |
-| BIZ-04 | Single-user accounts | SEC: privilege escalation. DATA: more people see contacts | Roles, a per-member audit, 2FA |
 | BIZ-05 | No integrations | SEC: leaked keys and contact scraping | Scoped hashed keys, rate limits, an IP allowlist |
 | BIZ-06 | No branding | SEC: custom-domain takeover. LEGAL: Meta display-name rules | DNS verification, manual review |
 | DSN-01, OPS-05 | No dark theme, a single-leader jobs process | PAY: several leaders could double-process | Keep the claim-once locks |

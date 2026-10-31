@@ -469,6 +469,17 @@ export default async function authRoutes(app: FastifyInstance) {
   }
 
   app.get('/api/auth/me', auth, async (req) => {
+    if (req.role !== 'owner') {
+      // A team member in an owner's workspace (BIZ-04): the plan and what the workspace is called, so the app works; not the owner's address, number or billing.
+      // The person shown is the member themselves, and `member` says which role they have here.
+      const [summary, me] = await Promise.all([accountSummary(req.userId), prisma.user.findUniqueOrThrow({ where: { id: req.actorId }, select: { name: true, email: true, locale: true } })]);
+      return {
+        ...summary,
+        user: { ...summary.user, id: req.actorId, name: me.name, email: me.email, phone: null, locale: me.locale, hasPassword: true },
+        subscription: { ...summary.subscription, amountFCFA: 0, paymentMethod: null, pspProvider: null },
+        member: { role: req.role, workspaceId: req.userId },
+      };
+    }
     await syncCountry(req);
     return accountSummary(req.userId);
   });

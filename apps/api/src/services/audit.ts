@@ -20,19 +20,23 @@ export type AuditAction =
   | 'bulk_read' | 'bulk_read_blocked' | 'sheets_autosync_confirmed' | 'sheets_autosync_paused'
   | 'account_export' | 'account_delete_requested' | 'account_delete_cancelled' | 'account_delete_postponed' | 'account_deleted'
   | 'survey_sent' | 'template_recategorised' | 'payout_held' | 'reconciliation_alert'
-  | 'staff_gift_resolved' | 'staff_payment_resolved' | 'staff_number_revealed' | 'support_action';
+  | 'staff_gift_resolved' | 'staff_payment_resolved' | 'staff_number_revealed' | 'support_action'
+  | 'team_invited' | 'team_invite_revoked' | 'team_member_joined' | 'team_role_changed' | 'team_member_removed' | 'team_member_left' | 'member_request' | 'member_denied';
 
-export interface AuditContext { userId?: string | null; sessionId?: string | null; ip?: string | null; userAgent?: string | null }
+/** `actorId`: set when a team member acted on an owner's workspace (BIZ-04): `userId` is then the owner, whose trail it is, and `actorId` is who did it. */
+export interface AuditContext { userId?: string | null; actorId?: string | null; sessionId?: string | null; ip?: string | null; userAgent?: string | null }
 
 export interface AuditEntry { action: AuditAction; targetType?: string; targetId?: string; meta?: Record<string, string | number | boolean | null> }
 
 /** Where a request came from, in the form the trail keeps it. */
 export function auditContext(req: FastifyRequest, userId?: string | null): AuditContext {
-  return { userId: userId ?? (req as { userId?: string }).userId ?? null, sessionId: (req as { sessionId?: string }).sessionId ?? null, ip: clientIp(req), userAgent: req.headers['user-agent'] ?? null };
+  const uid = userId ?? (req as { userId?: string }).userId ?? null;
+  const actor = (req as { actorId?: string }).actorId;
+  return { userId: uid, actorId: actor && actor !== uid ? actor : null, sessionId: (req as { sessionId?: string }).sessionId ?? null, ip: clientIp(req), userAgent: req.headers['user-agent'] ?? null };
 }
 
 const data = (ctx: AuditContext, e: AuditEntry): Prisma.AuditLogUncheckedCreateInput => ({
-  userId: ctx.userId ?? null, sessionId: ctx.sessionId ?? null, action: e.action, targetType: e.targetType ?? null, targetId: e.targetId ?? null,
+  userId: ctx.userId ?? null, actorId: ctx.actorId ?? null, sessionId: ctx.sessionId ?? null, action: e.action, targetType: e.targetType ?? null, targetId: e.targetId ?? null,
   ipPrefix: ipPrefix(ctx.ip), userAgent: ctx.userAgent ? describeAgent(ctx.userAgent).label : null, meta: (e.meta as Prisma.InputJsonValue | undefined) ?? undefined,
 });
 
@@ -47,6 +51,7 @@ export async function audit(ctx: AuditContext, e: AuditEntry, log: { warn: (o: u
 }
 
 export async function recentActivity(userId: string, take = 40) {
-  const rows = await prisma.auditLog.findMany({ where: { userId }, orderBy: { at: 'desc' }, take });
+  // The owner's own security trail: what team members did is in the team's activity (BIZ-04), not mixed into it.
+  const rows = await prisma.auditLog.findMany({ where: { userId, actorId: null }, orderBy: { at: 'desc' }, take });
   return rows.map((r) => ({ id: r.id, at: r.at, action: r.action, place: [r.userAgent, r.ipPrefix].filter(Boolean).join(' · ') || null, meta: r.meta }));
 }

@@ -9,7 +9,8 @@ export type Lang = 'en' | 'fr';
 export type MailKind =
   | 'verify_email' | 'register_existing' | 'reset_password' | 'password_changed' | 'new_device' | 'failed_logins'
   | 'export_alert' | 'bulk_delete_alert' | 'bulk_read_alert' | 'sheets_sync_paused' | 'two_factor_changed' | 'sessions_revoked' | 'link_google' | 'step_up_code'
-  | 'deletion_requested' | 'deletion_cancelled' | 'account_deleted' | 'template_recategorised' | 'payouts_held' | 'reconciliation_alert';
+  | 'deletion_requested' | 'deletion_cancelled' | 'account_deleted' | 'template_recategorised' | 'payouts_held' | 'reconciliation_alert'
+  | 'team_invite' | 'team_joined' | 'team_removed';
 
 export interface MailParams {
   url?: string;
@@ -156,6 +157,20 @@ function build(kind: MailKind, lang: Lang, p: MailParams): Body {
         ? { subject: `Rapprochement quotidien : ${items.length} point(s) à regarder`, lines: ['Le contrôle quotidien des porte-monnaie et des fonds chez les prestataires a trouvé :', ...items.map((i) => `• ${i}`), 'Rien n’a été modifié par ce contrôle. Détail : npx tsx --env-file=.env scripts/reconcile.mts status. Cette alerte n’est envoyée qu’une fois par jour et par point.'] }
         : { subject: `Daily reconciliation: ${items.length} item(s) to look at`, lines: ['The daily check of the wallets and of the funds at the payment providers found:', ...items.map((i) => `• ${i}`), 'This check changed nothing. Details: npx tsx --env-file=.env scripts/reconcile.mts status. This alert is sent once a day for each item.'] };
     }
+    case 'team_invite': {
+      const role = p.template === 'editor' ? ['éditeur', 'editor'] : ['lecteur', 'viewer'];
+      return fr
+        ? { subject: `${p.name || 'Quelqu’un'} vous invite à travailler sur son compte SurveyFlow`, lines: [hi, `${p.name || 'Une personne'}${p.what ? ` (${p.what})` : ''} vous invite à rejoindre son équipe SurveyFlow en tant que ${role[0]}.`, `Pour accepter, connectez-vous (ou créez un compte) avec CETTE adresse e-mail, confirmez-la, puis ouvrez le lien. Il ne marche qu’une fois et pour cette adresse, pendant ${p.count ?? 7} jours. Vous devrez aussi activer l’authentification à deux facteurs sur votre compte avant de pouvoir travailler dans cette équipe.`], button: { label: 'Voir l’invitation', url: p.url! }, foot: 'Si vous ne connaissez pas cette personne, ignorez ce message : rien ne se passera.' }
+        : { subject: `${p.name || 'Someone'} invites you to work on their SurveyFlow account`, lines: [hi, `${p.name || 'Someone'}${p.what ? ` (${p.what})` : ''} invites you to join their SurveyFlow team as ${role[1]}.`, `To accept, sign in (or create an account) with THIS e-mail address, confirm it, then open the link. It works once and only for this address, for ${p.count ?? 7} days. You will also need to turn on two-factor authentication on your own account before you can work in this team.`], button: { label: 'View the invitation', url: p.url! }, foot: 'If you do not know this person, ignore this message: nothing will happen.' };
+    }
+    case 'team_joined':
+      return fr
+        ? { subject: 'Un membre a rejoint votre équipe SurveyFlow', lines: [hi, `${p.name ? '' : ''}${p.what || 'Une personne'} a accepté votre invitation et a maintenant le rôle ${p.template === 'editor' ? 'éditeur' : 'lecteur'} dans votre espace.`, 'Vous voyez tout ce que fait votre équipe dans Paramètres, Équipe. Vous pouvez retirer l’accès à tout moment.'] }
+        : { subject: 'A member joined your SurveyFlow team', lines: [hi, `${p.what || 'Someone'} accepted your invitation and now has the ${p.template === 'editor' ? 'editor' : 'viewer'} role in your workspace.`, 'You can see everything your team does in Settings, Team. You can remove their access at any time.'] };
+    case 'team_removed':
+      return fr
+        ? { subject: 'Vous ne faites plus partie d’une équipe SurveyFlow', lines: [hi, `Votre accès à l’espace de travail${p.what ? ` « ${p.what} »` : ''} a été retiré. Vous n’y avez plus accès.`] }
+        : { subject: 'You are no longer part of a SurveyFlow team', lines: [hi, `Your access to the workspace${p.what ? ` "${p.what}"` : ''} was removed. You no longer have access to it.`] };
     case 'step_up_code':
       return fr
         ? { subject: `Votre code de confirmation SurveyFlow : ${p.code}`, lines: [hi, `Votre code de confirmation est ${p.code}. Il est valable 10 minutes.`], foot: 'Ne le communiquez à personne. SurveyFlow ne vous le demandera jamais par téléphone ou message.' }

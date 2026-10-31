@@ -1,5 +1,6 @@
 import { signOut } from 'next-auth/react';
 import type { TFn, TKey } from './i18n';
+import { setWorkspace, workspaceHeaders } from './workspace';
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string, public details?: Record<string, any>, public issues?: Array<{ path: string; message: string }>) {
@@ -30,9 +31,11 @@ async function withStepUp<T>(run: () => Promise<T>): Promise<T> {
 async function request<T>(path: string, init: { method?: string; body?: unknown; form?: FormData; signal?: AbortSignal }): Promise<T> {
   let res: Response;
   try {
+    const method = init.method ?? (init.body !== undefined || init.form ? 'POST' : 'GET');
+    const headers = { ...(init.form ? {} : init.body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...workspaceHeaders(path, method) };
     res = await fetch(`/proxy${path}`, {
-      method: init.method ?? (init.body !== undefined || init.form ? 'POST' : 'GET'),
-      headers: init.form ? undefined : init.body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      method,
+      headers: Object.keys(headers).length ? headers : undefined,
       body: init.form ?? (init.body !== undefined ? JSON.stringify(init.body) : undefined),
       signal: init.signal,
       cache: 'no-store',
@@ -55,6 +58,12 @@ async function request<T>(path: string, init: { method?: string; body?: unknown;
     void signOut({ callbackUrl: '/login?expired=1' });
     throw new ApiError(401, 'unauthorized', 'unauthorized');
   }
+  // Removed from a team, or the account that invited them is gone: this browser goes back to the person's own account instead of showing errors on every page.
+  if (res.status === 403 && data?.error === 'not_a_member' && typeof window !== 'undefined') {
+    setWorkspace(null);
+    window.location.assign('/dashboard');
+    throw new ApiError(403, 'not_a_member', 'not_a_member');
+  }
   if (!res.ok) {
     // One screen answers every "connect your WhatsApp number first" refusal, wherever it came from (see components/whatsapp-gate.tsx).
     if (data?.error === 'whatsapp_not_connected' && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(WHATSAPP_REQUIRED_EVENT));
@@ -75,9 +84,11 @@ export const TWO_FACTOR_REQUIRED_EVENT = 'sf:two-factor-required';
 /** Downloads a file through the proxy (keeps the filename the API chose). `init.method: 'POST'` for a download that is asked for rather than fetched. */
 export function download(path: string, fallbackName: string, init: { method?: string; body?: unknown } = {}) {
   return withStepUp(async () => {
+    const method = init.method ?? 'GET';
+    const headers = { ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...workspaceHeaders(path, method) };
     const res = await fetch(`/proxy${path}`, {
-      method: init.method ?? 'GET', cache: 'no-store',
-      headers: init.body !== undefined ? { 'Content-Type': 'application/json' } : undefined, body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+      method, cache: 'no-store',
+      headers: Object.keys(headers).length ? headers : undefined, body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));

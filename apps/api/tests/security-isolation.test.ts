@@ -35,7 +35,7 @@ const PUBLIC = new Set([
 ]);
 
 /** The page of A's data that the markers below let a test recognise anywhere in a response. */
-interface Victim { world: World; contactIds: string[]; surveyId: string; sessionId: string; paymentId: string; paymentRef: string; accountId: string; ownerPhoneId: string; email: string; markers: string[] }
+interface Victim { world: World; contactIds: string[]; surveyId: string; sessionId: string; paymentId: string; paymentRef: string; accountId: string; ownerPhoneId: string; memberRowId: string; inviteId: string; email: string; markers: string[] }
 
 const PARAM: Array<[RegExp, (v: Victim) => string]> = [
   [/^\/api\/surveys\/:id/, (v) => v.surveyId],
@@ -45,6 +45,8 @@ const PARAM: Array<[RegExp, (v: Victim) => string]> = [
   [/^\/api\/payments\/:id/, (v) => v.paymentId],
   [/^\/api\/whatsapp\/accounts\/:id/, (v) => v.accountId],
   [/^\/api\/analytics-bot\/phones\/:id/, (v) => v.ownerPhoneId],
+  [/^\/api\/team\/members\/:id/, (v) => v.memberRowId],
+  [/^\/api\/team\/invites\/:id/, (v) => v.inviteId],
   [/^\/api\/dev\/simulator\/:contactId/, (v) => v.contactIds[0]!],
 ];
 
@@ -57,6 +59,7 @@ const BODY: Record<string, unknown> = {
   'POST /api/surveys/:id/sync/google-sheets': { autoSync: true },
   'PATCH /api/contacts/:id': { name: 'hijacked' },
   'PATCH /api/analytics-bot/phones/:id': { alerts: false },
+  'PATCH /api/team/members/:id': { role: 'viewer' },
   'POST /api/payments/mock/:reference': { outcome: 'success' },
   'POST /api/dev/simulator/:contactId/send': { type: 'text', text: 'hello' },
 };
@@ -100,9 +103,13 @@ beforeAll(async () => {
   const second = await loginRaw(app, aUser.email, TEST_PASSWORD);
   const account = await prisma.whatsAppAccount.findFirstOrThrow({ where: { userId: a.userId } });
   const phone = await prisma.ownerPhone.create({ data: { userId: a.userId, phone: '237677733101' } });
+  // a team member and a pending invitation of A's: another owner must not be able to see, change or remove either
+  const colleague = await prisma.user.create({ data: { email: 'zz-marker-colleague@example.com', name: 'ZZ-MARKER-COLLEAGUE', businessName: 'x', phone: '+237677000002' } });
+  const memberRow = await prisma.teamMember.create({ data: { workspaceId: a.userId, memberId: colleague.id, role: 'editor', invitedBy: a.userId } });
+  const inviteRow = await prisma.teamInvite.create({ data: { workspaceId: a.userId, email: 'zz-marker-invitee@example.com', emailCanonical: 'zz-marker-invitee@example.com', role: 'viewer', tokenHash: 'zz-marker-hash', invitedBy: a.userId, expiresAt: new Date(Date.now() + 86_400_000) } });
   A = {
-    world: w, contactIds: w.contactIds, surveyId: w.surveyId, sessionId: JSON.parse(second.body).sessionId, paymentId: topup.id, paymentRef: topup.reference, accountId: account.id, ownerPhoneId: phone.id, email: aUser.email,
-    markers: ['ZZ-MARKER', aUser.email, w.surveyId, ...w.contactIds, account.id, topup.id, topup.reference, JSON.parse(second.body).sessionId, '237677733101', '677733100'],
+    world: w, contactIds: w.contactIds, surveyId: w.surveyId, sessionId: JSON.parse(second.body).sessionId, paymentId: topup.id, paymentRef: topup.reference, accountId: account.id, ownerPhoneId: phone.id, memberRowId: memberRow.id, inviteId: inviteRow.id, email: aUser.email,
+    markers: ['ZZ-MARKER', memberRow.id, inviteRow.id, aUser.email, w.surveyId, ...w.contactIds, account.id, topup.id, topup.reference, JSON.parse(second.body).sessionId, '237677733101', '677733100'],
   };
 
   // Owner B: a different owner with data of their own (so lists are not empty) on the same plan.

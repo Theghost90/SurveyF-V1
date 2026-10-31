@@ -140,6 +140,9 @@ model User {
   messageLogs      MessageLog[]
   sheetSyncs       SheetSync[]
   walletEntries    WalletEntry[]
+  teamMembers      TeamMember[]         @relation("Workspace") // people who work on this owner's workspace
+  memberships      TeamMember[]         @relation("Member") // the workspaces this person works on
+  teamInvites      TeamInvite[]         @relation("Invites")
   funnelEvents     FunnelEvent[]
   botAlerts        BotAlert[]
   ownerPhones      OwnerPhone[]
@@ -718,9 +721,12 @@ model AuditLog {
   ipPrefix   String?
   userAgent  String?
   meta       Json?
+  // BIZ-04: when a team member acted on an owner's workspace, `userId` is the owner (whose trail it is) and `actorId` is the member who did it. Null for the owner's own acts.
+  actorId    String?
 
   @@index([userId, at])
   @@index([action, at])
+  @@index([userId, actorId, at])
 }
 
 /**
@@ -780,4 +786,40 @@ model ReconciliationRun {
   report         Json
 
   @@index([at])
+}
+
+// ADDED (BIZ-04). A person who works on another owner's workspace with their OWN login, password and second factor. Only two roles, and only the owner manages the team.
+model TeamMember {
+  id          String   @id @default(cuid())
+  workspaceId String // the owner's User.id: whose surveys and participants this person works on
+  memberId    String // the member's own User.id
+  role        String // viewer | editor
+  invitedBy   String
+  createdAt   DateTime @default(now())
+
+  workspace User @relation("Workspace", fields: [workspaceId], references: [id], onDelete: Cascade)
+  member    User @relation("Member", fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, memberId])
+  @@index([memberId])
+}
+
+// ADDED (BIZ-04). An invitation by e-mail: single use, expires, and only the signed-in person whose confirmed address it was sent to can accept it.
+model TeamInvite {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  email          String
+  emailCanonical String
+  role           String
+  tokenHash      String    @unique // only the hash is stored: the link in the e-mail is the only copy of the token
+  invitedBy      String
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  workspace User @relation("Invites", fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([emailCanonical])
 }

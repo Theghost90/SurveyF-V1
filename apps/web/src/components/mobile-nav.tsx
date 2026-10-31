@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { BarChart3, FlaskConical, Home, Users } from 'lucide-react';
+import { useAccount } from '@/lib/account';
 import { useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 
@@ -12,13 +13,14 @@ import { cn } from '@/lib/utils';
 export function MobileNav({ showSimulator }: { showSimulator: boolean }) {
   const t = useT();
   const pathname = usePathname();
+  const member = useAccount().account?.member; // a team member (BIZ-04): no simulator, and a viewer has no participants
   if (pathname.startsWith('/onboarding')) return null; // the wizard is a focused flow: no navigation until it is done
   const is = (href: string) => pathname === href || pathname.startsWith(href + '/');
   const tabs = [
     { href: '/dashboard', label: t('app.nav.home'), Icon: Home },
     { href: '/surveys', label: t('app.nav.surveys'), Icon: BarChart3 },
-    { href: '/contacts', label: t('app.nav.contacts'), Icon: Users },
-    ...(showSimulator ? [{ href: '/simulator', label: t('app.nav.simulator'), Icon: FlaskConical }] : []),
+    ...(!member || member.role === 'editor' ? [{ href: '/contacts', label: t('app.nav.contacts'), Icon: Users }] : []),
+    ...(showSimulator && !member ? [{ href: '/simulator', label: t('app.nav.simulator'), Icon: FlaskConical }] : []),
   ];
 
   return (

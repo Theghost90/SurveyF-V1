@@ -2,7 +2,8 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import { AlertTriangle, ChevronDown, CreditCard, LogOut, Settings, Sparkles, Wallet } from 'lucide-react';
+import { AlertTriangle, ChevronDown, CreditCard, LogOut, Settings, Sparkles, Users, Wallet } from 'lucide-react';
+import useSWR from 'swr';
 import { Logo } from '@/components/logo';
 import { LanguageToggle } from '@/components/language-toggle';
 import { MobileNav } from '@/components/mobile-nav';
@@ -18,6 +19,7 @@ import { useAccount } from '@/lib/account';
 import { dateShort, money, num } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
+import { currentWorkspace, setWorkspace } from '@/lib/workspace';
 import { useEffect } from 'react';
 
 export function AppShell({ children, showSimulator }: { children: React.ReactNode; showSimulator: boolean }) {
@@ -27,6 +29,10 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
   const router = useRouter();
   const { account } = useAccount();
   const { wallet } = useWallet();
+  // BIZ-04: a team member inside an owner's workspace sees the surveys (and, as an editor, the participants), never the owner's billing, wallet or connections.
+  const member = account?.member;
+  const { data: workspaces } = useSWR<{ items: Array<{ workspaceId: string; businessName: string; role: 'viewer' | 'editor' }> }>('/team/workspaces');
+  const switchTo = (id: string | null) => { setWorkspace(id); window.location.assign('/dashboard'); };
 
   // The customer segment is the one required answer of setup. Anyone without it (new sign-up that skipped the wizard, or an
   // account created before this question existed) is taken to the onboarding step that asks it, and nowhere else until answered.
@@ -36,8 +42,8 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
   const nav = [
     { href: '/dashboard', label: t('app.nav.dashboard') },
     { href: '/surveys', label: t('app.nav.surveys') },
-    { href: '/contacts', label: t('app.nav.contacts') },
-    ...(showSimulator ? [{ href: '/simulator', label: t('app.nav.simulator') }] : []),
+    ...(!member || member.role === 'editor' ? [{ href: '/contacts', label: t('app.nav.contacts') }] : []),
+    ...(showSimulator && !member ? [{ href: '/simulator', label: t('app.nav.simulator') }] : []),
   ];
 
   const inAccount = ['/settings', '/billing'].some((h) => pathname === h || pathname.startsWith(h + '/'));
@@ -76,8 +82,8 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
             })}
           </nav>
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:ml-0 sm:gap-3">
-            {account && <Link href="/billing" className="hidden lg:inline"><Badge variant={account.plan.key === 'trial' ? 'amber' : 'default'}>{t(`plan.${account.plan.key as 'trial'}`)}</Badge></Link>}
-            {account?.plan.features.giftAutomation && wallet && (
+            {account && !member && <Link href="/billing" className="hidden lg:inline"><Badge variant={account.plan.key === 'trial' ? 'amber' : 'default'}>{t(`plan.${account.plan.key as 'trial'}`)}</Badge></Link>}
+            {!member && account?.plan.features.giftAutomation && wallet && (
               <Link href="/billing#wallet" className="hidden lg:inline" aria-label={`${t('w.title')}: ${money(wallet.balance, wallet.currency, locale)}`}>
                 <Badge variant={wallet.balance === 0 ? 'amber' : 'neutral'}><Wallet className="mr-1 h-3.5 w-3.5" aria-hidden />{num(wallet.balance, locale)}</Badge>
               </Link>
@@ -93,17 +99,27 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
               <DropdownMenuContent align="end" className="min-w-[220px]">
                 <DropdownMenuLabel className="short:hidden xl:hidden">{account?.user.businessName}</DropdownMenuLabel>
                 <DropdownMenuLabel className="font-normal text-muted-foreground">{account?.user.email}</DropdownMenuLabel>
-                <DropdownMenuItem asChild className="min-h-[44px] short:min-h-[36px]">
+                {!member && <DropdownMenuItem asChild className="min-h-[44px] short:min-h-[36px]">
                   <Link href="/billing"><CreditCard className="h-4 w-4" aria-hidden />{t('app.nav.billing')}
                     {account && <Badge className="ml-auto lg:hidden" variant={account.plan.key === 'trial' ? 'amber' : 'default'}>{t(`plan.${account.plan.key as 'trial'}`)}</Badge>}
                   </Link>
-                </DropdownMenuItem>
-                {account?.plan.features.giftAutomation && wallet && (
+                </DropdownMenuItem>}
+                {!member && account?.plan.features.giftAutomation && wallet && (
                   <DropdownMenuItem asChild className="min-h-[44px] short:min-h-[36px] lg:hidden">
                     <Link href="/billing#wallet"><Wallet className="h-4 w-4" aria-hidden />{t('w.title')}<Badge className="ml-auto" variant={wallet.balance === 0 ? 'amber' : 'neutral'}>{num(wallet.balance, locale)}</Badge></Link>
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem asChild className="min-h-[44px] short:min-h-[36px]"><Link href="/settings"><Settings className="h-4 w-4" aria-hidden />{t('app.nav.settings')}</Link></DropdownMenuItem>
+                {(member || (workspaces?.items.length ?? 0) > 0) && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('tm.workspaces')}</DropdownMenuLabel>
+                    {member && <DropdownMenuItem className="min-h-[44px] short:min-h-[36px]" onSelect={() => switchTo(null)}><Users className="h-4 w-4" aria-hidden />{t('tm.mine')}</DropdownMenuItem>}
+                    {workspaces?.items.filter((w) => w.workspaceId !== currentWorkspace()).map((w) => (
+                      <DropdownMenuItem key={w.workspaceId} className="min-h-[44px] short:min-h-[36px]" onSelect={() => switchTo(w.workspaceId)}><Users className="h-4 w-4" aria-hidden />{w.businessName}<Badge className="ml-auto" variant="neutral">{t(`tm.role.${w.role}`)}</Badge></DropdownMenuItem>
+                    ))}
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="min-h-[44px] short:min-h-[36px]" onSelect={() => void signOut({ callbackUrl: '/' })}><LogOut className="h-4 w-4" aria-hidden />{t('app.signout')}</DropdownMenuItem>
               </DropdownMenuContent>
@@ -112,6 +128,15 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
         </div>
       </header>
 
+      {member && (
+        <div role="status" data-testid="member-banner" className="border-b border-mint-2/50 bg-mint/50 text-sm text-ink">
+          <div className="mx-auto flex max-w-[1344px] flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5 sm:px-8">
+            <Users className="h-4 w-4 text-leaf" aria-hidden />
+            <span className="font-medium">{t('tm.banner', { business: account?.user.businessName ?? '', role: t(`tm.role.${member.role}`) })}</span>
+            <button type="button" onClick={() => switchTo(null)} className={buttonVariants({ size: 'sm', variant: 'dark', className: 'ml-auto h-8 rounded-lg px-3 text-[13px]' })}>{t('tm.back')}</button>
+          </div>
+        </div>
+      )}
       {account?.user.deletionScheduledFor && <DeletionBanner scheduledFor={account.user.deletionScheduledFor} />}
       {account && account.user.emailVerified === false && <VerifyBanner email={account.user.email} />}
       {banner && (

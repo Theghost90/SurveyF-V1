@@ -27,7 +27,12 @@ const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 1000) / 10 :
 
 export interface DistributionEntry { label: string; count: number; pct: number }
 
-export async function computeAnalytics(surveyId: string, userId: string) {
+/**
+ * `people: false` is the version for a team viewer (BIZ-04): every count, distribution and free-text answer, but no name and no number next to any of them, and not the
+ * list of people who never replied. The shape is the same, so the page works; the fields that would name somebody are empty.
+ */
+export async function computeAnalytics(surveyId: string, userId: string, opts: { people?: boolean } = {}) {
+  const people = opts.people !== false;
   const survey = await prisma.survey.findFirst({
     where: { id: surveyId, userId },
     include: { questions: { orderBy: { order: 'asc' } } },
@@ -89,7 +94,7 @@ export async function computeAnalytics(surveyId: string, userId: string) {
           where: { questionId: q.id, NOT: { answer: '' } }, orderBy: { answeredAt: 'desc' }, take: 20,
           include: { contact: { select: { name: true, phone: true } } },
         });
-        texts = latest.map((r) => ({ answer: r.answer, answeredAt: r.answeredAt, name: r.contact.name, phone: maskPhone(r.contact.phone) }));
+        texts = latest.map((r) => ({ answer: r.answer, answeredAt: r.answeredAt, name: people ? r.contact.name : '', phone: people ? maskPhone(r.contact.phone) : '' }));
       } else if (q.type === 'multi') {
         const counts = new Map<string, number>();
         for (const r of rows) {
@@ -133,7 +138,7 @@ export async function computeAnalytics(surveyId: string, userId: string) {
         }
       : null;
 
-  const nonStarters = await prisma.surveyRecipient.findMany({
+  const nonStarters = !people ? [] : await prisma.surveyRecipient.findMany({
     where: { surveyId, status: { in: ['sent', 'delivered'] }, contact: { optedOutAt: null } },
     include: { contact: { select: { name: true, phone: true } } },
     orderBy: { sentAt: 'desc' }, take: 50,
