@@ -254,6 +254,20 @@ await step('analytics: funnel, completion rate and the drop-off alert reflect wh
   await page.getByTestId('remind-rule').waitFor();
   expect(/cannot be reminded yet/.test(await page.getByTestId('remind-wait-noReply').innerText()), 'a note explains when the non-responders can be reminded');
   await page.getByTestId('remind-wait-abandoned').waitFor();
+  // FUT-05: the funnel is a Recharts funnel chart by default, with the bars one click away and a real table of the same numbers for a screen reader
+  const chart = page.getByTestId('funnel-chart');
+  await chart.waitFor({ timeout: 15000 });
+  expect(await chart.locator('svg').count() > 0, 'the funnel chart draws an svg');
+  expect(await chart.locator('.recharts-funnel-trapezoid').count() >= 3, 'the funnel has a slice per step (sent, started, the questions, completed)');
+  expect(await chart.getAttribute('aria-label') !== null && /Invitation sent: 3/.test(await chart.getAttribute('aria-label')), 'the chart is described to a screen reader, with its numbers');
+  const table = page.getByTestId('funnel-table');
+  expect(/Invitation sent\s+3\s+100%/.test((await table.innerText()).replace(/\s+/g, ' ')), 'the table of the same numbers is in the page (invitations sent: 3, 100%)');
+  await shot('analytics-funnel-chart');
+  await page.getByTestId('funnel-view-bars').click();
+  await page.getByTestId('funnel-bars').waitFor();
+  expect(await page.getByTestId('funnel-chart').count() === 0, 'the chart is replaced by the bars');
+  await page.getByTestId('funnel-view-chart').click();
+  await page.getByTestId('funnel-chart').waitFor();
   await shot('analytics');
 });
 

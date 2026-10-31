@@ -297,7 +297,7 @@ setting, not code)** and one real confirmation e-mail received · Turnstile keys
 ## 16. What was verified, and what could not be
 
 **Verified in this environment** (real Postgres, Redis, headless Chromium):
-- **729 automated tests** (84 shared in 7 files, 559 API in 34 files, 29 website in 4 files, 57 script tests) and the backlog check, run together by `npm test`: sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed) and the password they ask for, purge, squatter replacement, aliases, password policy and hash upgrade,
+- **732 automated tests** (84 shared in 7 files, 559 API in 34 files, 32 website in 5 files, 57 script tests) and the backlog check, run together by `npm test`: sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed) and the password they ask for, purge, squatter replacement, aliases, password policy and hash upgrade,
   the three login counters and the CAPTCHA paths, sessions and refresh rotation (race, grace, reuse, revoke, expiry), JWT rotation, password reset/change, Google sign-in (stubbed JWKS: wrong audience/issuer/signature, unverified e-mail, linking, squatter), TOTP (RFC vectors, replay, recovery codes, disable),
   step-up (methods, window per session, limits), masking, reveal, export and bulk-delete controls, caps, the read caps, the Sheets re-confirmation, e-mails and audit rows, the rate limits per session and per address, key ring, rotation script (child process), blind index, parked payloads, production boot refusals, log hygiene,
   the append-only trigger, **every API route** against a second owner, the website proxy's rules, token renewal and cookie handling (14 tests), the post-sign-in redirect rule, the audit gate and the backlog checker.
@@ -398,7 +398,7 @@ Law No. 2024/017 (certified text in `docs/legal/`): erasure s.37 and s.38, a cop
 3. **Participants' requests.** The owner is the one holding participants' data; a participant who writes to the owner is handled by the owner, by hand (no queue in the product yet; ADM-02).
 4. **A hostile owner** can use the 30 days to get a paused account's data out by the download (3 a day, confirmed each time, e-mailed). That is the intended right.
 5. **Large accounts.** The file is built in memory in one go: an account with millions of answers will be slow and heavy. Not measured.
-6. **Not run in a real browser yet**: the screen is type-checked, linted and covered by the API tests, not driven by `e2e-*`.
+6. **Driven in a real browser on 2026-10-31** (`scripts/e2e-new.mjs`, the production build of the website against the API on the local database), not on a phone's width and not against a real e-mail provider.
 
 *Tests:* `apps/api/tests/account-data.test.ts` (15): file content and what it must not contain, alert/trail/cap, not shut out by the rows cap, unconfirmed and signed-out refusals, step-up and `DELETE`, refusal for each kind of unresolved money, the freeze (and what stays possible), cancelling, the erasure and its cascade, the archive without any name, number or e-mail, the postponement.
 
@@ -441,5 +441,5 @@ A colleague works on an owner's workspace with **their own login, password and s
 3. **Two-step verification is checked, not enforced at invitation time**: an invited person without it can accept, and then every request in the workspace is refused until they set it up (the page tells them).
 4. **A downgrade does not remove members already in** (it blocks new ones); a downgraded owner can remove them.
 5. **A deleted owner account** takes its team rows with it (the workspace is erased, §20); a deleted member leaves the trail rows that name them by id.
-6. **Not driven in a real browser yet**: the Team tab, the accept page and the workspace switcher are type-checked, linted and covered by the proxy and client tests, not by `e2e-*`.
+6. **Driven in a real browser on 2026-10-31** (`scripts/e2e-new.mjs`): inviting, a second browser accepting, the editor working in the workspace, the trail, the removal. Not clicked: the workspace switcher in the account menu. Not run: a phone's width, a real e-mail provider, an authenticator app's enrolment for the colleague (set in the database for the test).
 

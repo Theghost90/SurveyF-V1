@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowLeft, Download, Gift, Lightbulb, RefreshCw, Send, T
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { toast } from 'sonner';
 import { questionTypeLabel } from '@surveyflow/shared';
+import { FunnelView } from '@/components/analytics/funnel-view';
 import { RevealablePhone } from '@/components/phone-reveal';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -154,16 +155,7 @@ export function AnalyticsDashboard({ id }: { id: string }) {
         <Card>
           <CardHeader><CardTitle>{t('a.funnel')}</CardTitle><CardDescription>{t('a.funnelSub')}</CardDescription></CardHeader>
           <CardContent className="flex flex-col gap-3">
-            {data.funnel.map((f, i) => {
-              const max = Math.max(1, data.funnel[0]?.count ?? 1);
-              return (
-                <div key={f.key} className="grid grid-cols-[120px_1fr_44px] items-center gap-3 text-sm">
-                  <span className="truncate font-medium">{f.key === 'sent' ? t('a.f.sent') : f.key === 'started' ? t('a.f.started') : f.key === 'completed' ? t('a.f.completed') : t('a.f.answered', { n: f.key.slice(1) })}</span>
-                  <div className="h-5 overflow-hidden rounded-md bg-muted" role="img" aria-label={`${f.count} / ${max}`}><div className="h-full rounded-md bg-leaf" style={{ width: `${(f.count / max) * 100}%`, opacity: 1 - i * 0.04 }} /></div>
-                  <span className="text-right font-bold tabular-nums">{f.count}</span>
-                </div>
-              );
-            })}
+            <FunnelView steps={data.funnel.map((f) => ({ key: f.key, count: f.count, label: f.key === 'sent' ? t('a.f.sent') : f.key === 'started' ? t('a.f.started') : f.key === 'completed' ? t('a.f.completed') : t('a.f.answered', { n: f.key.slice(1) }) }))} />
             {data.dropOff && (
               <div role="note" className="mt-2 flex gap-3 rounded-xl bg-amber-soft p-4 text-sm text-amber-ink">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />

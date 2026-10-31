@@ -15,6 +15,7 @@ Profiles: `full` (staging and pilot, everything) and `public` (launch, nothing t
 | Encrypted backups, restore test, recovery (`scripts/backup.mjs`, `restore-test.mts`) and the host's disk encryption | DAT-02 | on | **on** | no money; the law asks for secure back-up copies (s.27(1)) and encryption (s.22(2)). The host's disk is a setting at the host, yours to check and write down |
 | Message category per survey (utility or marketing), cost acknowledgement before every marketing send, re-categorisation by Meta | WA-03 | on | **on** | no money is held; WhatsApp messages are the core product and Meta bills the owner directly. Needed so that promotions are not sent as utility |
 | Team members: viewer and editor with their own login, two-step verification, a trail (Settings, Team) | BIZ-04 | on | **on** | no money is held; the owner's colleagues work on the owner's own account. Nothing in it is specific to payouts |
+| The analytics funnel as a chart | FUT-05 | on | **on** | a display of the owner's own results; nothing to do with money |
 | Receipts, proof of gift | core | on | on only if gifts exist | depends on the reward model |
 | Wallet top-up (card, Mobile Money) | PAY-08 | on | **off** | stored value held for owners (LEG-03) |
 | Stored balance debited per gift; release of unfunded gifts; refund to wallet | PAY-06, PAY-07 | on | **off** | stored value |
@@ -34,6 +35,7 @@ Profiles: `full` (staging and pilot, everything) and `public` (launch, nothing t
 ## Log of changes to this list
 - 2026-10-29: first proposal.
 - 2026-10-29: Google sign-in added as a row (on in `public`): SEC-05 is built and verified.
+- 2026-10-31: FUT-05 added as a row (on in `public`).
 - 2026-10-31: BIZ-04 added as a row (on in `public`). The pricing page stops saying "soon" for team members in both profiles.
 - 2026-10-31: PAY-07 split out of the "money admin console" row and built as logic plus a command line (no screen): `full` only; nothing to settle in `public`.
 - 2026-10-31: PAY-02 split out of the "money admin console" row and built: the daily reconciliation is `full` only; with no wallet in `public` it finds nothing to do.

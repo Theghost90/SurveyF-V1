@@ -102,6 +102,7 @@ await step('publishing with an empty wallet is allowed but never silent', async 
   await toast(/gift wallet is empty/i);
   await page.getByText(/Your gift wallet is empty: nobody will receive a gift/).waitFor({ timeout: 15000 });
   await shot('03-send-panel-warning');
+  await page.getByTestId('send-cost-accept').click(); // WA-03: a marketing send needs the cost accepted first
   await page.getByRole('button', { name: /Send survey via WhatsApp/ }).click();
   await toast(/2 invitation\(s\) queued/);
   await call('POST', '/dev/jobs/run');
