@@ -286,6 +286,6 @@ if (FAKE) console.log(`(self-test: ${fakeSent.length} messages were built by the
 console.log(`\nNot coverable by a script, do these by hand (docs/META_CHECK.md):
   • Tech Provider status: business verification + app review for whatsapp_business_messaging / whatsapp_business_management (advanced access)
   • the Embedded Signup popup, run in a browser by someone with a role on your Meta app
-  • the callback fields subscribed in the app dashboard (messages, message_template_status_update)
+  • the callback fields subscribed in the app dashboard (messages, message_template_status_update, template_category_update)
   • a real inbound round trip: tap a button on your phone and watch the survey start in the dashboard`);
 process.exit(counts.FAIL ? 1 : 0);

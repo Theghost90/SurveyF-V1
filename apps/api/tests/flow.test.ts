@@ -110,7 +110,7 @@ describe('end-to-end participant flow through the signed webhook', () => {
     expect(rows.map((r) => r.status).sort()).toEqual(['sent', 'sent', 'sent']);
     expect(await prisma.messageLog.count()).toBe(3);
     const chat = await chatOf(0);
-    expect(chat[0].template.name).toBe('survey_invitation');
+    expect(chat[0].template.name).toBe('survey_invitation_marketing'); // WA-03: a survey that does not say it follows a transaction goes out as marketing
     expect(chat[0].template.buttonPayloads[0]).toBe(`START:${w.surveyId}`);
     // Meta's delivery receipt moves sent → delivered, never backwards
     const wamid = rows[0]!.waMessageId!;
@@ -283,13 +283,13 @@ describe('end-to-end participant flow through the signed webhook', () => {
 
   it('STOP opts the contact out, cancels pending sends, and blocks future invitations', async () => {
     const w = await buildWorld(app, { send: false });
-    await w.owner.post(`/api/surveys/${w.surveyId}/send`, { contactIds: [w.contactIds[0]], scheduledAt: new Date(Date.now() + 3_600_000).toISOString() });
+    await w.owner.post(`/api/surveys/${w.surveyId}/send`, { acceptMarketingCost: true, contactIds: [w.contactIds[0]], scheduledAt: new Date(Date.now() + 3_600_000).toISOString() });
     await say(app, w, 0, (f) => textMsg(f, 'STOP'));
     const c = await prisma.contact.findUnique({ where: { id: w.contactIds[0] } });
     expect(c!.optedOutAt).toBeTruthy();
     expect((await prisma.sendJob.findFirst({ where: { recipient: { contactId: w.contactIds[0] } } }))!.status).toBe('failed');
     expect((await chatOf(0)).at(-1).message.body).toMatch(/unsubscribed/i);
-    const again = await w.owner.post(`/api/surveys/${w.surveyId}/send`, { contactIds: [w.contactIds[0]] });
+    const again = await w.owner.post(`/api/surveys/${w.surveyId}/send`, { acceptMarketingCost: true, contactIds: [w.contactIds[0]] });
     expect(again.status).toBe(400); // no eligible contacts
   });
 
@@ -298,7 +298,7 @@ describe('end-to-end participant flow through the signed webhook', () => {
     expect((await w.owner.post(`/api/surveys/${w.surveyId}/audience`, { all: true })).eligible).toBe(4);
     await say(app, w, 3, (f) => textMsg(f, 'STOP')); // contact 4 opts out
     expect((await w.owner.post(`/api/surveys/${w.surveyId}/audience`, { all: true })).eligible).toBe(3);
-    await w.owner.post(`/api/surveys/${w.surveyId}/send`, { contactIds: [w.contactIds[0]] });
+    await w.owner.post(`/api/surveys/${w.surveyId}/send`, { acceptMarketingCost: true, contactIds: [w.contactIds[0]] });
     await runSendWorkerOnce();
     const a = await w.owner.post(`/api/surveys/${w.surveyId}/audience`, { all: true });
     expect(a.eligible).toBe(2); // one already invited, one opted out
@@ -446,11 +446,11 @@ describe('plan limits (402)', () => {
     const w = await buildWorld(app, { contacts: 3, send: false, plan: 'starter' }); // starter: 1,000 messages
     const { prisma: db } = await import('../src/lib/prisma');
     await db.messageLog.createMany({ data: Array.from({ length: 999 }, () => ({ userId: w.owner.userId, kind: 'invitation' })) });
-    const r = await w.owner.post(`/api/surveys/${w.surveyId}/send`, { all: true });
+    const r = await w.owner.post(`/api/surveys/${w.surveyId}/send`, { acceptMarketingCost: true, all: true });
     expect(r.status).toBe(402);
     expect(r.details).toMatchObject({ limit: 'messagesPerMonth', remaining: 1, requested: 3 });
     // answers are NOT gated by quota: an already-invited participant can still finish
-    const one = await w.owner.post(`/api/surveys/${w.surveyId}/send`, { contactIds: [w.contactIds[0]] });
+    const one = await w.owner.post(`/api/surveys/${w.surveyId}/send`, { acceptMarketingCost: true, contactIds: [w.contactIds[0]] });
     expect(one.status).toBe(200);
     await runSendWorkerOnce();
     await say(app, w, 0, (f) => templateBtn(f, `START:${w.surveyId}`));
@@ -473,6 +473,6 @@ describe('client isolation', () => {
     for (const path of [`/api/surveys/${w.surveyId}`, `/api/surveys/${w.surveyId}/analytics`, `/api/surveys/${w.surveyId}/export/excel`, `/api/surveys/${w.surveyId}/recipients`]) {
       expect((await other.raw('GET', path)).status).toBe(404);
     }
-    expect((await other.raw('POST', `/api/surveys/${w.surveyId}/send`, { all: true })).status).toBe(404);
+    expect((await other.raw('POST', `/api/surveys/${w.surveyId}/send`, { acceptMarketingCost: true, all: true })).status).toBe(404);
   });
 });

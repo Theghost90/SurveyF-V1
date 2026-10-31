@@ -10,6 +10,8 @@ import { deleteSession, getSession, saveSession } from './sessions';
 import { handleOwnerMessage, isPlatformNumber } from '../analytics-bot';
 import { checkMilestone } from '../analytics-alerts';
 import { track } from '../funnel';
+import { audit } from '../audit';
+import { sendMail } from '../mail';
 
 /** Subset of Meta's webhook message object that we read. */
 export interface WaInboundMessage {
@@ -43,6 +45,10 @@ export async function processWebhookPayload(body: unknown, log: Logger): Promise
         await onTemplateStatus(entry.id, value);
         continue;
       }
+      if (change.field === 'template_category_update') {
+        await onTemplateCategory(entry.id, value);
+        continue;
+      }
       if (change.field !== 'messages') continue;
       const phoneNumberId: string | undefined = value.metadata?.phone_number_id;
       if (!phoneNumberId) continue;
@@ -63,6 +69,54 @@ async function onTemplateStatus(wabaId: string | undefined, v: { event?: string;
     where: { account: { wabaId }, name: v.message_template_name, language: (v.message_template_language ?? '').slice(0, 2) },
     data: { status: v.event.toUpperCase(), reason: v.reason && v.reason !== 'NONE' ? v.reason : null },
   });
+}
+
+/**
+ * Meta changes a template's category (also after approval), and may announce it first (WA-03). Two shapes, per Meta's reference of `template_category_update`:
+ * a completed change carries `previous_category` and `new_category`; an announced one carries `correct_category` (what it will become) and `new_category`
+ * (what it is now) and a timestamp. `message_template_language` is not always there, so the template is found by its id first. The owner is told once per change,
+ * because a template that moves to marketing changes what every send costs.
+ */
+type CategoryNotice = {
+  message_template_id?: number | string; message_template_name?: string; message_template_language?: string;
+  previous_category?: string; new_category?: string; correct_category?: string; category_update_timestamp?: number | string;
+};
+function noticeDate(v: number | string | undefined): Date {
+  const n = typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : v;
+  if (typeof n === 'number' && Number.isFinite(n)) return new Date(n > 1e12 ? n : n * 1000);
+  const d = typeof v === 'string' ? new Date(v) : null;
+  return d && !Number.isNaN(d.getTime()) ? d : new Date(Date.now() + 24 * 3_600_000);
+}
+async function onTemplateCategory(wabaId: string | undefined, v: CategoryNotice) {
+  const id = v.message_template_id != null ? String(v.message_template_id) : undefined;
+  if (!wabaId || (!id && !v.message_template_name)) return;
+  const language = (v.message_template_language ?? '').slice(0, 2);
+  const rows = await prisma.messageTemplate.findMany({
+    where: { account: { wabaId }, ...(id ? { metaTemplateId: id } : { name: v.message_template_name, ...(language ? { language } : {}) }) },
+    include: { account: { include: { user: { select: { email: true, name: true, locale: true } } } } },
+  });
+  const announced = !v.previous_category && !!v.correct_category;
+  const next = (announced ? v.correct_category : v.new_category)?.toUpperCase();
+  if (!next) return;
+  for (const row of rows) {
+    const before = row.category.toUpperCase();
+    if (announced) {
+      const at = noticeDate(v.category_update_timestamp);
+      await prisma.messageTemplate.update({ where: { id: row.id }, data: { ...(v.new_category ? { category: v.new_category.toUpperCase() } : {}), categoryPending: next, categoryPendingAt: at } });
+    } else {
+      await prisma.messageTemplate.update({ where: { id: row.id }, data: { category: next, categoryPending: null, categoryPendingAt: null } });
+    }
+    // Only a move up to marketing costs the owner more; say it once per change (Meta repeats notices until it gets an answer).
+    if (next !== 'MARKETING' || (!announced && before === 'MARKETING')) continue;
+    const key = `sf:tplcat:${row.id}:${announced ? 'soon' : 'done'}:${next}`;
+    if ((await redis.set(key, '1', 'EX', 7 * 86_400, 'NX')) !== 'OK') continue;
+    const u = row.account.user;
+    await sendMail(u.email, 'template_recategorised', u.locale === 'en' ? 'en' : 'fr', {
+      name: u.name, template: `${row.name} (${row.language})`, from: announced ? (v.new_category ?? before).toUpperCase() : (v.previous_category ?? before).toUpperCase(), to: next, soon: announced,
+      when: announced ? noticeDate(v.category_update_timestamp).toISOString().slice(0, 10) : undefined,
+    });
+    await audit({ userId: row.account.userId }, { action: 'template_recategorised', meta: { template: row.name, language: row.language, from: before, to: next, announced } });
+  }
 }
 
 // ---- idempotency ---------------------------------------------------------------------------

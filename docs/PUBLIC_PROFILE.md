@@ -13,6 +13,7 @@ Profiles: `full` (staging and pilot, everything) and `public` (launch, nothing t
 | Prize draws | core | on | **on** | lottery rules per country are a separate licence risk |
 | Account download and deletion (Settings, Your data): 30-day read-only grace, refused while money is unresolved, money record kept without any name, number or e-mail | DAT-01 | on | **on** | no money is held; it is what the law's rights sections ask for (s.37 to 39, 43); needed for a public launch. The only money-shaped part (the archive) keeps records the owner already generated |
 | Encrypted backups, restore test, recovery (`scripts/backup.mjs`, `restore-test.mts`) and the host's disk encryption | DAT-02 | on | **on** | no money; the law asks for secure back-up copies (s.27(1)) and encryption (s.22(2)). The host's disk is a setting at the host, yours to check and write down |
+| Message category per survey (utility or marketing), cost acknowledgement before every marketing send, re-categorisation by Meta | WA-03 | on | **on** | no money is held; WhatsApp messages are the core product and Meta bills the owner directly. Needed so that promotions are not sent as utility |
 | Receipts, proof of gift | core | on | on only if gifts exist | depends on the reward model |
 | Wallet top-up (card, Mobile Money) | PAY-08 | on | **off** | stored value held for owners (LEG-03) |
 | Stored balance debited per gift; release of unfunded gifts; refund to wallet | PAY-06, PAY-07 | on | **off** | stored value |
@@ -29,5 +30,6 @@ Profiles: `full` (staging and pilot, everything) and `public` (launch, nothing t
 ## Log of changes to this list
 - 2026-10-29: first proposal.
 - 2026-10-29: Google sign-in added as a row (on in `public`): SEC-05 is built and verified.
+- 2026-10-31: WA-03 added as a row (on in `public`). Surveys with a reward are marketing by default: if the reward model is decided as "no gifts", more surveys can qualify as utility; nothing else changes.
 - 2026-10-31: DAT-02 added as a row (on in `public`, no switch: it is tooling run by the operator, not a route). It is a Must for any public launch with real owners' data; its host half is not done.
 - 2026-10-31: DAT-01 added as a row (on in `public`): account download and deletion are built. The "rights handling (s.38 to 43)" data-law item below is now partly met: erasure, copy and portability exist; rectification (s.42) is the owner editing their own data, and handling a **participant's** request to the owner is not built.

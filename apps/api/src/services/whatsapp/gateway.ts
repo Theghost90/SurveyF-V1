@@ -26,6 +26,8 @@ export interface RemoteTemplate {
   language: string;
   status: string;
   reason?: string;
+  /** What Meta says the category is now (it may differ from what was submitted). */
+  category?: string;
 }
 
 /** A WhatsApp API failure, classified so callers can retry transient ones and give up on the rest. */

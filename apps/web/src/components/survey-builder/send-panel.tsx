@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { AlertTriangle, CalendarClock, Send } from 'lucide-react';
 import { toast } from 'sonner';
-import { PAID_PLAN_KEYS, PLANS, TEMPLATE_NAMES } from '@surveyflow/shared';
+import { PAID_PLAN_KEYS, PLANS, type CategoryReason } from '@surveyflow/shared';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -17,6 +17,7 @@ import { money, num } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 import { formatPhone } from '@surveyflow/shared';
+import { ReasonText } from './message-type';
 
 interface ContactRow { id: string; name: string; phone: string; tags: string[]; optedOut: boolean }
 interface Contacts { total: number; tags: string[]; items: ContactRow[] }
@@ -35,19 +36,22 @@ export function SendPanel({ surveyId, status, language, onPublish, publishing, d
   const [when, setWhen] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ queued: number } | null>(null);
+  const [acceptCost, setAcceptCost] = useState(false);
 
   const { data: wa } = useSWR<Accounts>('/whatsapp/accounts');
   const { data: contacts } = useSWR<Contacts>(`/contacts?pageSize=100${search ? `&search=${encodeURIComponent(search)}` : ''}`, { keepPreviousData: true });
   const { data: all } = useSWR<Contacts>('/contacts?pageSize=1');
 
   const acct = wa?.items[0];
-  const invitation = acct?.templates.find((x) => x.name === TEMPLATE_NAMES.invitation && x.language === language);
-  const waProblem = !wa ? null : !acct ? 'none' : acct.status !== 'active' ? 'error' : invitation && invitation.status !== 'APPROVED' ? 'template' : null;
 
   const selection = useMemo(() => (mode === 'all' ? { all: true } : mode === 'select' ? { contactIds: [...selected] } : { tags: [...tags] }), [mode, selected, tags]);
   const empty = mode === 'select' ? selected.size === 0 : mode === 'tags' ? tags.size === 0 : false;
   // Exact count from the server: it knows who is already invited, opted out, or without consent.
-  const { data: audience } = useSWR<{ eligible: number; messagesRemaining: number; recipientsRemaining: number | null; newPeople: number; gift?: GiftReadiness | null }>(status === 'active' && !empty ? [`/surveys/${surveyId}/audience`, JSON.stringify(selection), result?.queued ?? 0] : null, ([url]: [string]) => api(url, { body: selection }));
+  const { data: audience } = useSWR<{ eligible: number; messagesRemaining: number; recipientsRemaining: number | null; newPeople: number; gift?: GiftReadiness | null; category: 'utility' | 'marketing'; categoryReasons: CategoryReason[]; invitationTemplate: string }>(status === 'active' && !empty ? [`/surveys/${surveyId}/audience`, JSON.stringify(selection), result?.queued ?? 0] : null, ([url]: [string]) => api(url, { body: selection }));
+  // The template this survey will really be sent with (utility or marketing): its review state is what can stop a send.
+  const invitation = audience && acct?.templates.find((x) => x.name === audience.invitationTemplate && x.language === language);
+  const waProblem = !wa ? null : !acct ? 'none' : acct.status !== 'active' ? 'error' : invitation && invitation.status !== 'APPROVED' ? 'template' : null;
+  const marketing = audience?.category === 'marketing';
   const remaining = audience?.messagesRemaining ?? (account ? Math.max(0, account.plan.limits.messagesPerMonth - account.usage.messages) : null);
   const target = empty ? 0 : (audience?.eligible ?? 0);
   // Explore reaches a fixed number of different people. When this audience has more new people than are left, the button becomes the plan.
@@ -58,8 +62,9 @@ export function SendPanel({ surveyId, status, language, onPublish, publishing, d
   async function send() {
     setBusy(true);
     try {
-      const res = await api<{ queued: number }>(`/surveys/${surveyId}/send`, { body: { ...selection, ...(schedule && when ? { scheduledAt: new Date(when).toISOString() } : {}) } });
+      const res = await api<{ queued: number }>(`/surveys/${surveyId}/send`, { body: { ...selection, ...(marketing && acceptCost ? { acceptMarketingCost: true } : {}), ...(schedule && when ? { scheduledAt: new Date(when).toISOString() } : {}) } });
       setResult(res);
+      setAcceptCost(false);
       toast.success(t('b.send.queued', { n: res.queued }));
       void refreshAccount();
     } catch (err) {
@@ -133,6 +138,17 @@ export function SendPanel({ surveyId, status, language, onPublish, publishing, d
               {schedule && <Input type="datetime-local" value={when} min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} onChange={(e) => setWhen(e.target.value)} aria-label={t('b.send.schedule')} className="max-w-xs" />}
             </div>
 
+            {audience && target > 0 && (marketing ? (
+              <div role="alert" data-testid="send-cost-warning" className="flex flex-col gap-3 rounded-xl bg-amber-soft p-4 text-sm text-amber-ink">
+                <p className="font-semibold">{t('b.send.costTitle')}</p>
+                <p>{t('b.send.costText', { n: target })}</p>
+                {audience.categoryReasons.length > 0 && <ul className="list-disc space-y-0.5 pl-5">{audience.categoryReasons.map((r, i) => <li key={i}><ReasonText reason={r} /></li>)}</ul>}
+                <label className="flex cursor-pointer items-start gap-3 font-semibold"><Checkbox checked={acceptCost} onCheckedChange={(v) => setAcceptCost(!!v)} data-testid="send-cost-accept" className="mt-0.5" />{t('b.send.costAccept')}</label>
+              </div>
+            ) : audience.categoryReasons.length > 0 && (
+              <p role="status" className="rounded-xl bg-canvas px-4 py-3 text-sm text-body">{audience.categoryReasons.map((r, i) => <span key={i}><ReasonText reason={r} /> </span>)}</p>
+            ))}
+
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
               <p className="text-sm text-muted-foreground">
                 {target === 0 && !empty && audience ? t('b.send.nobody') : remaining !== null && t('b.send.quota', { n: target, remaining: num(remaining, locale) })}
@@ -140,7 +156,7 @@ export function SendPanel({ surveyId, status, language, onPublish, publishing, d
               {overCap ? (
                 <Link href={`/billing?plan=${suggested}`} data-testid="send-activate" className={buttonVariants({ variant: 'brand', size: 'lg', className: 'h-auto min-h-12 w-full whitespace-normal py-2.5 text-center sm:w-auto' })}>{t('b.send.exploreCta')}</Link>
               ) : (
-                <Button size="lg" onClick={send} loading={busy} disabled={!!waProblem || dirty || target === 0 || (schedule && !when)} className="h-auto min-h-12 w-full whitespace-normal py-2.5 text-center sm:w-auto">
+                <Button size="lg" onClick={send} loading={busy} disabled={!!waProblem || dirty || target === 0 || (schedule && !when) || (marketing && !acceptCost)} className="h-auto min-h-12 w-full whitespace-normal py-2.5 text-center sm:w-auto">
                   <Send className="h-4 w-4" aria-hidden />{t('b.send.cta')}
                 </Button>
               )}

@@ -17,7 +17,8 @@ import { AppError } from '../lib/errors';
 import { track } from '../services/funnel';
 import { assertWhatsAppConnected } from '../services/whatsapp/require';
 import { maskPhone } from '@surveyflow/shared';
-import { auditContext, auditStrict } from '../services/audit';
+import { audit, auditContext, auditStrict } from '../services/audit';
+import { invitationPlan } from '../services/message-category';
 
 const GIFT_AUTOMATION = new Set(['airtime', 'momo', 'discount', 'prize_draw']);
 
@@ -58,6 +59,7 @@ function surveyData(input: SurveyInput) {
     giftDeliveryMode: input.gift.giftDeliveryMode,
     giftMaxCount: input.gift.giftMaxCount ?? null,
     kind: input.kind,
+    followsTransaction: input.followsTransaction,
     deadlineAt: input.deadlineAt ?? null,
     autoRemindNonResponders: input.autoRemindNonResponders,
     autoRemindAbandoners: input.autoRemindAbandoners,
@@ -81,7 +83,7 @@ function dto(s: Awaited<ReturnType<typeof owned>>) {
     id: s.id, title: s.title, description: s.description, status: s.status, language: s.language,
     giftType: s.giftType, giftValue: s.giftValue, giftAmount: s.giftAmount, giftDeliveryMode: s.giftDeliveryMode, giftMaxCount: s.giftMaxCount,
     customThankYou: s.customThankYou, scheduledAt: s.scheduledAt, whatsappAccountId: s.whatsappAccountId,
-    kind: s.kind, deadlineAt: s.deadlineAt, autoRemindNonResponders: s.autoRemindNonResponders, autoRemindAbandoners: s.autoRemindAbandoners,
+    kind: s.kind, followsTransaction: s.followsTransaction, deadlineAt: s.deadlineAt, autoRemindNonResponders: s.autoRemindNonResponders, autoRemindAbandoners: s.autoRemindAbandoners,
     createdAt: s.createdAt, publishedAt: s.publishedAt, closedAt: s.closedAt,
     questions: s.questions.map((q) => ({ id: q.id, order: q.order, text: q.text, type: q.type, options: q.options, required: q.required })),
   };
@@ -176,7 +178,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
         data: {
           userId: req.userId, title: `${s.title} (copy)`, description: s.description, language: s.language, customThankYou: s.customThankYou,
           giftType: s.giftType, giftValue: s.giftValue, giftAmount: s.giftAmount, giftDeliveryMode: s.giftDeliveryMode, giftMaxCount: s.giftMaxCount,
-          whatsappAccountId: s.whatsappAccountId, kind: s.kind, autoRemindNonResponders: s.autoRemindNonResponders, autoRemindAbandoners: s.autoRemindAbandoners,
+          whatsappAccountId: s.whatsappAccountId, kind: s.kind, followsTransaction: s.followsTransaction, autoRemindNonResponders: s.autoRemindNonResponders, autoRemindAbandoners: s.autoRemindAbandoners,
         },
       });
       await tx.question.createMany({ data: s.questions.map((q) => ({ surveyId: c.id, order: q.order, text: q.text, type: q.type, options: (q.options ?? undefined) as Prisma.InputJsonValue | undefined, required: q.required })) });
@@ -224,6 +226,8 @@ export default async function surveyRoutes(app: FastifyInstance) {
     contactIds: z.array(z.string()).max(20_000).optional(),
     tags: z.array(z.string()).optional(),
     scheduledAt: z.coerce.date().optional(),
+    /** The owner has seen the marketing-message cost warning and accepts it (WA-03). Required whenever the invitation goes out as marketing. */
+    acceptMarketingCost: z.boolean().optional(),
   });
 
   app.post('/api/surveys/:id/send', authVerified, async (req) => {
@@ -234,13 +238,18 @@ export default async function surveyRoutes(app: FastifyInstance) {
     if (!s.whatsappAccountId) throw conflict('whatsapp_not_connected', 'Finish connecting your WhatsApp Business number first.');
     const account = await prisma.whatsAppAccount.findUnique({ where: { id: s.whatsappAccountId } });
     if (!account || account.status !== 'active') throw conflict('whatsapp_unavailable', 'Your WhatsApp connection needs attention (Settings → WhatsApp)');
-    if (!(await isTemplateApproved(account.id, TEMPLATE_NAMES.invitation, s.language))) {
+    const plan = await invitationPlan(s, account.id);
+    if (!(await isTemplateApproved(account.id, plan.templateName, s.language))) {
       throw conflict('template_not_approved', 'Your WhatsApp invitation template is still awaiting Meta approval. Try again once it is approved.');
     }
     if (!body.all && !body.contactIds?.length && !body.tags?.length) throw badRequest('no_recipients', 'Choose who to send the survey to');
 
     const contacts = await eligibleContacts(req.userId, s.id, body);
     if (!contacts.length) throw badRequest('no_eligible_contacts', 'No eligible contacts: they may be opted out, lack consent, or were already invited');
+    // Marketing messages cost more, and Meta bills them to the owner: the owner has to have seen that, every time, before anything is queued (WA-03).
+    if (plan.category === 'marketing' && !body.acceptMarketingCost) {
+      throw new AppError(409, 'marketing_cost_unacknowledged', 'These invitations are sent as marketing messages, which Meta bills at a higher rate than utility messages. Confirm that you accept this cost to send.', { category: plan.category, reasons: plan.reasons, recipients: contacts.length });
+    }
 
     const ctx = await loadAccount(req.userId);
     try {
@@ -251,10 +260,11 @@ export default async function surveyRoutes(app: FastifyInstance) {
       throw err;
     }
     const when = body.scheduledAt && body.scheduledAt > new Date() ? body.scheduledAt : new Date();
-    const queued = await enqueueInvitations(s, contacts.map((c) => c.id), when);
+    const queued = await enqueueInvitations(s, contacts.map((c) => c.id), when, plan.category);
+    await audit(auditContext(req), { action: 'survey_sent', meta: { surveyId: s.id, category: plan.category, reasons: plan.reasons.map((r) => r.code).join(','), people: queued, acceptedCost: plan.category === 'marketing' } });
     await track(req.userId, 'first_send', { plan: ctx.plan.key });
     const gift = await giftReadiness(req.userId, s, queued);
-    return { queued, scheduledFor: when, messagesRemaining: messagesRemaining(ctx) - queued, gift, giftWarning: gift && !gift.sufficient ? { code: gift.empty ? 'gift_wallet_empty' : 'gift_wallet_low', ...gift } : null };
+    return { queued, category: plan.category, scheduledFor: when, messagesRemaining: messagesRemaining(ctx) - queued, gift, giftWarning: gift && !gift.sufficient ? { code: gift.empty ? 'gift_wallet_empty' : 'gift_wallet_low', ...gift } : null };
   });
 
   /** Exact audience for the send panel: how many invitations this selection would queue, and what it costs in quota. */
@@ -267,7 +277,9 @@ export default async function surveyRoutes(app: FastifyInstance) {
     const optedOut = await prisma.contact.count({ where: { userId: req.userId, optedOutAt: { not: null } } });
     // Explore reaches a fixed number of different people: say how many are left and how many of THIS audience are new people.
     const newPeople = ctx.plan.limits.recipients === null ? 0 : await freshRecipientCount(req.userId, eligible.map((c) => c.id));
-    return { eligible: eligible.length, totalContacts: total, optedOut, messagesRemaining: messagesRemaining(ctx), recipientsRemaining: recipientsRemaining(ctx), newPeople, gift: await giftReadiness(req.userId, s, eligible.length) };
+    // The category the invitation would go out under, and why, so that the cost warning is on screen BEFORE the owner presses send.
+    const plan = await invitationPlan(s, s.whatsappAccountId);
+    return { eligible: eligible.length, totalContacts: total, optedOut, messagesRemaining: messagesRemaining(ctx), recipientsRemaining: recipientsRemaining(ctx), newPeople, gift: await giftReadiness(req.userId, s, eligible.length), category: plan.category, categoryReasons: plan.reasons, invitationTemplate: plan.templateName };
   });
 
   app.post('/api/surveys/:id/remind', authVerified, async (req) => {

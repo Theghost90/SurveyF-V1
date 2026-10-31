@@ -63,7 +63,7 @@ For a production-like preview: `npm run build && npm start` (the API reads the r
    webhook, the PSP webhooks and receipt links; `PUBLIC_API_URL` must be the API's public **https** address (checked at startup); the site must sit behind a platform that sets a country header (Vercel, Cloudflare,
    CloudFront) or visitors are treated as Cameroon / FCFA; non-FCFA prices need the live rate source reachable (`FX_API_URL`, see `.env.example`); `PSP_FEES` / `CAMERPAY_PLAN` refine the provider ranking
    (documented fees are built in: `docs/DECISIONS.md` §3.3).
-3. Meta: point the app's webhook at `https://<api>/api/webhook/whatsapp`, subscribe to `messages` and `message_template_status_update`, configure Embedded Signup. **Run `scripts/meta-check.mts` first** (it runs the production gateway against your Meta test app and says what passes, what Meta rejects and what no script can cover): `docs/META_CHECK.md`.
+3. Meta: point the app's webhook at `https://<api>/api/webhook/whatsapp`, subscribe to `messages`, `message_template_status_update` and `template_category_update`, configure Embedded Signup. **Run `scripts/meta-check.mts` first** (it runs the production gateway against your Meta test app and says what passes, what Meta rejects and what no script can cover): `docs/META_CHECK.md`.
 4. Each PSP: sandbox pass first (see the table in `docs/DECISIONS.md` §4) — Campay and PayUnit especially. Register `https://<api>/api/payments/webhook/<psp>` in each provider's dashboard and set its webhook secret (the API warns at boot when one is missing and **refuses to start in production with no provider at all**). Keep the jobs process running (`RUN_JOBS=true`): the payment reconciliation job is what finds a payment whose webhook never came. Payments that need a person: `scripts/payments-review.mts` (`docs/PAYMENTS.md`).
 5. Replace the draft `/privacy` and `/terms` with counsel-approved text; set `NEXT_PUBLIC_SALES_WHATSAPP` for the agencies CTA.
 6. Deploy templates (untested here — no Docker daemon): `apps/api/Dockerfile`, `deploy/fly.api.toml`, `deploy/railway.json`, `apps/web/vercel.json`.
@@ -101,7 +101,7 @@ docs/META_CHECK.md  running the WhatsApp integration against a real Meta test ap
 ## Tests
 
 ```bash
-npm test                          # shared (71) + API (480) + website (22) tests, then the script tests (57) and the backlog check. Needs the local Postgres/Redis (`docker compose up -d`); the API tests use their own `surveyflow_test` database, which `npm test` creates and migrates by itself first (`npm run test:db`, `scripts/test-db.mjs`)
+npm test                          # shared (84) + API (492) + website (22) tests, then the script tests (57) and the backlog check. Needs the local Postgres/Redis (`docker compose up -d`); the API tests use their own `surveyflow_test` database, which `npm test` creates and migrates by itself first (`npm run test:db`, `scripts/test-db.mjs`)
 npm run typecheck                 # the three workspaces
 npm run audit:gate                # npm audit --omit=dev: fails on a high or critical advisory that is not written in docs/audit-allowlist.json with a reason and an end date
 npm run release:check             # typecheck + the website's lint + npm test + the audit gate: before every release

@@ -1,7 +1,7 @@
 'use client';
 import { Fragment, useMemo } from 'react';
 import { Gift, List } from 'lucide-react';
-import { TEMPLATE_DEFS, TEMPLATE_NAMES, buildQuestionMessage, buildThankYouMessage, estimateMinutes, type OutboundMessage } from '@surveyflow/shared';
+import { TEMPLATE_DEFS, TEMPLATE_NAMES, buildQuestionMessage, buildThankYouMessage, classifySurvey, estimateMinutes, type OutboundMessage } from '@surveyflow/shared';
 import { useState } from 'react';
 import { useT } from '@/lib/i18n/client';
 import { OwnerChat } from './bot-preview';
@@ -57,7 +57,8 @@ export function WhatsAppPreview({ draft, businessName, step, onStep, surveyId }:
   const [who, setWho] = useState<'participant' | 'owner'>('participant');
   const lang = draft.language;
   const total = draft.questions.length;
-  const tpl = TEMPLATE_DEFS.find((d) => d.name === TEMPLATE_NAMES.invitation && d.language === lang)!;
+  const category = classifySurvey({ title: draft.title, description: draft.description, customThankYou: draft.customThankYou, followsTransaction: draft.followsTransaction, giftType: draft.gift.giftType, questions: draft.questions.map((q) => ({ text: q.text, options: q.options })) }).category;
+  const tpl = TEMPLATE_DEFS.find((d) => d.name === (category === 'utility' ? TEMPLATE_NAMES.invitation : TEMPLATE_NAMES.invitationMarketing) && d.language === lang)!; // the one the survey will really be sent with
   const invite = tpl.body.replace('{{1}}', lang === 'fr' ? 'Aïcha' : 'Aïcha').replace('{{2}}', businessName || 'Boulangerie Akwa').replace('{{3}}', String(estimateMinutes(total || 1)));
 
   // step 0 = invitation, 1..n = question n, n+1 = thank-you

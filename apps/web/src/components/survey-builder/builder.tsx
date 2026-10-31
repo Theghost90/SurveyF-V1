@@ -22,6 +22,7 @@ import { useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 import { GiftSettings } from './gift-settings';
 import { QuestionCard } from './question-card';
+import { MessageType } from './message-type';
 import { ReminderSettings } from './reminder-settings';
 import { SendPanel } from './send-panel';
 import { fromApi, newQuestion, toPayload, validateDraft, type SurveyDraft } from './types';
@@ -215,6 +216,8 @@ export function SurveyBuilder({ id }: { id: string }) {
           <ReminderSettings draft={draft} onChange={setDraft} errors={showErrors ? errors : { ...errors, deadline: undefined }} zone={zone} today={today} />
 
           <GiftSettings draft={draft} onChange={setDraft} errors={giftErrors as never} canAutomate={!!account?.plan.features.giftAutomation} />
+
+          <MessageType draft={draft} onChange={setDraft} />
 
           <SendPanel surveyId={id} status={survey.status} language={draft.language} onPublish={publish} publishing={busy === 'publish'} dirty={dirty} />
         </div>

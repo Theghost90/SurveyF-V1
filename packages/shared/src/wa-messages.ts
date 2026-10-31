@@ -176,7 +176,8 @@ export interface TemplateDef {
   name: string;
   language: SurveyLang;
   /**
-   * Meta category. Invitations and gift notices: UTILITY per the spec (Meta may re-categorise invitations as MARKETING).
+   * Meta category. The follow-up invitation and gift notices: UTILITY per the spec (Meta may re-categorise them as MARKETING, after approval too: the API listens for it).
+   * The general invitation is MARKETING.
    * Every REMINDER-type message (reminder, nudge, deadline note, progress-saved notes) is declared MARKETING by decision of the
    * owner: it asks someone to do something they did not do, Meta bills it at the marketing rate and may cap its frequency.
    */
@@ -191,7 +192,8 @@ export interface TemplateDef {
 }
 
 export const TEMPLATE_NAMES = {
-  invitation: 'survey_invitation',
+  invitation: 'survey_invitation', // UTILITY: a follow-up to something the person did with the business (see message-category.ts)
+  invitationMarketing: 'survey_invitation_marketing', // MARKETING: every other survey
   reminder: 'survey_reminder',
   giftNotice: 'survey_gift_notice',
   // automatic reminders (see reminders.ts)
@@ -202,13 +204,26 @@ export const TEMPLATE_NAMES = {
 } as const;
 
 export const TEMPLATE_DEFS: TemplateDef[] = [
+  // The UTILITY invitation names the thing it follows up (an order, a visit, a booking): that is what separates it from a general invitation. Used only for surveys
+  // whose owner says so and whose content is not promotional (message-category.ts); a test keeps promotional wording out of every UTILITY template.
   {
     name: TEMPLATE_NAMES.invitation, language: 'en', category: 'UTILITY',
-    body: 'Hello {{1}}! {{2}} invites you to a short survey. It takes about {{3}} minutes.',
+    body: 'Hello {{1}}! Following your recent order, visit or booking with {{2}}, we would like your feedback in a short survey. It takes about {{3}} minutes.',
     examples: ['Aïcha', 'Boulangerie Akwa', '2'], buttons: ['Start survey', 'Not now'],
   },
   {
     name: TEMPLATE_NAMES.invitation, language: 'fr', category: 'UTILITY',
+    body: 'Bonjour {{1}} ! Suite à votre récente commande, visite ou réservation chez {{2}}, nous aimerions avoir votre avis dans un court sondage. Cela prend environ {{3}} minutes.',
+    examples: ['Aïcha', 'Boulangerie Akwa', '2'], buttons: ['Commencer', 'Pas maintenant'],
+  },
+  // The general invitation, declared MARKETING from the start: it is what every survey is sent with unless it qualifies for the one above.
+  {
+    name: TEMPLATE_NAMES.invitationMarketing, language: 'en', category: 'MARKETING',
+    body: 'Hello {{1}}! {{2}} invites you to a short survey. It takes about {{3}} minutes.',
+    examples: ['Aïcha', 'Boulangerie Akwa', '2'], buttons: ['Start survey', 'Not now'],
+  },
+  {
+    name: TEMPLATE_NAMES.invitationMarketing, language: 'fr', category: 'MARKETING',
     body: 'Bonjour {{1}} ! {{2}} vous invite à répondre à un court sondage. Cela prend environ {{3}} minutes.',
     examples: ['Aïcha', 'Boulangerie Akwa', '2'], buttons: ['Commencer', 'Pas maintenant'],
   },

@@ -110,10 +110,10 @@ export class CloudApiGateway implements WhatsAppGateway {
   }
 
   async listTemplates(creds: WaCreds): Promise<RemoteTemplate[]> {
-    const r = await this.call<{ data: Array<{ id: string; name: string; language: string; status: string; rejected_reason?: string }> }>(
-      `${creds.wabaId}/message_templates`, creds.accessToken, { query: { fields: 'id,name,language,status,rejected_reason', limit: '100' } },
+    const r = await this.call<{ data: Array<{ id: string; name: string; language: string; status: string; rejected_reason?: string; category?: string }> }>(
+      `${creds.wabaId}/message_templates`, creds.accessToken, { query: { fields: 'id,name,language,status,rejected_reason,category', limit: '100' } },
     );
-    return r.data.map((t) => ({ id: t.id, name: t.name, language: t.language, status: t.status, reason: t.rejected_reason }));
+    return r.data.map((t) => ({ id: t.id, name: t.name, language: t.language, status: t.status, reason: t.rejected_reason, category: t.category }));
   }
 
   async subscribeApp(creds: WaCreds) {

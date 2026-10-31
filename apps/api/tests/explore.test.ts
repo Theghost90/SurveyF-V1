@@ -35,13 +35,13 @@ describe('Explore: usage cap, no clock', () => {
     const aud = await o.post(`/api/surveys/${sid}/audience`, { all: true });
     expect(aud).toMatchObject({ eligible: 8, recipientsRemaining: 5, newPeople: 8 });
 
-    const refused = await o.post(`/api/surveys/${sid}/send`, { all: true });
+    const refused = await o.post(`/api/surveys/${sid}/send`, { acceptMarketingCost: true, all: true });
     expect(refused.status).toBe(402);
     expect(refused).toMatchObject({ error: 'plan_limit', details: { limit: 'recipients', max: 5, remaining: 5, requested: 8, upgrade: { recommendedPlan: 'starter' } } });
     expect(await prisma.surveyRecipient.count()).toBe(0);
 
-    expect((await o.post(`/api/surveys/${sid}/send`, { contactIds: ids.slice(0, 5) })).status).toBe(200);
-    const again = await o.post(`/api/surveys/${sid}/send`, { contactIds: [ids[5]!] });
+    expect((await o.post(`/api/surveys/${sid}/send`, { acceptMarketingCost: true, contactIds: ids.slice(0, 5) })).status).toBe(200);
+    const again = await o.post(`/api/surveys/${sid}/send`, { acceptMarketingCost: true, contactIds: [ids[5]!] });
     expect(again.status).toBe(402);
     expect(again.details).toMatchObject({ limit: 'recipients', remaining: 0 });
     expect((await o.get('/api/auth/me')).usage.recipients).toBe(5);
@@ -51,23 +51,23 @@ describe('Explore: usage cap, no clock', () => {
     const o = await registerOwner(app);
     const ids = await contacts(o, 5);
     const a = await publishedSurvey(o, 'A');
-    expect((await o.post(`/api/surveys/${a}/send`, { all: true })).status).toBe(200);
+    expect((await o.post(`/api/surveys/${a}/send`, { acceptMarketingCost: true, all: true })).status).toBe(200);
     await o.post(`/api/surveys/${a}/close`);
     const b = await publishedSurvey(o, 'B');
     const aud = await o.post(`/api/surveys/${b}/audience`, { all: true });
     expect(aud).toMatchObject({ recipientsRemaining: 0, newPeople: 0 });
-    expect((await o.post(`/api/surveys/${b}/send`, { contactIds: ids })).status).toBe(200);
+    expect((await o.post(`/api/surveys/${b}/send`, { acceptMarketingCost: true, contactIds: ids })).status).toBe(200);
   });
 
   it('a paid plan has no such cap', async () => {
     const w = await buildWorld(app, { contacts: 8, plan: 'starter', send: false });
-    expect((await w.owner.post(`/api/surveys/${w.surveyId}/send`, { all: true })).status).toBe(200);
+    expect((await w.owner.post(`/api/surveys/${w.surveyId}/send`, { acceptMarketingCost: true, all: true })).status).toBe(200);
     expect((await w.owner.get('/api/auth/me')).plan.limits.recipients).toBeNull();
   });
 
   it('nothing expires and a plan that lapses lands on Explore with the cap already used: no way back to a free Starter', async () => {
     const w = await buildWorld(app, { contacts: 8, plan: 'growth', send: false });
-    expect((await w.owner.post(`/api/surveys/${w.surveyId}/send`, { all: true })).status).toBe(200);
+    expect((await w.owner.post(`/api/surveys/${w.surveyId}/send`, { acceptMarketingCost: true, all: true })).status).toBe(200);
     await runSendWorkerOnce(100);
     await prisma.subscription.update({ where: { userId: w.owner.userId }, data: { cancelAtPeriodEnd: true, currentPeriodEnd: new Date(Date.now() - 1000) } });
     await runBillingLifecycle();
@@ -77,7 +77,7 @@ describe('Explore: usage cap, no clock', () => {
     const extra = (await contacts(w.owner, 1, 20))[0]!;
     await w.owner.post(`/api/surveys/${w.surveyId}/close`); // Explore has one live survey
     const s2 = await publishedSurvey(w.owner, 'After');
-    const r = await w.owner.post(`/api/surveys/${s2}/send`, { contactIds: [extra] });
+    const r = await w.owner.post(`/api/surveys/${s2}/send`, { acceptMarketingCost: true, contactIds: [extra] });
     expect(r.status).toBe(402);
     expect(r.details).toMatchObject({ limit: 'recipients', remaining: 0 });
     expect(me.usage.responseOverageFCFA).toBe(0); // nothing is billed to someone on Explore
@@ -101,7 +101,7 @@ describe('connect WhatsApp first', () => {
     await expectBlocked(await o.post('/api/contacts', { name: 'A', phone: '+237677100001', consent: true }));
     await expectBlocked(await o.post('/api/wallet/topup', { amount: 5000, method: 'card' }));
     await expectBlocked(await o.post('/api/surveys/anything/publish'));
-    await expectBlocked(await o.post('/api/surveys/anything/send', { all: true }));
+    await expectBlocked(await o.post('/api/surveys/anything/send', { acceptMarketingCost: true, all: true }));
     await expectBlocked(await o.post('/api/surveys/anything/duplicate'));
     await expectBlocked(await o.post('/api/surveys/anything/remind', { target: 'no_reply' }));
     expect(await prisma.survey.count()).toBe(0);
@@ -140,9 +140,9 @@ describe('funnel milestones: the first time each happens, once', () => {
     await contacts(o, 8);
     const sid = await publishedSurvey(o);
     await o.post('/api/surveys', { title: 'Second', questions: sampleQuestions() });
-    await o.post(`/api/surveys/${sid}/send`, { contactIds: (await prisma.contact.findMany({ take: 2 })).map((c) => c.id) });
-    await o.post(`/api/surveys/${sid}/send`, { contactIds: (await prisma.contact.findMany({ skip: 2, take: 2 })).map((c) => c.id) });
-    await o.post(`/api/surveys/${sid}/send`, { all: true }); // 4 left to reach but only 1 slot: the wall
+    await o.post(`/api/surveys/${sid}/send`, { acceptMarketingCost: true, contactIds: (await prisma.contact.findMany({ take: 2 })).map((c) => c.id) });
+    await o.post(`/api/surveys/${sid}/send`, { acceptMarketingCost: true, contactIds: (await prisma.contact.findMany({ skip: 2, take: 2 })).map((c) => c.id) });
+    await o.post(`/api/surveys/${sid}/send`, { acceptMarketingCost: true, all: true }); // 4 left to reach but only 1 slot: the wall
     expect(await names(o.userId)).toEqual(['signup', 'whatsapp_connected', 'survey_created', 'first_send', 'paywall_view']);
   });
 

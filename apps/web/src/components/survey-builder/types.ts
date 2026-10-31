@@ -14,6 +14,8 @@ export interface SurveyDraft {
   kind: SurveyKind;
   /** Last day to answer, as a local calendar date (YYYY-MM-DD) in the owner's time zone; '' = none. Stored as the END of that day. */
   deadline: string;
+  /** The people get this because of something they did with the business: what lets the invitation be a utility message (WA-03). */
+  followsTransaction: boolean;
   autoRemindNonResponders: boolean;
   autoRemindAbandoners: boolean;
   gift: GiftDraft;
@@ -39,6 +41,7 @@ export function fromApi(s: any, offsetMin: number): SurveyDraft {
     customThankYou: s.customThankYou ?? '',
     kind: s.kind === 'event' ? 'event' : 'general',
     deadline: s.deadlineAt ? localDateString(new Date(s.deadlineAt), offsetMin) : '',
+    followsTransaction: !!s.followsTransaction,
     autoRemindNonResponders: !!s.autoRemindNonResponders,
     autoRemindAbandoners: !!s.autoRemindAbandoners,
     gift: {
@@ -61,6 +64,7 @@ export function toPayload(d: SurveyDraft, offsetMin: number) {
     customThankYou: d.customThankYou.trim() || null,
     kind: d.kind,
     deadlineAt: d.deadline ? (endOfLocalDay(d.deadline, offsetMin)?.toISOString() ?? null) : null,
+    followsTransaction: d.followsTransaction,
     autoRemindNonResponders: d.autoRemindNonResponders,
     autoRemindAbandoners: d.autoRemindAbandoners,
     gift: {

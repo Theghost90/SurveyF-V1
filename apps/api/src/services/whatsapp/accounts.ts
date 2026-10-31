@@ -24,7 +24,7 @@ export async function ensureTemplates(acct: WhatsAppAccount): Promise<MessageTem
   const gw = getGateway();
   const creds = credsFor(acct);
   const existing = new Map((await prisma.messageTemplate.findMany({ where: { accountId: acct.id } })).map((t) => [templateKey(t.name, t.language), t]));
-  const remote = new Map<string, { id: string; status: string; reason?: string }>();
+  const remote = new Map<string, { id: string; status: string; reason?: string; category?: string }>();
   try {
     for (const t of await gw.listTemplates(creds)) remote.set(templateKey(t.name, t.language), t);
   } catch {
@@ -54,8 +54,9 @@ export async function ensureTemplates(acct: WhatsAppAccount): Promise<MessageTem
     if (status) {
       await prisma.messageTemplate.upsert({
         where: { accountId_name_language: { accountId: acct.id, name: def.name, language: def.language } },
-        create: { accountId: acct.id, name: def.name, language: def.language, category: def.category, status, metaTemplateId: id, reason: known?.reason },
-        update: { status, metaTemplateId: id ?? undefined, reason: known?.reason ?? null },
+        create: { accountId: acct.id, name: def.name, language: def.language, category: known?.category?.toUpperCase() ?? def.category, status, metaTemplateId: id, reason: known?.reason },
+        // Meta's own word for the category wins over what was submitted (it re-categorises); a change it announced is over once the two agree.
+        update: { status, metaTemplateId: id ?? undefined, reason: known?.reason ?? null, ...(known?.category ? { category: known.category.toUpperCase(), categoryPending: null, categoryPendingAt: null } : {}) },
       });
     }
   }

@@ -174,7 +174,7 @@ export interface World {
 }
 
 /** Owner + simulated WhatsApp number + N contacts + a published survey, invitations sent (worker run). */
-export async function buildWorld(app: FastifyInstance, opts: { country?: string; contacts?: number; plan?: 'trial' | 'starter' | 'growth' | 'business'; gift?: Record<string, unknown>; send?: boolean; questions?: unknown[]; wallet?: number } = {}): Promise<World> {
+export async function buildWorld(app: FastifyInstance, opts: { country?: string; contacts?: number; plan?: 'trial' | 'starter' | 'growth' | 'business'; gift?: Record<string, unknown>; send?: boolean; questions?: unknown[]; wallet?: number; survey?: Record<string, unknown> } = {}): Promise<World> {
   const owner = await registerOwner(app, { plan: opts.plan });
   // An owner in another country: their currency (and so their wallet's) is that country's, as if they had registered from there.
   const currency = currencyForCountry(opts.country ?? 'CM');
@@ -189,12 +189,12 @@ export async function buildWorld(app: FastifyInstance, opts: { country?: string;
     if (c.status !== 201) throw new Error('contact: ' + JSON.stringify(c));
     contactIds.push(c.id);
   }
-  const s = await owner.post('/api/surveys', { title: 'Customer Satisfaction', language: 'en', questions: opts.questions ?? sampleQuestions(), gift: opts.gift ?? {} });
+  const s = await owner.post('/api/surveys', { title: 'Customer Satisfaction', language: 'en', questions: opts.questions ?? sampleQuestions(), gift: opts.gift ?? {}, ...(opts.survey ?? {}) });
   if (s.status !== 201) throw new Error('survey: ' + JSON.stringify(s));
   const pub = await owner.post(`/api/surveys/${s.id}/publish`);
   if (pub.status !== 200) throw new Error('publish: ' + JSON.stringify(pub));
   if (opts.send !== false) {
-    const sent = await owner.post(`/api/surveys/${s.id}/send`, { all: true });
+    const sent = await owner.post(`/api/surveys/${s.id}/send`, { all: true, acceptMarketingCost: true }); // (WA-03: the cost warning is acknowledged here; message-category.test.ts is where it is tested)
     if (sent.status !== 200) throw new Error('send: ' + JSON.stringify(sent));
     await runSendWorkerOnce(100);
   }

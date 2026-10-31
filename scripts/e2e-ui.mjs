@@ -185,7 +185,10 @@ await step('gift settings: Growth-only gifts are locked on a trial account', asy
   await page.getByText(/Gift automation is included from the Growth plan/).waitFor();
 });
 
-await step('send the survey to all contacts', async () => {
+await step('send the survey to all contacts (the marketing-cost warning is on screen and the button waits for it)', async () => {
+  await page.getByTestId('send-cost-warning').waitFor({ timeout: 15000 });
+  expect(await page.getByRole('button', { name: /send survey via whatsapp/i }).isDisabled(), 'the send button waits for the cost to be accepted');
+  await page.getByTestId('send-cost-accept').click();
   await page.getByRole('button', { name: /send survey via whatsapp/i }).click();
   await page.getByText('3 invitation(s) queued.').first().waitFor({ timeout: 15000 });
 });

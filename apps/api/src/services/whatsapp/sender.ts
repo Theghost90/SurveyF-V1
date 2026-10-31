@@ -4,6 +4,7 @@ import { templatePayload } from '@surveyflow/shared';
 import { decryptIfEncrypted, encryptSecret } from '../../lib/crypto';
 import { redis } from '../../lib/redis';
 import { prisma } from '../../lib/prisma';
+import { utilityHasChanged } from '../message-category';
 import { credsFor } from './accounts';
 import { getGateway, WaError, type TemplateSend } from './gateway';
 
@@ -28,7 +29,8 @@ const FOLLOWUP_KINDS = new Set(['deadline_note', 'progress_saved', 'progress_sav
 
 // ---- enqueue --------------------------------------------------------------------------
 
-export async function enqueueInvitations(survey: { id: string; userId: string }, contactIds: string[], scheduledFor: Date) {
+/** `category` is what the owner was shown and accepted when sending (WA-03): it is kept on the job and decides the template, whatever happens to the survey or to Meta's classification afterwards. */
+export async function enqueueInvitations(survey: { id: string; userId: string }, contactIds: string[], scheduledFor: Date, category: 'utility' | 'marketing') {
   let queued = 0;
   for (let i = 0; i < contactIds.length; i += 500) {
     const chunk = contactIds.slice(i, i + 500);
@@ -45,7 +47,7 @@ export async function enqueueInvitations(survey: { id: string; userId: string },
           const pending = await tx.sendJob.count({ where: { recipientId: recipient.id, kind: 'invitation', status: { in: ['queued', 'processing'] } } });
           if (pending === 0) {
             await tx.surveyRecipient.update({ where: { id: recipient.id }, data: { status: 'queued', lastError: null } });
-            await tx.sendJob.create({ data: { userId: survey.userId, recipientId: recipient.id, kind: 'invitation', scheduledFor } });
+            await tx.sendJob.create({ data: { userId: survey.userId, recipientId: recipient.id, kind: 'invitation', scheduledFor, category } });
             queued++;
           }
         }
@@ -193,8 +195,15 @@ async function processJob(id: string) {
     const firstName = contact.name.trim().split(/\s+/)[0] || contact.name;
     let template: TemplateSend;
     if (job.kind === 'invitation') {
+      // The category was decided and accepted when the owner sent. A job without one (queued before WA-03) is treated as marketing: the safe direction.
+      const utility = job.category === 'utility';
+      if (utility && (await utilityHasChanged(acct.id, lang))) {
+        // Meta moved the utility template to marketing after the owner accepted the utility rate: sending would bill more than was accepted. Held, and sendable again once accepted.
+        await prisma.surveyRecipient.updateMany({ where: { id: r.id, status: 'queued' }, data: { status: 'failed', lastError: 'category_changed' } });
+        return finish(id, { status: 'failed', lastError: 'category_changed' });
+      }
       template = {
-        name: TEMPLATE_NAMES.invitation, language: lang,
+        name: utility ? TEMPLATE_NAMES.invitation : TEMPLATE_NAMES.invitationMarketing, language: lang,
         bodyParams: [firstName, survey.user.businessName, String(estimateMinutes(survey.questions.length))],
         buttonPayloads: [templatePayload('START', survey.id), templatePayload('DECLINE', survey.id)],
       };

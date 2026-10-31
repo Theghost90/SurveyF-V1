@@ -21,6 +21,7 @@ Newest first.
 <!-- backlog:table changelog -->
 | Date | Level | Change |
 | --- | --- | --- |
+| 2026-10-31 | major | WA-03 is built (Must): each survey is sent as a utility or a marketing message, marketing by default and unless it qualifies, the owner must accept the cost before every marketing send, and a re-categorisation by Meta is stored, announced and never silently billed. Not yet run against the real Meta. |
 | 2026-10-31 | major | DAT-02 is built as far as the repository can go (Must): encrypted backups, a restore test, a recovery command and a preflight check. The host's disk encryption is not something code can do or see: the row stays "check open" until you have read it in your provider's documentation. |
 | 2026-10-31 | major | DAT-01 is built (Must): export of the whole account, deletion with a 30-day grace, a pseudonymised financial archive kept for N years, all behind confirmation, caps, e-mails and the audit log. Its web screen has not been driven in a real browser yet. |
 | 2026-10-31 | minor | SEC-01 narrowed to the owner's own sending domain: a real message was delivered through Gmail SMTP from the owner's PC. |
@@ -34,21 +35,21 @@ Newest first.
 ## At a glance
 
 <!-- backlog:summary:start -->
-**76 rows: 23 built, 53 not built.** Of the built ones, 6 still have a check open against a real service or device.
+**76 rows: 24 built, 52 not built.** Of the built ones, 7 still have a check open against a real service or device.
 
 | | ✅ Built | ⬜ Not built | Total |
 |---|---|---|---|
-| Must | 11 | 23 | 34 |
+| Must | 12 | 22 | 34 |
 | Should | 8 | 11 | 19 |
 | Could | 4 | 10 | 14 |
 | Won't this release | 0 | 9 | 9 |
-| **All** | **23** | **53** | **76** |
+| **All** | **24** | **52** | **76** |
 
 Each ID in the grid carries its state: ✅ built · ⚠️ built, a check is open · ⬜ not built · 🧑 your action, no code · ⏸ deferred by you · 🔭 next version.
 
 | | Smaller | Small | Big | Bigger |
 |---|---|---|---|---|
-| **MUST** (34) | ⚠️ SEC-07, ⚠️ DAT-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01, 🧑 BIZ-02 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⬜ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-01, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⬜ PAY-02, ⬜ PAY-07, ⬜ WA-03, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, 🧑 LEG-03, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
+| **MUST** (34) | ⚠️ SEC-07, ⚠️ DAT-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01, 🧑 BIZ-02 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⬜ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-01, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⚠️ WA-03, ⬜ PAY-02, ⬜ PAY-07, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, 🧑 LEG-03, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
 | **SHOULD** (19) | ✅ SEC-10, ⚠️ SEC-11, ✅ SEC-14, ⬜ PAY-06 | ⚠️ SEC-13, ⬜ WA-06, ⬜ BIZ-03, 🧑 LEG-05, 🧑 OPS-04 | ✅ SEC-06b, ✅ SEC-09, ✅ SEC-12, ✅ SEC-17, ⬜ ADM-03, ⬜ ADM-04, ⬜ LEG-02b, ⬜ PAY-08b, ⬜ PAY-09, ⬜ WA-05 | none |
 | **COULD** (14) | ✅ SEC-18 | ✅ SEC-19, ✅ SEC-20 | ⬜ WA-07, ⬜ DSN-01, ⬜ ADM-06, ⬜ PAY-12, ⬜ OPS-05 | ✅ SEC-15, ⬜ BIZ-04, ⬜ BIZ-05, ⬜ BIZ-06, ⬜ ADM-05, ⬜ PAY-11 |
 | **WON'T THIS RELEASE** (9) | 🔭 FUT-05 | ⏸ DEF-01, ⏸ DEF-02 | 🔭 FUT-03 | ⏸ DEF-03, ⏸ DEF-04, 🔭 FUT-01, 🔭 FUT-02, 🔭 FUT-04 |
@@ -72,6 +73,7 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 | SEC-16 | Upgrade the website framework (Next.js 14.2.35 to 15.5.28, React 19): 25 advisories, one a critical remote-code-execution flaw on Windows servers | Must | Small | ✅ Built | `apps/web/package.json`, `apps/web/tests/proxy-renewal.test.ts`, `scripts/preflight.mts` | Own commit, `git revert` undoes it. The fix is checked under Windows path rules (`preflight --only next`: fails on 15.5.23, passes on 15.5.28) and it was run on the owner's own Windows PC (win32-x64, Node 24.21.0, 2026-10-31): 9 of 9 hostile lookups refused. It is that code run on that Node, not an attack on a running Windows server; the advisory's own page could not be read | none |
 | DAT-01 | Account deletion, data export, retention rules (finding 13; built 2026-10-31 on your instruction, D-10, which lifts D-05 for this row) | Must | Big | ✅ Built | `apps/api/tests/account-data.test.ts`, `apps/api/src/services/account-data.ts`, `apps/api/prisma/migrations/20261031000000_account_data_rights` | Limits: the web screen (Settings, Your data) is type-checked and linted but not driven in a real browser yet. The 10 years kept for financial records is a default for counsel to confirm, not a legal statement. Nobody on staff sees the requests until ADM-02 (the retention job carries them out after the grace period). Copies in database backups last until the backup expires (DAT-02) | ⚖ |
 | DAT-02 | Encrypted database backups with a restore test and a recovery command (finding 11; built 2026-10-31 on your instruction, D-10). The host's disk encryption is the other half and is yours (`docs/BACKUP_RESTORE.md`) | Must | Smaller | ⚠️ Built, check open | `scripts/tests/backup.test.mjs`, `scripts/lib/sealed-file.mjs`, `scripts/lib/backup.mjs`, `scripts/backup.mjs`, `scripts/restore-test.mts`, `docs/BACKUP_RESTORE.md` | NOT DONE and not doable from the repository: encryption of the database disk at the production host (read your provider's documentation for that product and write where you read it in HOST_DISK_ENCRYPTION; the preflight prints it and does not verify it). Not yet run: a real backup and restore on the production host or on Windows (only a local PostgreSQL 16 so far) | 📄 host |
+| WA-03 | Per-survey message category (utility or marketing), re-categorisation by Meta, cost warning (built 2026-10-31 on your instruction, D-10) | Must | Big | ⚠️ Built, check open | `packages/shared/src/message-category.test.ts`, `apps/api/tests/message-category.test.ts`, `packages/shared/src/message-category.ts`, `apps/api/prisma/migrations/20261031010000_message_category` | Not run against the real Meta (WA-01): whether it accepts the two invitation wordings in the categories they declare, and whether it re-categorises them. The `template_category_update` field must be ticked in the app's webhook settings. The word list that makes a survey read as promotional is a judgement, not Meta's rule. Rates are Meta's and are not shown in the product | none |
 | SEC-06b | "Confirm it is you" for large exports and bulk deletes (split from SEC-06, D-02) | Should | Big | ✅ Built | `apps/api/tests/security-2fa-stepup.test.ts`, `apps/api/tests/security-reads.test.ts` | — | none |
 | SEC-09 | Two-factor authentication for customers: authenticator app and recovery codes (finding 7) | Should | Big | ✅ Built | `apps/api/tests/security-2fa-stepup.test.ts`, `apps/api/tests/security-crypto.test.ts` | — | none |
 | SEC-10 | Generic sign-up response, alias normalisation (findings 9 and 15) | Should | Smaller | ✅ Built | `apps/api/tests/security-auth.test.ts` | — | none |
@@ -95,7 +97,6 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 | PAY-02 | Daily reconciliation, wallets against provider balances. Pilot stop-gap: a daily manual check with the SQL query; the automated job before scale (D-02). Not verified: whether providers offer a balance API | Must | Big | ⬜ Not built | Code | none |
 | PAY-07 | Resolution screen for "to verify" gifts and payments (delivered inside ADM-02) | Must | Big | ⬜ Not built | Code | none |
 | PAY-13 | Payout limits: a cap per account and per phone per day, and a hold on payouts for accounts only a few days old. Counted in the matrix, not built (D-07); a Must for any launch with real payouts | Must | Small | ⬜ Not built | Code | none |
-| WA-03 | Per-survey message category, re-categorisation, cost warning | Must | Big | ⬜ Not built | Code | none |
 | ADM-01 | Staff foundation: separate admin app, staff accounts, RBAC, mandatory 2FA, audit log (section G; stays Must for a public launch, D-03, D-08) | Must | Big | ⬜ Not built | Code | ⚖ 📄 |
 | ADM-02 | Money and customer operations console; needs ADM-01, delivers PAY-07 and the screen of PAY-02 (D-03, D-08) | Must | Big | ⬜ Not built | Code | ⚖ |
 | PAY-06 | Unfunded gifts expire after about 30 days | Should | Smaller | ⬜ Not built | Code | none |
@@ -194,6 +195,7 @@ For every row: what it fixes, the risks it brings (with a label), and how they a
 | SEC-20 | Only numbers were protected from bulk reading; names and answers were not | UX: friction for large legitimate lists. ABUSE: a slow scraper under the soft cap | A count of distinct people per 24 hours, step-up past the soft number, a hard stop, one e-mail, an audit row |
 | DAT-01 | No erasure or export | DATA: irreversible deletion; the export file is a leak. PAY: the ledger must stay | Built: no stored export (built on the spot, sent to the requesting browser only, no link to forward), a step-up confirmation every time, a daily cap and an e-mail each time; deletion needs the word DELETE and a step-up, is refused while wallet, gifts or payments are unresolved, waits 30 days read-only (cancelable, e-mailed), is postponed if money appears in the grace, and keeps only a pseudonymised money record (keyed hash, no name, number or e-mail) for the retention period |
 | DAT-02 | Plain text at rest and in backups | OPS: a lost key. COST: managed encryption | Built: backups sealed with AES-256-GCM as they are written (never a plain copy on disk), a manifest with checksum and the row count of every table, a weekly restore test into a scratch database (the preflight fails a backup that was never restored), a recovery command that refuses a non-empty target, the key kept in two places away from the server. Not built: encryption of the host's disk (yours to check) |
+| WA-03 | Wrong cost and category | COST: marketing messages cost more. LEGAL: promotions sent as "utility" | Built: marketing unless the owner says the survey follows something the person did AND no reward is attached AND nothing reads as a promotion (English and French word list, shown as reasons, never overridable); the owner must accept the cost before every marketing send (enforced by the API, 409 otherwise) and every send is in the audit trail with its category; a template Meta moves to marketing is stored, e-mailed once (also when announced in advance) and an invitation accepted as utility is held, never sent at a rate nobody accepted |
 
 ### Not built yet
 
@@ -220,7 +222,6 @@ For every row: what it fixes, the risks it brings (with a label), and how they a
 | PAY-12 | An upgrade starts a new period | PAY: calculation errors | A cap, tests, counsel on the terms |
 | PAY-13 | A wallet top-up by card followed by gifts to Mobile Money numbers is a cash-out route for stolen cards, and the chargeback arrives after the money has gone | UX: an honest owner meets a cap. PAY: caps set too high do nothing | A cap per account and per phone per day, a hold on payouts for young accounts, sized against the providers' dispute terms (docs/PAYMENTS.md, section on chargebacks) |
 | WA-01, WA-02, WA-04 | Unverified Meta, no approval, unsubmitted templates | COST: Meta billing. OPS: rejections. SEC: tokens in tests | A test app first, an alert on rejection, tokens only in the environment |
-| WA-03 | Wrong cost and category | COST: marketing messages cost more. LEGAL: promotions sent as "utility" | Default to marketing when unsure, wording rules, a cost warning |
 | WA-05 | Owners cannot reach people outside their contacts | ABUSE: gift farming and spam. DATA: public numbers. SEC: guessable links. COST: quota use | Unguessable codes, expiry, caps (WA-06), a country limit, a consent line and STOP, joiners count toward the Explore cap |
 | WA-06 | Gift farming through a public link | UX: honest users capped | One gift per number per survey, a per-survey ceiling, a gifts switch |
 | WA-07 | No owner alerts by e-mail or WhatsApp | COST: billed to SurveyFlow. ABUSE: spam | Reuse the bot's caps and mute |

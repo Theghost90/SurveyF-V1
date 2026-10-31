@@ -141,7 +141,7 @@ describe('the grace period', () => {
     const w = await scheduled();
     expect((await w.owner.raw('GET', '/api/surveys')).status).toBe(200);
     expect((await w.owner.raw('GET', '/api/account/data')).json.deletionScheduledFor).toBeTruthy();
-    for (const [m, u, body] of [['POST', '/api/contacts', { name: 'X', phone: '+237677999999', consent: true }], ['POST', `/api/surveys/${w.surveyId}/send`, { all: true }], ['PUT', `/api/surveys/${w.surveyId}`, {}], ['DELETE', `/api/contacts/${w.contactIds[0]}`, undefined]] as const) {
+    for (const [m, u, body] of [['POST', '/api/contacts', { name: 'X', phone: '+237677999999', consent: true }], ['POST', `/api/surveys/${w.surveyId}/send`, { acceptMarketingCost: true, all: true }], ['PUT', `/api/surveys/${w.surveyId}`, {}], ['DELETE', `/api/contacts/${w.contactIds[0]}`, undefined]] as const) {
       const r = await w.owner.raw(m, u, body);
       expect([r.status, r.json?.error], `${m} ${u}`).toEqual([423, 'account_pending_deletion']);
     }

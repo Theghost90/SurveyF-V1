@@ -103,6 +103,8 @@ export const surveyInputSchema = z.object({
   kind: z.enum(SURVEY_KINDS).default('general'),
   /** Last day answers matter. Required for live-event surveys; optional otherwise. */
   deadlineAt: z.coerce.date().nullish(),
+  /** The owner's statement that the people get this survey because of something they did with the business (a purchase, a booking, a visit). Without it the invitation is sent as marketing (message-category.ts). */
+  followsTransaction: z.boolean().default(false),
   /** Automatic, single, polite reminders (rules in reminders.ts). Off unless the owner switches them on. */
   autoRemindNonResponders: z.boolean().default(false),
   autoRemindAbandoners: z.boolean().default(false),

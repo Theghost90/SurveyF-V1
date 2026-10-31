@@ -109,7 +109,7 @@ await step('publish, invite 12 people; 3 complete, 2 abandon at Q2, 1 declines (
   }
   st.contacts = contacts;
   expect((await call('POST', `/surveys/${st.survey}/publish`)).status === 200, 'publish');
-  const sent = await call('POST', `/surveys/${st.survey}/send`, { all: true });
+  const sent = await call('POST', `/surveys/${st.survey}/send`, { all: true, acceptMarketingCost: true });
   expect(sent.status === 200, `send: ${JSON.stringify(sent)}`);
   for (let i = 0; i < 4; i++) await call('POST', '/dev/jobs/run');
   const survey = (await call('GET', `/surveys/${st.survey}`)).json;

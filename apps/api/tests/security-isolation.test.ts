@@ -217,7 +217,7 @@ describe('ids in a request body that are not yours are ignored (finding SEC-12)'
     const audience = await b.post(`/api/surveys/${bWorld.surveyId}/audience`, { contactIds: A.contactIds });
     expect(audience.status).toBe(200);
     expect(audience.eligible).toBe(0);
-    const send = await b.post(`/api/surveys/${bWorld.surveyId}/send`, { contactIds: A.contactIds });
+    const send = await b.post(`/api/surveys/${bWorld.surveyId}/send`, { acceptMarketingCost: true, contactIds: A.contactIds });
     expect(send.status).toBe(400);
     expect(send.error).toBe('no_eligible_contacts');
     expect(await prisma.surveyRecipient.count({ where: { contactId: { in: A.contactIds }, survey: { userId: b.userId } } })).toBe(0);

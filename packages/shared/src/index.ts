@@ -3,6 +3,7 @@ export * from './countries';
 export * from './phone';
 export * from './survey';
 export * from './wa-messages';
+export * from './message-category';
 export * from './wallet';
 export * from './segments';
 export * from './reminders';

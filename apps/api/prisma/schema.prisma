@@ -115,14 +115,14 @@ model User {
   // ADDED (security): the address with its aliases folded (john.doe+x@gmail.com == johndoe@gmail.com) so one mailbox cannot open several accounts.
   // Set by the Prisma extension in lib/prisma.ts on every write, never by hand; nullable only so `db push` can add it to a table that already has rows
   // (the start-up backfill fills them).
-  emailCanonical    String?   @unique
+  emailCanonical       String?   @unique
   // ADDED (security): null until the owner proved they can read mail sent to the address. An unverified account cannot send, pay, export or connect anything.
-  emailVerifiedAt   DateTime?
-  passwordChangedAt DateTime?
+  emailVerifiedAt      DateTime?
+  passwordChangedAt    DateTime?
   // ADDED (security): authenticator-app second factor. The secret is AES-GCM ciphertext (lib/crypto.ts); totpLastStep stops a code being used twice.
-  totpSecret        String?
-  totpEnabledAt     DateTime?
-  totpLastStep      Int?
+  totpSecret           String?
+  totpEnabledAt        DateTime?
+  totpLastStep         Int?
   // ADDED (DAT-01, law 2024/017 s.38-43): the owner asked for the account to be erased. Nothing is deleted until deletionScheduledFor (30 days later); signing in and
   // cancelling is possible until then. While it is set the account only reads: surveys are paused and every change except cancelling and downloading is refused.
   deletionRequestedAt  DateTime?
@@ -166,16 +166,19 @@ model WhatsAppAccount {
 // ADDED: WhatsApp templates are per-WABA, so each connected account needs its own
 // copies of the invitation/reminder templates, each with its own approval state.
 model MessageTemplate {
-  id             String   @id @default(cuid())
-  accountId      String
-  name           String
-  language       String // "fr" | "en"
-  category       String   @default("UTILITY")
-  status         String   @default("PENDING") // PENDING | APPROVED | REJECTED | PAUSED
-  metaTemplateId String?
-  reason         String?
-  updatedAt      DateTime @updatedAt
-  createdAt      DateTime @default(now())
+  id                String    @id @default(cuid())
+  accountId         String
+  name              String
+  language          String // "fr" | "en"
+  category          String    @default("UTILITY") // what Meta says it is now: kept up to date by template_category_update (WA-03)
+  // Meta announces a re-categorisation ahead of time: what it will become, and when. Cleared once the change is made.
+  categoryPending   String?
+  categoryPendingAt DateTime?
+  status            String    @default("PENDING") // PENDING | APPROVED | REJECTED | PAUSED
+  metaTemplateId    String?
+  reason            String?
+  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime  @default(now())
 
   account WhatsAppAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
@@ -199,6 +202,10 @@ model Survey {
   customThankYou String? // referenced by the spec's gift code but missing from its schema
   giftAmount     Int?    @map("giftAmountFCFA") // numeric value for airtime / momo gifts, in whole units of the owner's wallet currency
   giftMaxCount   Int? // hard cap on gifts, protects the owner's budget
+
+  // The owner's statement that the people get this because of something they did with the business (a purchase, a booking, a visit). Without it the
+  // invitation goes out as MARKETING (packages/shared/src/message-category.ts, WA-03).
+  followsTransaction Boolean @default(false)
 
   // ADDED (automatic reminders). `kind` = general | event; `deadlineAt` is required for events. The two switches are
   // independent and OFF by default: SurveyFlow, not the owner, decides when a reminder is polite (shared/reminders.ts).
@@ -308,6 +315,7 @@ model SendJob {
   scheduledFor DateTime  @default(now())
   attempts     Int       @default(0)
   lastError    String?
+  category     String? // invitations: 'utility' | 'marketing', decided and acknowledged when the owner sent (WA-03). Never sent as utility once Meta moved that template
   lockedAt     DateTime?
   payload      Json?
   createdAt    DateTime  @default(now())

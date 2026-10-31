@@ -9,7 +9,7 @@ export type Lang = 'en' | 'fr';
 export type MailKind =
   | 'verify_email' | 'register_existing' | 'reset_password' | 'password_changed' | 'new_device' | 'failed_logins'
   | 'export_alert' | 'bulk_delete_alert' | 'bulk_read_alert' | 'sheets_sync_paused' | 'two_factor_changed' | 'sessions_revoked' | 'link_google' | 'step_up_code'
-  | 'deletion_requested' | 'deletion_cancelled' | 'account_deleted';
+  | 'deletion_requested' | 'deletion_cancelled' | 'account_deleted' | 'template_recategorised';
 
 export interface MailParams {
   url?: string;
@@ -21,6 +21,11 @@ export interface MailParams {
   rows?: number;
   what?: string; // export kind or survey title
   enabled?: boolean;
+  /** template_recategorised: the template, what it was, what it is (or will be), and whether it already happened. */
+  template?: string;
+  from?: string;
+  to?: string;
+  soon?: boolean;
 }
 
 export const escapeHtml = (s: string): string => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -118,6 +123,18 @@ function build(kind: MailKind, lang: Lang, p: MailParams): Body {
       return fr
         ? { subject: 'Votre compte SurveyFlow a été supprimé', lines: [hi, 'Votre compte et les données qu’il contenait ont été effacés. Conservez ce message comme preuve : nous n’avons plus rien qui vous identifie, hormis les justificatifs financiers décrits dans notre politique de confidentialité.'] }
         : { subject: 'Your SurveyFlow account was deleted', lines: [hi, 'Your account and the data it held have been erased. Keep this message as your proof: we hold nothing that identifies you any more, apart from the financial records described in our privacy policy.'] };
+    case 'template_recategorised': {
+      const t = p.template ?? '';
+      return fr
+        ? { subject: p.soon ? 'Meta va changer la catégorie d’un de vos modèles WhatsApp' : 'Meta a changé la catégorie d’un de vos modèles WhatsApp', lines: [hi, p.soon
+          ? `Meta a annoncé qu’elle va classer le modèle « ${t} » de votre compte WhatsApp en ${p.to}${p.when ? ` vers le ${p.when}` : ''}. Les messages envoyés avec ce modèle seront alors facturés au tarif ${p.to}, plus élevé que le tarif ${p.from}.`
+          : `Meta a classé le modèle « ${t} » de votre compte WhatsApp en ${p.to} (il était ${p.from}). Les messages envoyés avec ce modèle sont facturés au tarif ${p.to}.`,
+        'Ce que SurveyFlow fait : un sondage qui s’envoyait au tarif utilitaire est traité comme un sondage marketing, et on vous demandera d’accepter ce coût avant chaque envoi. Les invitations qui attendaient d’être envoyées avec l’ancien tarif sont retenues (statut « échec ») : renvoyez-les depuis la page du sondage quand vous acceptez le nouveau coût.', 'Les tarifs sont ceux de Meta, par pays : consultez la facturation de votre compte WhatsApp Business.'] }
+        : { subject: p.soon ? 'Meta is about to change the category of one of your WhatsApp templates' : 'Meta changed the category of one of your WhatsApp templates', lines: [hi, p.soon
+          ? `Meta announced that it will classify the template "${t}" of your WhatsApp account as ${p.to}${p.when ? ` around ${p.when}` : ''}. Messages sent with it will then be billed at the ${p.to} rate, which is higher than the ${p.from} rate.`
+          : `Meta classified the template "${t}" of your WhatsApp account as ${p.to} (it was ${p.from}). Messages sent with it are billed at the ${p.to} rate.`,
+        'What SurveyFlow does: a survey that was sent at the utility rate is now treated as a marketing survey, and you will be asked to accept that cost before each send. Invitations that were waiting to go out at the old rate are held back (status "failed"): send them again from the survey page once you accept the new cost.', 'The rates are Meta\'s, by country: see the billing of your WhatsApp Business account.'] };
+    }
     case 'step_up_code':
       return fr
         ? { subject: `Votre code de confirmation SurveyFlow : ${p.code}`, lines: [hi, `Votre code de confirmation est ${p.code}. Il est valable 10 minutes.`], foot: 'Ne le communiquez à personne. SurveyFlow ne vous le demandera jamais par téléphone ou message.' }
