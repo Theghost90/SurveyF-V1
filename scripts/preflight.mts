@@ -5,9 +5,10 @@
  *
  *   npx tsx --env-file=.env scripts/preflight.mts [options]
  *
- *   --only <list>       comma-separated subset of: google, breach, captcha, argon2, mail, headers, next (default: all that apply)
+ *   --only <list>       comma-separated subset of: google, breach, captcha, argon2, mail, headers, next, backup (default: all that apply)
  *   --domain <domain>   mail: the domain of EMAIL_FROM; checks its SPF, DKIM and DMARC records in DNS
  *   --mail-to <address> mail: send ONE real e-mail through the configured provider (EMAIL_PROVIDER) to this address
+ *   --backup-dir <dir>  backup: where `scripts/backup.mjs` writes (default BACKUP_DIR, then ./backups)
  *   --url <https://...> headers: the address of the deployed website (or of the `npm run share` tunnel); checks https, HSTS, the CSP and the cookies
  *   --fake-services     self-test of THIS script: haveibeenpwned, Cloudflare and Resend are answered by built-in fakes that follow their documentation. It shows that the
  *                       script reads real answers correctly; it proves nothing about the real services.
@@ -20,6 +21,8 @@
  *   mail      DNS records of the sending domain, and one real message. "Accepted" is not "delivered": look at the inbox, the spam folder and the message headers (dkim, spf, dmarc = pass).
  *   headers   what the deployed website sends: https redirect, HSTS, a fresh CSP nonce per page, the other headers, and the cookie names (a proxy that hides https turns
  *             `__Host-next-auth.csrf-token` into `next-auth.csrf-token`: that is the failure this finds). Against `npm run share` it is a check through a real Cloudflare edge.
+ *   backup    the encrypted backups (DAT-02): a key is set, the newest backup is recent and matches its checksum, a restore test passed lately, the database connection is
+ *             encrypted, and what you state about the host's disk. It does NOT see the host's disk: that is a setting at your host; this prints what you wrote, not a verdict.
  *   next      offline: loads the INSTALLED Next.js, makes it behave as on a Windows host (path.win32) and checks that it refuses cache paths that climb out of its folder
  *             and escapes the backslash in a path segment: the fix of the critical remote-code-execution advisory for Windows-hosted servers (15.5.24). Re-run it after every
  *             Next.js upgrade; it SKIPs, never fails, when a later Next.js has moved the code it reads.
@@ -33,7 +36,7 @@ import nodePath from 'node:path';
 
 const args = process.argv.slice(2);
 const opt = (n: string) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined; };
-const ALL = ['google', 'breach', 'captcha', 'argon2', 'mail', 'headers', 'next'];
+const ALL = ['google', 'breach', 'captcha', 'argon2', 'mail', 'headers', 'next', 'backup'];
 const only = new Set((opt('only') ?? ALL.join(',')).split(',').map((s) => s.trim()).filter(Boolean));
 for (const o of only) if (!ALL.includes(o)) { console.error(`unknown check "${o}" (${ALL.join(', ')})`); process.exit(2); }
 
@@ -405,9 +408,70 @@ async function checkNext(): Promise<void> {
   else report('PASS', `next@${version}`, `under Windows path rules all ${total} hostile cache lookups are refused, a plain one still resolves (${good}), and a backslash in a segment is escaped.\nThis is the code of the fix in 15.5.24, run on this computer's Node: it is not a run on a Windows host.`);
 }
 
+async function checkBackup(): Promise<void> {
+  section('backup: encrypted copies, a restore test, the database connection and the disk');
+  const { listBackups, readManifest, readRestoreLog, sha256OfFile } = await import('./lib/backup.mjs');
+  const { parseKeyRing } = await import('./lib/sealed-file.mjs');
+  const production = process.env.NODE_ENV === 'production';
+  const dir = nodePath.resolve(opt('backup-dir') || process.env.BACKUP_DIR || 'backups');
+  const backups = listBackups(dir);
+  if (!process.env.BACKUP_KEYS && !backups.length) {
+    report(production ? 'FAIL' : 'SKIP', 'backups', `Not set up: no BACKUP_KEYS and no backup in ${dir}. Make a key (node scripts/backup.mjs --new-key), keep a second copy of it away from the server, then run scripts/backup.mjs and scripts/restore-test.mts (docs/BACKUP_RESTORE.md).`);
+  } else {
+    // 1. the key
+    try {
+      const ring = parseKeyRing(process.env.BACKUP_KEYS);
+      const material = (spec: string) => spec.split(',').map((e) => e.slice(e.indexOf(':') + 1).trim()).filter(Boolean);
+      const shared = material(process.env.BACKUP_KEYS ?? '').some((k) => material(process.env.ENCRYPTION_KEYS ?? '').includes(k));
+      if (shared) report('WARN', 'backup key', 'a backup key is also an ENCRYPTION_KEYS key: one leak would open both the live data and every backup. Use a key of its own.');
+      else report('PASS', 'backup key', `${ring.keys.size} key(s), sealing with "${ring.active[0]}". Keep a second copy somewhere that is not this server: without the key every backup is noise.`);
+    } catch (e) { report('FAIL', 'backup key', message(e)); }
+    // 2. the newest backup: recent, complete, unchanged
+    const newest = backups[0];
+    if (!newest) report('FAIL', 'newest backup', `no backup in ${dir}`);
+    else {
+      const manifest = (() => { try { return readManifest(newest); } catch { return null; } })();
+      const age = manifest ? (Date.now() - new Date(manifest.createdAt).getTime()) / 3_600_000 : Infinity;
+      const label = `${nodePath.basename(newest)}${manifest ? `, ${age.toFixed(1)} h old, ${Object.keys(manifest.tables).length} tables` : ''}`;
+      if (!manifest) report('FAIL', 'newest backup', `${label}: no readable manifest beside it`);
+      else if ((await sha256OfFile(newest)) !== manifest.sha256) report('FAIL', 'newest backup', `${label}: its checksum does not match the manifest: the file was changed or damaged after it was written`);
+      else if (age <= 26) report('PASS', 'newest backup', `${label}, checksum matches.`);
+      else if (age <= 72) report('WARN', 'newest backup', `${label}: older than a day. Is the daily job running?`);
+      else report('FAIL', 'newest backup', `${label}: more than three days old. The backup job has stopped.`);
+    }
+    // 3. the restore test
+    const log = readRestoreLog(dir);
+    const last = log.at(-1);
+    const lastOk = [...log].reverse().find((r: { ok: boolean }) => r.ok);
+    if (!last) report('FAIL', 'restore test', 'a backup that has never been restored is a hope, not a backup. Run: npx tsx --env-file=.env scripts/restore-test.mts');
+    else if (!last.ok) report('FAIL', 'restore test', `the last restore test (${last.at}) FAILED: ${(last.problems ?? []).join('; ')}`);
+    else if (Date.now() - new Date(lastOk.at).getTime() > 8 * 86_400_000) report('WARN', 'restore test', `the last passing restore test is from ${lastOk.at}: more than a week ago. Run it again.`);
+    else report('PASS', 'restore test', `passed ${lastOk.at}: ${lastOk.rows} rows came back into a scratch database and matched.`);
+  }
+  // 4. the connection to the database
+  if (process.env.DATABASE_URL) {
+    try {
+      const { Client } = createRequire(new URL('../apps/api/package.json', import.meta.url))('pg');
+      const client = new Client({ connectionString: process.env.DATABASE_URL });
+      await client.connect();
+      const { rows } = await client.query('SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()');
+      await client.end();
+      const host = new URL(process.env.DATABASE_URL).hostname;
+      const local = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(host);
+      if (rows[0]?.ssl) report('PASS', 'database connection', `encrypted in transit (TLS) to ${host}.`);
+      else if (local) report('SKIP', 'database connection', `not encrypted, but ${host} is this computer: nothing crosses a network.`);
+      else report('WARN', 'database connection', `not encrypted in transit to ${host}: add ?sslmode=require (or verify-full) to DATABASE_URL.`);
+    } catch (e) { report('WARN', 'database connection', `could not check: ${message(e)}`); }
+  }
+  // 5. the disk: not visible from here
+  const stated = (process.env.HOST_DISK_ENCRYPTION ?? '').trim();
+  if (stated) report('SKIP', 'database disk', `You state: "${stated}". This script cannot see the host's disks and checks nothing here: keep the evidence (the provider's page or a screenshot) with the go-live records.`);
+  else report(production ? 'WARN' : 'SKIP', 'database disk', 'Whether the database disk is encrypted is a setting of the host and cannot be read from here. Check it in the provider console, then write what you found in HOST_DISK_ENCRYPTION (provider, setting, date).');
+}
+
 // ---- run ------------------------------------------------------------------------------------------------------------------------
 
-const runs: Record<string, () => Promise<void>> = { google: checkGoogle, breach: checkBreach, captcha: checkCaptcha, argon2: checkArgon2, mail: checkMail, headers: checkHeaders, next: checkNext };
+const runs: Record<string, () => Promise<void>> = { google: checkGoogle, breach: checkBreach, captcha: checkCaptcha, argon2: checkArgon2, mail: checkMail, headers: checkHeaders, next: checkNext, backup: checkBackup };
 for (const name of ALL) {
   if (!only.has(name)) continue;
   try { await runs[name]!(); } catch (e) { report('FAIL', `${name}: the check itself broke`, message(e)); }

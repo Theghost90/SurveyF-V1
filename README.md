@@ -67,7 +67,7 @@ For a production-like preview: `npm run build && npm start` (the API reads the r
 4. Each PSP: sandbox pass first (see the table in `docs/DECISIONS.md` §4) — Campay and PayUnit especially. Register `https://<api>/api/payments/webhook/<psp>` in each provider's dashboard and set its webhook secret (the API warns at boot when one is missing and **refuses to start in production with no provider at all**). Keep the jobs process running (`RUN_JOBS=true`): the payment reconciliation job is what finds a payment whose webhook never came. Payments that need a person: `scripts/payments-review.mts` (`docs/PAYMENTS.md`).
 5. Replace the draft `/privacy` and `/terms` with counsel-approved text; set `NEXT_PUBLIC_SALES_WHATSAPP` for the agencies CTA.
 6. Deploy templates (untested here — no Docker daemon): `apps/api/Dockerfile`, `deploy/fly.api.toml`, `deploy/railway.json`, `apps/web/vercel.json`.
-7. On the deployed site run **`npx tsx --env-file=.env scripts/preflight.mts --url https://<your site> --domain <sender domain> --mail-to <you>`**: it checks, with the production code, what the tests can only fake (e-mail and its DNS records, Turnstile, haveibeenpwned, https, HSTS, the cookies, the CSP, argon2 on that host, the Windows fix of Next.js): `docs/SECURITY.md` §19. And **`npm run release:check`** before every release (typecheck, lint, every test and the `npm audit` gate).
+7. On the deployed site run **`npx tsx --env-file=.env scripts/preflight.mts --url https://<your site> --domain <sender domain> --mail-to <you>`**: it checks, with the production code, what the tests can only fake (e-mail and its DNS records, Turnstile, haveibeenpwned, https, HSTS, the cookies, the CSP, argon2 on that host, the Windows fix of Next.js; add `--only backup` for the encrypted backups and the restore test): `docs/SECURITY.md` §19 and §21. And **`npm run release:check`** before every release (typecheck, lint, every test and the `npm audit` gate).
 
 ## Repository layout
 
@@ -84,7 +84,7 @@ apps/api            Fastify API, Prisma schema + migrations, workers (send queue
 apps/web            Next.js app (marketing, auth, dashboard, builder, analytics, billing, simulator)
 packages/shared     plans & prices (single source of truth), phone normalisation, WhatsApp message builders
 apps/web/tests      tests of the website's API proxy (token renewal, cookie rules, refusals)
-scripts/            share-demo.mjs (npm run share), e2e-*.mjs browser tests (ui, bot, wallet, payments, currency, security, responsive, landscape), rotate-keys.mts (encryption key rotation), preflight.mts (checks against the real services), audit-gate.mjs (npm run audit:gate),
+scripts/            share-demo.mjs (npm run share), e2e-*.mjs browser tests (ui, bot, wallet, payments, currency, security, responsive, landscape), rotate-keys.mts (encryption key rotation), preflight.mts (checks against the real services), audit-gate.mjs (npm run audit:gate), backup.mjs + restore-test.mts (encrypted backups: `docs/BACKUP_RESTORE.md`),
                     backlog-check.mjs (npm run backlog:check), tests/ (their unit tests), ui-tour.mjs and shoot.mjs (screenshots)
 surveyflow_design.md   design specification: tokens, layout and navigation, components, responsive rules
 docs/DECISIONS.md   spec/design deviations, open questions, verification status
@@ -101,7 +101,7 @@ docs/META_CHECK.md  running the WhatsApp integration against a real Meta test ap
 ## Tests
 
 ```bash
-npm test                          # shared (71) + API (480) + website (22) tests, then the script tests (37) and the backlog check. Needs the local Postgres/Redis (`docker compose up -d`); the API tests use their own `surveyflow_test` database, which `npm test` creates and migrates by itself first (`npm run test:db`, `scripts/test-db.mjs`)
+npm test                          # shared (71) + API (480) + website (22) tests, then the script tests (57) and the backlog check. Needs the local Postgres/Redis (`docker compose up -d`); the API tests use their own `surveyflow_test` database, which `npm test` creates and migrates by itself first (`npm run test:db`, `scripts/test-db.mjs`)
 npm run typecheck                 # the three workspaces
 npm run audit:gate                # npm audit --omit=dev: fails on a high or critical advisory that is not written in docs/audit-allowlist.json with a reason and an end date
 npm run release:check             # typecheck + the website's lint + npm test + the audit gate: before every release

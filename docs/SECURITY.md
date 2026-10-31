@@ -20,13 +20,13 @@ Legend as in `DECISIONS.md`: ✅ done and tested here · ⚠️ built, but could
 | 8 | Spoofable client IP | SEC-07 | ✅ (⚠️ real CDN) | §10 |
 | 9 | Sign-up enumeration | SEC-10 | ✅ | §3.2 |
 | 10 | Sign-up abuse and CPU load | SEC-04 (CAPTCHA), SEC-11 (argon2id) | ✅ (⚠️ CAPTCHA) | §3, §4 |
-| 11 | Participant data is plain text in the database | **DAT-02 (not built)**; SEC-15 (built, §11) | see §11 | §11, §12 |
+| 11 | Participant data is plain text in the database | **DAT-02 (backups built 2026-10-31; the host's disk is yours, §21)**; SEC-15 (built, §11) | ⚠️ partly | §11, §21 |
 | 12 | Owner separation only in application code | SEC-12 | ✅ (test and guard, **not** Postgres RLS) | §13 |
 | 13 | No account deletion or erasure; no security e-mails; no audit log | **DAT-01 (built 2026-10-31)**; the e-mails and the audit log (SEC-01/04/06/08) | ✅ (limits in §20) | §9, §20 |
 | 14 | Search terms in log URLs | SEC-14 | ✅ | §14 |
 | 15 | Missing browser protections, aliases, 72-byte truncation | SEC-13, SEC-10, SEC-11 | ✅ | §3.2, §4.1, §10 |
 
-Not built, on purpose: **finding 11** as such (the matrix item DAT-02: encrypted disks and backups depend on the hosting choice; finding 13, DAT-01, was built later, §20); **Postgres row-level security** (§13 explains the choice); **any staff console or role system** (ADM-01 to ADM-06).
+Not built: **finding 11's host half** (the encryption of the database disk is a setting at the host and cannot be done or seen from here: §21; its backup half and finding 13, DAT-01, were built later, §20 and §21); **Postgres row-level security** (§13 explains the choice); **any staff console or role system** (ADM-01 to ADM-06).
 
 ### 1.1 Matrix items added after the review (SEC-16 to SEC-20)
 
@@ -237,7 +237,7 @@ two-factor on/off, sign-out everywhere, Google link, the step-up code, a list re
 3. **Names and answers** in lists are not masked. One login can list at most `READ_HARD_PEOPLE` different participants a day and needs a recent confirmation past `READ_SOFT_PEOPLE` (§8), but a stolen session can still read up to the soft number without any confirmation.
 4. **Google Sheets auto-sync** now needs a confirmation to be switched on and pauses itself after 30 days without a new one (§8); in between it keeps pushing new rows.
 5. **Staff and operators**: no console, no roles, no staff 2FA, no audit of staff actions; database access by the operator is unlogged. Matrix items ADM-01 to ADM-02 (Must for a public launch) cover this.
-6. **Encrypted disks and backups** (DAT-02), a **breach-notification procedure**, handling a *participant's* own request to the owner, and **retention periods that counsel has not confirmed** (the 10 years kept for money records, §20, is our default). Account deletion and download exist (§20).
+6. **The host's disk encryption** (DAT-02's host half, §21), a **breach-notification procedure**, handling a *participant's* own request to the owner, and **retention periods that counsel has not confirmed** (the 10 years kept for money records, §20, is our default). Account deletion and download exist (§20).
 7. **Postgres row-level security**: owner separation is application code, guarded by a test over every route (§13). One forgotten filter in *new* code that the guard does not see would still leak.
 8. **Denial of service** beyond the rate limits (no WAF, no per-tenant quotas on CPU-heavy PDF exports other than the per-minute and daily caps). The general limit counts per verified session with a ceiling per address (§10.1), so a crowd behind one carrier address is not throttled for nothing; the numbers are to be tuned with real traffic.
 9. **Dependencies**: `npm audit --omit=dev` reports **0 advisories** since 2026-10-28 and `npm run audit:gate` fails a release on any high or critical one that is not written in `docs/audit-allowlist.json` with a reason and an end date (§18); a new advisory can appear tomorrow. **Secrets management** is the deployment's job (the application reads environment variables).
@@ -267,7 +267,7 @@ The request log keeps the **path without its query string** (search terms, token
 | `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`★ (or `CAPTCHA_DISABLED=true`) | CAPTCHA |
 | `CLIENT_IP_HEADER` or `TRUSTED_PROXY_HOPS` (website) | where the visitor's address comes from |
 | `NEXTAUTH_SECRET`★, `NEXTAUTH_URL` (website) | cookie encryption; https in production. Blank in development gets a fixed throw-away secret (`apps/web/next.config.mjs`); **blank in production signs nobody in** |
-| `CSP_MODE`, `HIBP_CHECK`, `ARGON2_*`, `ACCESS_TOKEN_TTL_SECONDS`, `SESSION_TTL_HOURS`, `AUTH_MIN_RESPONSE_MS`, `SIGNUP_PER_IP_HOUR`, `EXPORT_*`, `STEP_UP_*`, `REVEAL_PER_DAY`, `REQUIRE_2FA_PLANS`, `AUDIT_RETENTION_DAYS`, `UNVERIFIED_PURGE_HOURS`, `ACCOUNT_DELETION_GRACE_DAYS`, `FINANCIAL_RETENTION_YEARS`, `ACCOUNT_EXPORT_PER_DAY`, `RATE_LIMIT_SESSION_PER_MINUTE`, `RATE_LIMIT_IP_PER_MINUTE`, `CONFIRM_REQUIRES_PASSWORD`, `READ_SOFT_PEOPLE`, `READ_HARD_PEOPLE`, `SHEETS_AUTOSYNC_DAYS` | the tunable limits above |
+| `CSP_MODE`, `HIBP_CHECK`, `ARGON2_*`, `ACCESS_TOKEN_TTL_SECONDS`, `SESSION_TTL_HOURS`, `AUTH_MIN_RESPONSE_MS`, `SIGNUP_PER_IP_HOUR`, `EXPORT_*`, `STEP_UP_*`, `REVEAL_PER_DAY`, `REQUIRE_2FA_PLANS`, `AUDIT_RETENTION_DAYS`, `UNVERIFIED_PURGE_HOURS`, `ACCOUNT_DELETION_GRACE_DAYS`, `FINANCIAL_RETENTION_YEARS`, `ACCOUNT_EXPORT_PER_DAY`, `BACKUP_KEYS`, `BACKUP_DIR`, `BACKUP_KEEP_DAYS`, `HOST_DISK_ENCRYPTION` (the last four are read by the backup scripts only), `RATE_LIMIT_SESSION_PER_MINUTE`, `RATE_LIMIT_IP_PER_MINUTE`, `CONFIRM_REQUIRES_PASSWORD`, `READ_SOFT_PEOPLE`, `READ_HARD_PEOPLE`, `SHEETS_AUTOSYNC_DAYS` | the tunable limits above |
 
 Generate secrets with `openssl rand -base64 32` (use `-base64 48` for `JWT_SECRET`).
 
@@ -296,7 +296,7 @@ setting, not code)** and one real confirmation e-mail received · Turnstile keys
 ## 16. What was verified, and what could not be
 
 **Verified in this environment** (real Postgres, Redis, headless Chromium):
-- **610 automated tests** (71 shared in 6 files, 480 API in 29 files, 22 website in 3 files, 37 script tests) and the backlog check, run together by `npm test`: sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed) and the password they ask for, purge, squatter replacement, aliases, password policy and hash upgrade,
+- **630 automated tests** (71 shared in 6 files, 480 API in 29 files, 22 website in 3 files, 57 script tests) and the backlog check, run together by `npm test`: sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed) and the password they ask for, purge, squatter replacement, aliases, password policy and hash upgrade,
   the three login counters and the CAPTCHA paths, sessions and refresh rotation (race, grace, reuse, revoke, expiry), JWT rotation, password reset/change, Google sign-in (stubbed JWKS: wrong audience/issuer/signature, unverified e-mail, linking, squatter), TOTP (RFC vectors, replay, recovery codes, disable),
   step-up (methods, window per session, limits), masking, reveal, export and bulk-delete controls, caps, the read caps, the Sheets re-confirmation, e-mails and audit rows, the rate limits per session and per address, key ring, rotation script (child process), blind index, parked payloads, production boot refusals, log hygiene,
   the append-only trigger, **every API route** against a second owner, the website proxy's rules, token renewal and cookie handling (14 tests), the post-sign-in redirect rule, the audit gate and the backlog checker.
@@ -393,10 +393,32 @@ Law No. 2024/017 (certified text in `docs/legal/`): erasure s.37 and s.38, a cop
 
 **What it does not do.**
 1. s.38(2) says erasure is done *immediately* on request. The 30 days are a safety delay the backlog asked for; the account stops acting at once, but the data is erased later. Whether that delay is acceptable is counsel's call (`DECISIONS.md` §3.9); `ACCOUNT_DELETION_GRACE_DAYS` can be set down to 1.
-2. **Backups.** Copies of the database in backups last until the backup expires (DAT-02).
+2. **Backups.** Copies of the database in backups last until the backup is pruned (`BACKUP_KEEP_DAYS`, 30 by default, §21), and a restored backup brings back an account that was erased after it was taken: re-apply the erasures (`docs/BACKUP_RESTORE.md`).
 3. **Participants' requests.** The owner is the one holding participants' data; a participant who writes to the owner is handled by the owner, by hand (no queue in the product yet; ADM-02).
 4. **A hostile owner** can use the 30 days to get a paused account's data out by the download (3 a day, confirmed each time, e-mailed). That is the intended right.
 5. **Large accounts.** The file is built in memory in one go: an account with millions of answers will be slow and heavy. Not measured.
 6. **Not run in a real browser yet**: the screen is type-checked, linted and covered by the API tests, not driven by `e2e-*`.
 
 *Tests:* `apps/api/tests/account-data.test.ts` (15): file content and what it must not contain, alert/trail/cap, not shut out by the rows cap, unconfirmed and signed-out refusals, step-up and `DELETE`, refusal for each kind of unresolved money, the freeze (and what stays possible), cancelling, the erasure and its cascade, the archive without any name, number or e-mail, the postponement.
+
+## 21. Encrypted backups, the restore test and the disk (DAT-02)
+
+Law No. 2024/017: "secure back-up copies" (s.27(1)), security measures "such as encryption" (s.22(2)). Runbook: `docs/BACKUP_RESTORE.md`. Code: `scripts/lib/sealed-file.mjs` (the encryption), `scripts/lib/backup.mjs`, `scripts/backup.mjs`, `scripts/restore-test.mts`, the `backup` check of `scripts/preflight.mts`. Tests: `scripts/tests/backup.test.mjs` (20; the 9 of the last block, which set up and tear down a scratch database, run a real `pg_dump` and `pg_restore`, and skip, saying why, where those are not installed).
+
+**What is built.**
+- **Sealed as written.** `pg_dump`'s output goes straight into AES-256-GCM in 1 MiB chunks; there is never a plain copy on disk (a test looks for a known value in the file and fails if it finds it). Each chunk is authenticated together with its number and a "last chunk" flag, so a changed byte, swapped or repeated chunks, a truncated copy and a trailing byte are all refused when the file is opened (mutation-checked: ignoring the authentication, or accepting a missing end, makes tests fail).
+- **Complete or absent.** Written as `.partial`, renamed at the end; a failed dump (no `pg_dump`, no database) leaves nothing that looks like a backup. Mode 0600 on Linux and macOS.
+- **A manifest** beside it: SHA-256 and the exact row count of every table, taken in the same exported snapshot as the dump so that the two agree. No credentials, no address.
+- **A restore test** into a scratch database it creates and drops (and refuses any other name): the checksum, every table's rows against the manifest, and up to 50 participants decrypted with the application's own `ENCRYPTION_KEYS`. Run for real against the test database: it passes, and with different application keys it fails with the sentence "ENCRYPTION_KEYS cannot decrypt them".
+- **A recovery command** (`backup.mjs --restore-into`): into a new, empty database only, refusing any database that has a table, comparing with the manifest.
+- **Pruning** by age, never the newest three, only files of the exact name the tool writes.
+- **The preflight** (`--only backup`): the key is set and is not an application key, the newest backup is under a day old and matches its checksum, a restore test passed within eight days (**a backup never restored is a FAIL**), the database connection is encrypted (TLS), and what you wrote about the disk. In production, "not set up" is a FAIL.
+
+**What it does not do, and what was not verified.**
+1. **The disk.** The encryption of the database's disk is a setting at the host. The code cannot change it and cannot see it; the preflight prints what you wrote in `HOST_DISK_ENCRYPTION` and says it checked nothing. Until you have read it in your provider's documentation, finding 11's disk half is open. I have not claimed that any provider encrypts by default: that is theirs to state.
+2. **Tried only on a local PostgreSQL 16.** Not on a managed database, not on Windows, not on a large database (memory is constant; the time is not measured). The snapshot needs a direct connection, not a transaction pooler.
+3. **The key.** Lost key: every backup is unreadable and nothing can be done. Stolen key together with a backup: the data is open. The key is for two places away from the server (§ "Read first" of the runbook).
+4. **A restored backup brings back accounts erased after it** (§20); re-applying erasures is by hand.
+5. **The restore test compares counts and decrypts participants**, not every value.
+6. **One failure of the test suite right after a mutation run was not reproduced** (six further runs, all green, no scratch databases left); I cannot say what it was.
+

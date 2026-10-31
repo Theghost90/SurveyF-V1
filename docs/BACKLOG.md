@@ -21,6 +21,7 @@ Newest first.
 <!-- backlog:table changelog -->
 | Date | Level | Change |
 | --- | --- | --- |
+| 2026-10-31 | major | DAT-02 is built as far as the repository can go (Must): encrypted backups, a restore test, a recovery command and a preflight check. The host's disk encryption is not something code can do or see: the row stays "check open" until you have read it in your provider's documentation. |
 | 2026-10-31 | major | DAT-01 is built (Must): export of the whole account, deletion with a 30-day grace, a pseudonymised financial archive kept for N years, all behind confirmation, caps, e-mails and the audit log. Its web screen has not been driven in a real browser yet. |
 | 2026-10-31 | minor | SEC-01 narrowed to the owner's own sending domain: a real message was delivered through Gmail SMTP from the owner's PC. |
 | 2026-10-31 | minor | SEC-07 narrowed to the production host (the real-Cloudflare check passed on the owner's phone); sign-out log lines now carry the visitor's address. |
@@ -33,21 +34,21 @@ Newest first.
 ## At a glance
 
 <!-- backlog:summary:start -->
-**76 rows: 22 built, 54 not built.** Of the built ones, 5 still have a check open against a real service or device.
+**76 rows: 23 built, 53 not built.** Of the built ones, 6 still have a check open against a real service or device.
 
 | | ✅ Built | ⬜ Not built | Total |
 |---|---|---|---|
-| Must | 10 | 24 | 34 |
+| Must | 11 | 23 | 34 |
 | Should | 8 | 11 | 19 |
 | Could | 4 | 10 | 14 |
 | Won't this release | 0 | 9 | 9 |
-| **All** | **22** | **54** | **76** |
+| **All** | **23** | **53** | **76** |
 
 Each ID in the grid carries its state: ✅ built · ⚠️ built, a check is open · ⬜ not built · 🧑 your action, no code · ⏸ deferred by you · 🔭 next version.
 
 | | Smaller | Small | Big | Bigger |
 |---|---|---|---|---|
-| **MUST** (34) | ⚠️ SEC-07, ⬜ DAT-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01, 🧑 BIZ-02 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⬜ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-01, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⬜ PAY-02, ⬜ PAY-07, ⬜ WA-03, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, 🧑 LEG-03, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
+| **MUST** (34) | ⚠️ SEC-07, ⚠️ DAT-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01, 🧑 BIZ-02 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⬜ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-01, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⬜ PAY-02, ⬜ PAY-07, ⬜ WA-03, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, 🧑 LEG-03, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
 | **SHOULD** (19) | ✅ SEC-10, ⚠️ SEC-11, ✅ SEC-14, ⬜ PAY-06 | ⚠️ SEC-13, ⬜ WA-06, ⬜ BIZ-03, 🧑 LEG-05, 🧑 OPS-04 | ✅ SEC-06b, ✅ SEC-09, ✅ SEC-12, ✅ SEC-17, ⬜ ADM-03, ⬜ ADM-04, ⬜ LEG-02b, ⬜ PAY-08b, ⬜ PAY-09, ⬜ WA-05 | none |
 | **COULD** (14) | ✅ SEC-18 | ✅ SEC-19, ✅ SEC-20 | ⬜ WA-07, ⬜ DSN-01, ⬜ ADM-06, ⬜ PAY-12, ⬜ OPS-05 | ✅ SEC-15, ⬜ BIZ-04, ⬜ BIZ-05, ⬜ BIZ-06, ⬜ ADM-05, ⬜ PAY-11 |
 | **WON'T THIS RELEASE** (9) | 🔭 FUT-05 | ⏸ DEF-01, ⏸ DEF-02 | 🔭 FUT-03 | ⏸ DEF-03, ⏸ DEF-04, 🔭 FUT-01, 🔭 FUT-02, 🔭 FUT-04 |
@@ -70,6 +71,7 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 | SEC-08 | Audit log: the owner's own trail, append-only (D-01, was Should) | Must | Small | ✅ Built | `apps/api/tests/security-ops.test.ts`, `apps/api/prisma/migrations/20261020000000_security_hardening` | Limit: staff actions arrive with ADM-01 | none |
 | SEC-16 | Upgrade the website framework (Next.js 14.2.35 to 15.5.28, React 19): 25 advisories, one a critical remote-code-execution flaw on Windows servers | Must | Small | ✅ Built | `apps/web/package.json`, `apps/web/tests/proxy-renewal.test.ts`, `scripts/preflight.mts` | Own commit, `git revert` undoes it. The fix is checked under Windows path rules (`preflight --only next`: fails on 15.5.23, passes on 15.5.28) and it was run on the owner's own Windows PC (win32-x64, Node 24.21.0, 2026-10-31): 9 of 9 hostile lookups refused. It is that code run on that Node, not an attack on a running Windows server; the advisory's own page could not be read | none |
 | DAT-01 | Account deletion, data export, retention rules (finding 13; built 2026-10-31 on your instruction, D-10, which lifts D-05 for this row) | Must | Big | ✅ Built | `apps/api/tests/account-data.test.ts`, `apps/api/src/services/account-data.ts`, `apps/api/prisma/migrations/20261031000000_account_data_rights` | Limits: the web screen (Settings, Your data) is type-checked and linted but not driven in a real browser yet. The 10 years kept for financial records is a default for counsel to confirm, not a legal statement. Nobody on staff sees the requests until ADM-02 (the retention job carries them out after the grace period). Copies in database backups last until the backup expires (DAT-02) | ⚖ |
+| DAT-02 | Encrypted database backups with a restore test and a recovery command (finding 11; built 2026-10-31 on your instruction, D-10). The host's disk encryption is the other half and is yours (`docs/BACKUP_RESTORE.md`) | Must | Smaller | ⚠️ Built, check open | `scripts/tests/backup.test.mjs`, `scripts/lib/sealed-file.mjs`, `scripts/lib/backup.mjs`, `scripts/backup.mjs`, `scripts/restore-test.mts`, `docs/BACKUP_RESTORE.md` | NOT DONE and not doable from the repository: encryption of the database disk at the production host (read your provider's documentation for that product and write where you read it in HOST_DISK_ENCRYPTION; the preflight prints it and does not verify it). Not yet run: a real backup and restore on the production host or on Windows (only a local PostgreSQL 16 so far) | 📄 host |
 | SEC-06b | "Confirm it is you" for large exports and bulk deletes (split from SEC-06, D-02) | Should | Big | ✅ Built | `apps/api/tests/security-2fa-stepup.test.ts`, `apps/api/tests/security-reads.test.ts` | — | none |
 | SEC-09 | Two-factor authentication for customers: authenticator app and recovery codes (finding 7) | Should | Big | ✅ Built | `apps/api/tests/security-2fa-stepup.test.ts`, `apps/api/tests/security-crypto.test.ts` | — | none |
 | SEC-10 | Generic sign-up response, alias normalisation (findings 9 and 15) | Should | Smaller | ✅ Built | `apps/api/tests/security-auth.test.ts` | — | none |
@@ -116,7 +118,6 @@ Counsel, a payment provider, Meta, the host, Google, or an action or decision of
 <!-- backlog:table notbuilt -->
 | ID | Item | MoSCoW | Size | State | Waiting on | ⚖/📄 |
 | --- | --- | --- | --- | --- | --- | --- |
-| DAT-02 | Encrypted database disk and backups at the host (finding 11; left unbuilt on your instruction, D-05) | Must | Smaller | ⬜ Not built | Host | 📄 host |
 | LEG-01 | Privacy Policy and Terms from counsel (the one-page facts sheet is ready: `docs/LEGAL_FACTS_SHEET.md`) | Must | Bigger | 🧑 Your action | Counsel, You | ⚖ |
 | LEG-02 | Consent responsibility text (retention moved to LEG-02b, D-02) | Must | Small | 🧑 Your action | Counsel | ⚖ |
 | LEG-03 | Is the prepaid wallet regulated as e-money? | Must | Bigger | 🧑 Your action | Counsel | ⚖ 📄 |
@@ -192,13 +193,13 @@ For every row: what it fixes, the risks it brings (with a label), and how they a
 | SEC-19 | The last account pre-hijacking path | UX: one more step on the confirmation page | Five wrong passwords burn the link, a switch (CONFIRM_REQUIRES_PASSWORD) |
 | SEC-20 | Only numbers were protected from bulk reading; names and answers were not | UX: friction for large legitimate lists. ABUSE: a slow scraper under the soft cap | A count of distinct people per 24 hours, step-up past the soft number, a hard stop, one e-mail, an audit row |
 | DAT-01 | No erasure or export | DATA: irreversible deletion; the export file is a leak. PAY: the ledger must stay | Built: no stored export (built on the spot, sent to the requesting browser only, no link to forward), a step-up confirmation every time, a daily cap and an e-mail each time; deletion needs the word DELETE and a step-up, is refused while wallet, gifts or payments are unresolved, waits 30 days read-only (cancelable, e-mailed), is postponed if money appears in the grace, and keeps only a pseudonymised money record (keyed hash, no name, number or e-mail) for the retention period |
+| DAT-02 | Plain text at rest and in backups | OPS: a lost key. COST: managed encryption | Built: backups sealed with AES-256-GCM as they are written (never a plain copy on disk), a manifest with checksum and the row count of every table, a weekly restore test into a scratch database (the preflight fails a backup that was never restored), a recovery command that refuses a non-empty target, the key kept in two places away from the server. Not built: encryption of the host's disk (yours to check) |
 
 ### Not built yet
 
 <!-- backlog:table risks -->
 | ID | Fixes | New risks | Containment |
 | --- | --- | --- | --- |
-| DAT-02 | Plain text at rest and in backups | OPS: a lost key. COST: managed encryption | Managed encryption, restore tests |
 | LEG-01 | No counsel-approved text | LEGAL: promises beyond the product | The lawyer works from the facts sheet, updated when the product changes |
 | LEG-02 | Unclear consent responsibility | DATA: consent proof is more personal data | Timestamp and owner only |
 | LEG-02b | Data kept longer than promised | DATA: irreversible deletion | A grace period, counsel sets the periods, a dry-run report first |

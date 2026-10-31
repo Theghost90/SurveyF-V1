@@ -22,6 +22,8 @@
     "typecheck": "npm run typecheck -w @surveyflow/shared && npm run typecheck -w @surveyflow/api && npm run typecheck -w @surveyflow/web",
     "audit:gate": "node scripts/audit-gate.mjs",
     "backlog:check": "node scripts/backlog-check.mjs",
+    "backup": "node --env-file=.env scripts/backup.mjs",
+    "restore:test": "tsx --env-file=.env scripts/restore-test.mts",
     "release:check": "npm run typecheck && npm run lint -w @surveyflow/web && npm test && npm run audit:gate",
     "share": "node scripts/share-demo.mjs"
   },
