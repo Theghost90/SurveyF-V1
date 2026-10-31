@@ -9,7 +9,7 @@ export type Lang = 'en' | 'fr';
 export type MailKind =
   | 'verify_email' | 'register_existing' | 'reset_password' | 'password_changed' | 'new_device' | 'failed_logins'
   | 'export_alert' | 'bulk_delete_alert' | 'bulk_read_alert' | 'sheets_sync_paused' | 'two_factor_changed' | 'sessions_revoked' | 'link_google' | 'step_up_code'
-  | 'deletion_requested' | 'deletion_cancelled' | 'account_deleted' | 'template_recategorised' | 'payouts_held';
+  | 'deletion_requested' | 'deletion_cancelled' | 'account_deleted' | 'template_recategorised' | 'payouts_held' | 'reconciliation_alert';
 
 export interface MailParams {
   url?: string;
@@ -26,6 +26,8 @@ export interface MailParams {
   from?: string;
   to?: string;
   soon?: boolean;
+  /** reconciliation_alert: one line per finding. */
+  items?: string[];
 }
 
 export const escapeHtml = (s: string): string => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -147,6 +149,12 @@ function build(kind: MailKind, lang: Lang, p: MailParams): Body {
       return fr
         ? { subject: 'Des cadeaux attendent à cause d’une limite de sécurité', lines: [hi, `Certains cadeaux de participants n’ont pas encore été versés : ${frWhy}. Les participants ont reçu un simple remerciement. Les cadeaux partent automatiquement, du plus ancien au plus récent, dès que la limite le permet${p.when ? ` (vers le ${p.when})` : ''}, et les participants sont alors prévenus.`, 'Rien n’a été débité de votre porte-monnaie pour ces cadeaux. Ces limites protègent les porte-monnaie contre l’encaissement de cartes volées ; pour les faire changer, contactez le support.'] }
         : { subject: 'Some gifts are waiting because of a safety limit', lines: [hi, `Some gifts for participants were not paid out yet: ${enWhy}. The participants received a plain thank-you. The gifts are sent automatically, oldest first, as soon as the limit allows${p.when ? ` (about ${p.when})` : ''}, and the participants are then told.`, 'Nothing was debited from your wallet for these gifts. These limits protect wallets from stolen cards being cashed out; to have them changed, contact support.'] };
+    }
+    case 'reconciliation_alert': {
+      const items = p.items ?? [];
+      return fr
+        ? { subject: `Rapprochement quotidien : ${items.length} point(s) à regarder`, lines: ['Le contrôle quotidien des porte-monnaie et des fonds chez les prestataires a trouvé :', ...items.map((i) => `• ${i}`), 'Rien n’a été modifié par ce contrôle. Détail : npx tsx --env-file=.env scripts/reconcile.mts status. Cette alerte n’est envoyée qu’une fois par jour et par point.'] }
+        : { subject: `Daily reconciliation: ${items.length} item(s) to look at`, lines: ['The daily check of the wallets and of the funds at the payment providers found:', ...items.map((i) => `• ${i}`), 'This check changed nothing. Details: npx tsx --env-file=.env scripts/reconcile.mts status. This alert is sent once a day for each item.'] };
     }
     case 'step_up_code':
       return fr

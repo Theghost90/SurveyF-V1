@@ -21,7 +21,8 @@ Profiles: `full` (staging and pilot, everything) and `public` (launch, nothing t
 | Payout currency conversion; wallet, gifts, overage in non-CFA currencies | PAY-05 | on | **off** | exchange/transfer service |
 | Wallet-funded overage | PAY-09 | on | **off** | invoiced through hosted checkout instead |
 | Payout limits (per account, per phone number, young-account hold) | PAY-13 | on | not needed | they limit payouts, which do not exist in `public` |
-| Money admin console, "to verify" screen, wallet reconciliation | ADM-02, PAY-02, PAY-07 | on | not needed | they exist only for the wallet |
+| Daily reconciliation of wallets against ledger and provider balances | PAY-02 | on | not needed | there is no wallet in `public` (the job finds nothing to reconcile) |
+| Money admin console and "to verify" screen | ADM-02, PAY-07 | on | not needed | they exist only for the wallet |
 
 ## Open decisions for `public`
 1. **Reward model:** gift allowance bundled in the plan (units, no top-up, no carry-over, no cash value; recommended, ideally airtime or data only), or no gifts at launch, or the owner's own provider account.
@@ -31,6 +32,7 @@ Profiles: `full` (staging and pilot, everything) and `public` (launch, nothing t
 ## Log of changes to this list
 - 2026-10-29: first proposal.
 - 2026-10-29: Google sign-in added as a row (on in `public`): SEC-05 is built and verified.
+- 2026-10-31: PAY-02 split out of the "money admin console" row and built: the daily reconciliation is `full` only; with no wallet in `public` it finds nothing to do.
 - 2026-10-31: PAY-13 split out of the "money admin console" row and built: payout limits are `full` only (off in `public`: no payouts there). The hold defaults to 0 days with the mock gift provider.
 - 2026-10-31: WA-03 added as a row (on in `public`). Surveys with a reward are marketing by default: if the reward model is decided as "no gifts", more surveys can qualify as utility; nothing else changes.
 - 2026-10-31: DAT-02 added as a row (on in `public`, no switch: it is tooling run by the operator, not a route). It is a Must for any public launch with real owners' data; its host half is not done.

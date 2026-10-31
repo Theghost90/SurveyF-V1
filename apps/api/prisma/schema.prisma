@@ -753,3 +753,31 @@ model Backfill {
   name  String   @id
   ranAt DateTime @default(now())
 }
+
+// ADDED (PAY-02). What a payment provider's own dashboard or API says the merchant account holds, at a moment: the other side of the daily reconciliation.
+model ProviderBalance {
+  id        String   @id @default(cuid())
+  provider  String // campay | flutterwave | notchpay | cinetpay | camerpay | payunit
+  currency  String
+  available Float // what can be paid out now, in whole currency units (a monitoring figure, not accounting)
+  asOf      DateTime // when it was read: the figure is only as fresh as this
+  source    String // manual | api
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([provider, currency, asOf])
+}
+
+// ADDED (PAY-02). One daily run of the reconciliation: the findings, and the sums they rest on.
+model ReconciliationRun {
+  id             String   @id @default(cuid())
+  at             DateTime @default(now())
+  source         String // job | cli
+  ok             Boolean // no finding that needs a person
+  obligationsXAF Int? // what customers' wallets and payouts in flight add up to, in CFA francs
+  assetsXAF      Int? // what the providers say they hold, in CFA francs; null while a provider is missing or stale
+  findings       Json
+  report         Json
+
+  @@index([at])
+}

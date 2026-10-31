@@ -40,7 +40,7 @@ export async function retryOnDeadlock<T>(run: () => Promise<T>, attempts = 5): P
  * exists here only.
  */
 export async function resetAll() {
-  await retryOnDeadlock(() => prisma.$executeRawUnsafe('TRUNCATE "User","SheetRow","AuditLog","FinancialArchive" RESTART IDENTITY CASCADE'));
+  await retryOnDeadlock(() => prisma.$executeRawUnsafe('TRUNCATE "User","SheetRow","AuditLog","FinancialArchive","ProviderBalance","ReconciliationRun" RESTART IDENTITY CASCADE'));
   await redis.flushdb();
 }
 

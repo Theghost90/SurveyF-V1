@@ -84,7 +84,7 @@ apps/api            Fastify API, Prisma schema + migrations, workers (send queue
 apps/web            Next.js app (marketing, auth, dashboard, builder, analytics, billing, simulator)
 packages/shared     plans & prices (single source of truth), phone normalisation, WhatsApp message builders
 apps/web/tests      tests of the website's API proxy (token renewal, cookie rules, refusals)
-scripts/            share-demo.mjs (npm run share), e2e-*.mjs browser tests (ui, bot, wallet, payments, currency, security, responsive, landscape), rotate-keys.mts (encryption key rotation), preflight.mts (checks against the real services), audit-gate.mjs (npm run audit:gate), backup.mjs + restore-test.mts (encrypted backups: `docs/BACKUP_RESTORE.md`),
+scripts/            share-demo.mjs (npm run share), e2e-*.mjs browser tests (ui, bot, wallet, payments, currency, security, responsive, landscape), rotate-keys.mts (encryption key rotation), preflight.mts (checks against the real services), audit-gate.mjs (npm run audit:gate), backup.mjs + restore-test.mts (encrypted backups: `docs/BACKUP_RESTORE.md`), reconcile.mts (the daily reconciliation of wallets and provider balances: `docs/PAYMENTS.md` §7),
                     backlog-check.mjs (npm run backlog:check), tests/ (their unit tests), ui-tour.mjs and shoot.mjs (screenshots)
 surveyflow_design.md   design specification: tokens, layout and navigation, components, responsive rules
 docs/DECISIONS.md   spec/design deviations, open questions, verification status
@@ -101,7 +101,7 @@ docs/META_CHECK.md  running the WhatsApp integration against a real Meta test ap
 ## Tests
 
 ```bash
-npm test                          # shared (84) + API (505) + website (22) tests, then the script tests (57) and the backlog check. Needs the local Postgres/Redis (`docker compose up -d`); the API tests use their own `surveyflow_test` database, which `npm test` creates and migrates by itself first (`npm run test:db`, `scripts/test-db.mjs`)
+npm test                          # shared (84) + API (527) + website (22) tests, then the script tests (57) and the backlog check. Needs the local Postgres/Redis (`docker compose up -d`); the API tests use their own `surveyflow_test` database, which `npm test` creates and migrates by itself first (`npm run test:db`, `scripts/test-db.mjs`)
 npm run typecheck                 # the three workspaces
 npm run audit:gate                # npm audit --omit=dev: fails on a high or critical advisory that is not written in docs/audit-allowlist.json with a reason and an end date
 npm run release:check             # typecheck + the website's lint + npm test + the audit gate: before every release

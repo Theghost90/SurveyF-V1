@@ -186,6 +186,16 @@ const schema = z.object({
   PAYOUT_PHONE_MAX_COUNT_PER_DAY: z.coerce.number().int().min(1).default(3), // and how many
   PAYOUT_HOLD_DAYS: z.coerce.number().int().min(0).max(60).optional(), // payouts of an account younger than this wait. Default 3; 0 with the mock gift provider (nothing real moves)
 
+  // --- reconciliation (PAY-02) ---
+  // Every day: do the wallets add up (ledger, top-ups, payouts) and do the payment providers hold at least what customers' wallets and payouts in flight add up to?
+  OPERATOR_EMAIL: z.string().email().optional(), // who is told when it does not. Without it an alert is only logged and recorded
+  OPERATOR_LOCALE: z.enum(['en', 'fr']).default('en'),
+  RECONCILE_MIN_SHORTFALL_XAF: z.coerce.number().int().min(0).default(5_000), // a shortfall smaller than this is rounding and fees in flight: no alarm
+  RECONCILE_MIN_SHORTFALL_PERCENT: z.coerce.number().min(0).max(100).default(2), // nor one smaller than this share of what is owed
+  RECONCILE_BALANCE_MAX_AGE_HOURS: z.coerce.number().int().min(1).default(48), // a provider balance older than this is not used: it is asked for again
+  // Providers whose balance SurveyFlow may READ by itself, with the credentials it already has (comma-separated: flutterwave, campay). Empty = none: balances are typed in.
+  BALANCE_SOURCES: z.string().default(''),
+
   // --- Google ---
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),

@@ -146,3 +146,28 @@ A gift a limit stops is **held**: not debited, not promised (the participant get
 * `scripts/e2e-payments.mjs` — real browser: still-waiting, in-progress card and *Check now*, no-proration notice, review wording (no operator detail), renewal banner EN/FR, the "do not pay again" error.
 * **Live check against a running API**: a payment marked paid at the (mock) provider with no webhook, no browser and no poll was activated by the scheduled job in about 50 s.
 * Migration `20261017010000_payments_reconcile` applied from scratch together with all earlier ones, no drift against `schema.prisma`.
+
+## 7. Daily reconciliation (PAY-02, built 2026-10-31)
+
+A silent cash shortfall is the failure nobody sees until a payout is refused. `scripts/reconcile.mts status` (and a job that runs it once a day) does two things, kept apart because only the first can be exact.
+
+**1. Inside SurveyFlow, exact, needing no provider.** Every wallet balance equals the sum of its ledger · no balance is negative (the database refuses one too: this is the second line) · no wallet holds money in no currency · every paid-out or in-flight gift holds in the ledger exactly what it cost, and a refund exists exactly when the gift was refunded · every wallet credit in the ledger matches ONE successful payment of the same amount, no payment is credited twice, and no successful top-up payment is missing its credit (a customer who paid and got nothing). Any difference is a bug, a failed activation or tampering.
+
+**2. Against the providers.** What customers are owed (wallets, plus gifts debited whose payout is not settled: pending, or failed with an unknown outcome; the payout, not the fee, which is SurveyFlow's) against what the providers' merchant accounts hold, **as a whole, in CFA francs, at rates already known** (money is spread over several providers and currencies; no rate means no conversion and the report says so). It is compared **only when every provider that ever received a wallet top-up has a fresh balance** (under 48 hours): half of the money against all of the debt would be a false alarm every day. Otherwise the report says which balance is missing or how old it is. A shortfall is an alarm only above 5,000 francs AND above 2 % of what is owed. A surplus is fine: the providers also hold SurveyFlow's own income.
+
+**Where the provider balances come from.** The honest default is that **you type them in**: each morning open each provider's dashboard and run `reconcile.mts balance <provider> <amount>`; nothing new is stored, no new key is exposed. SurveyFlow can read two of them itself (`BALANCE_SOURCES=flutterwave,campay`), with the key it already has, by a GET and nothing else:
+
+| Provider | Balance endpoint | Evidence | Why it is or is not automated |
+|---|---|---|---|
+| Flutterwave | `GET https://api.flutterwave.com/v3/balances` | Flutterwave's own reference | automated (opt-in) |
+| Campay | `GET /api/balance/` | **third-party SDKs only**, not Campay's pages | automated (opt-in), least certain |
+| Notch Pay | `GET /balance` | Notch Pay's own docs | **not automated**: it needs the private key in an `X-Grant` header, a key that can do more and is not configured here |
+| CinetPay | `GET /v1/transfer/check/balance` | CinetPay's v1 docs, partly incomplete | **not automated**: it needs a login token first, and the host differs between sources |
+| CamerPay, PayUnit | not found | none | typed in |
+
+**None of the readers has been run against the real service**: the tests feed them the documented answers, which proves they read those answers, nothing about the service. **The keys they use are not read-only** (no provider offered a read-only key that I could confirm), so the containment "read-only keys" holds only in the sense that the code can send nothing but a GET (`readOnlyGet`, tested). A balance that cannot be read is "unknown", never a shortfall: the last one on record is used until it is too old, and then the report asks for a new one.
+
+**Alerts.** One mail a day to `OPERATOR_EMAIL` for each finding, however often the check runs, one line per finding, and a line in the audit trail; without the address it is logged and recorded. Every run is recorded (`ReconciliationRun`), so the operator screen (ADM-02) has its data. The check changes nothing.
+
+**What it cannot do.** It trusts a balance somebody types in. It cannot tell *which* provider is short (the money is compared as a whole). It does not see money a provider holds back (a reserve, a lien for a chargeback) unless the "available" balance already excludes it. The demo seed and old test accounts trip the inside checks on purpose (a seeded top-up with no payment behind it, test wallets without a currency): the dev database reports findings, a real one should not.
+

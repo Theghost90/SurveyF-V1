@@ -1,6 +1,7 @@
 import { refreshRates } from '../services/fx';
 import { tryLeader } from '../lib/redis';
 import { processDueGifts, releaseHeldGifts } from '../services/gifts';
+import { runDailyReconciliation } from '../services/reconciliation';
 import { pspRouter } from '../services/payments/router';
 import { reconcilePayments } from '../services/payments/reconcile';
 import { sweepAbandoned } from '../services/survey/abandon';
@@ -44,6 +45,8 @@ export function startJobs(log: Log): () => void {
   every('bot-slowdown-alerts', 60 * 60_000, async () => ({ alerted: await sweepSlowdowns(new Date(), { warn: (o, m) => log.info(o, m) }) }), { leader: true, initialDelay: 50_000 });
   // Gifts that a payout limit held (a young account, a daily cap): let them go, oldest first, once the limit allows (PAY-13). Leader-only.
   every('held-gifts', 10 * 60_000, () => releaseHeldGifts(), { leader: true, initialDelay: 35_000 });
+  // Every day: do the wallets add up, and do the providers hold what customers are owed (PAY-02). Checked hourly, runs once a day. Leader-only.
+  every('reconcile', 3_600_000, () => runDailyReconciliation(), { leader: true, initialDelay: 90_000 });
   every('wallet-alerts', 10 * 60_000, () => notifyEmptyWallets(), { leader: true, initialDelay: 30_000 });
   every('fx-refresh', 3 * 3_600_000, async () => ({ refreshed: !!(await refreshRates()) }), { leader: true, initialDelay: 5_000 });
   every('billing-lifecycle', 15 * 60_000, () => runBillingLifecycle(), { leader: true, initialDelay: 10_000 });

@@ -19,7 +19,7 @@ export type AuditAction =
   | 'export' | 'export_blocked' | 'bulk_delete' | 'contact_reveal' | 'prize_draw_winner_shown'
   | 'bulk_read' | 'bulk_read_blocked' | 'sheets_autosync_confirmed' | 'sheets_autosync_paused'
   | 'account_export' | 'account_delete_requested' | 'account_delete_cancelled' | 'account_delete_postponed' | 'account_deleted'
-  | 'survey_sent' | 'template_recategorised' | 'payout_held';
+  | 'survey_sent' | 'template_recategorised' | 'payout_held' | 'reconciliation_alert';
 
 export interface AuditContext { userId?: string | null; sessionId?: string | null; ip?: string | null; userAgent?: string | null }
 
