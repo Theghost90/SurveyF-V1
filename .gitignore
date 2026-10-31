@@ -1,0 +1,19 @@
+node_modules
+dist
+.next
+.env
+.env.local
+*.log
+coverage
+.turbo
+apps/web/next-env.d.ts
+.artifacts
+test-results
+playwright-report
+*.tsbuildinfo
+
+# encrypted database backups (scripts/backup.mjs): sealed, but they still never belong in git
+backups/
+
+# local Redis snapshots
+dump.rdb

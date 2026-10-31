@@ -1,0 +1,15 @@
+# Local development services. `docker compose up -d` then `npm run db:push && npm run db:seed`.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: surveyflow
+      POSTGRES_PASSWORD: surveyflow
+      POSTGRES_DB: surveyflow
+    ports: ["127.0.0.1:5432:5432"] # this computer only: never the Wi-Fi or the network
+    volumes: [pgdata:/var/lib/postgresql/data]
+  redis:
+    image: redis:7
+    ports: ["127.0.0.1:6379:6379"] # this computer only (Redis has no password)
+volumes:
+  pgdata:

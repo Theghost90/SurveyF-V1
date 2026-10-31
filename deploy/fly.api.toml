@@ -1,0 +1,32 @@
+# TEMPLATE (untested): fly launch --config deploy/fly.api.toml --dockerfile apps/api/Dockerfile
+#
+# Who may call this API. It must stay reachable from the internet on exactly three paths: /api/webhook/whatsapp (Meta),
+# /api/payments/webhook/* (payment providers) and /api/receipts/* (participants' browsers), plus /healthz. EVERYTHING else is
+# refused by the app unless the request carries INTERNAL_API_SECRET, which only the website's server knows:
+#   fly secrets set INTERNAL_API_SECRET=$(openssl rand -base64 36)     # and the same value in the website's environment
+# Optional network layer on top: allow only the website's egress addresses (and Meta / PSP ranges) for every other path in
+# a WAF / reverse proxy in front of this app. A fully private network (Fly 6PN, Railway private networking) would also hide
+# the three public paths from Meta and the PSPs, so use it only if those callbacks are routed through a public proxy.
+# The API refuses to start in production without INTERNAL_API_SECRET and without an https, non-local PUBLIC_API_URL.
+app = "surveyflow-api"
+primary_region = "cdg"
+
+[build]
+  dockerfile = "../apps/api/Dockerfile"
+
+[deploy]
+  release_command = "npx prisma migrate deploy --config apps/api/prisma.config.ts"
+
+[http_service]
+  internal_port = 4223
+  force_https = true
+  auto_stop_machines = false   # the send queue and abandonment sweeper run in-process
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    path = "/healthz"
+    interval = "15s"
+    timeout = "3s"
+
+[[vm]]
+  memory = "1gb"               # Chromium needs headroom for PDF export

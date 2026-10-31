@@ -1,0 +1,4 @@
+{
+  "_about": "Advisories the release audit gate (npm run audit:gate) lets through, each with the reason it is not reachable or not worth blocking a release, and the date by which it must be looked at again. An entry past its date counts for nothing. Empty on 2026-10-28: npm audit --omit=dev reports 0 vulnerabilities.",
+  "allow": []
+}
