@@ -31,7 +31,7 @@ Differences from the diagram:
                  └──paid but underpaid / wrong currency / lower plan than active / activation error──▶ review ──operator──▶ success | failed
 ```
 * `failed` and `expired` are **our conclusions, not the provider's**: a hosted page lets the payer retry after a decline, and a payer may approve a Mobile Money prompt hours later. A provider-verified success is credited from any of `pending`, `failed`, `expired`.
-* `success` and `review` are final for the machine. `review` is resolved only by `scripts/payments-review.mts`.
+* `success` and `review` are final for the machine. `review` is resolved only by `scripts/payments-review.mts` (§4, §8).
 * The customer sees `review` as "we received your payment but could not apply it automatically, nothing is lost", never as a failure, and never sees the operator detail (`failReason`).
 
 ## 3. Risk register — what was wrong, what was done, how it is verified
@@ -84,8 +84,14 @@ Every item was **reproduced against the old code first** (a throwaway test, sinc
 | `list pending` | pending for over 2 h — the job is asking the provider about each; anything stuck here for days is worth a look |
 | `list unconfirmed` | pending after an unconfirmed push start (customer told not to pay again) |
 | `show <ref>` | the whole row, including every provider tried (`attempts`) |
-| `credit <ref> --note "why"` | apply it as paid (the amount **asked** is credited) — once, only from `review` |
-| `reject <ref> --note "why"` | close as failed and tell the customer it will be returned — **does not move money**; refund in the provider's dashboard |
+| `credit <ref> --operator <you> --note "why" [--yes]` | apply it as paid (the amount **asked** is credited) — once, only from `review`. Without `--yes` it only says what it would do |
+| `reject <ref> --operator <you> --note "why" [--yes]` | close as failed and tell the customer it will be returned — **does not move money**; refund in the provider's dashboard |
+| `gifts` | gifts only a person can settle (PAY-07, below): an unknown outcome, or held for good by a limit, with the masked number and what the ledger holds |
+| `gift show <id> [--reveal --operator <you> --note "why"]` | one of them; the number stays masked unless you ask, and asking is recorded |
+| `gift sent <id> --operator … --note … --evidence <the provider's reference> [--yes]` | the provider's own records show the payout was made: mark it sent and tell the participant |
+| `gift refund <id> --operator … --note … [--yes]` | the provider's records show it was NOT paid: what the ledger says the gift holds goes back to the wallet, once; the owner can then retry it |
+| `gift release <id> --operator … --note … [--yes]` | a gift held for good by a limit: pay it out whatever the limits say |
+| `gift cancel <id> --operator … --note … [--yes]` | drop a held gift: it was never debited, so nothing is given back |
 
 **What a `review` reason means**
 
@@ -170,4 +176,20 @@ A silent cash shortfall is the failure nobody sees until a payout is refused. `s
 **Alerts.** One mail a day to `OPERATOR_EMAIL` for each finding, however often the check runs, one line per finding, and a line in the audit trail; without the address it is logged and recorded. Every run is recorded (`ReconciliationRun`), so the operator screen (ADM-02) has its data. The check changes nothing.
 
 **What it cannot do.** It trusts a balance somebody types in. It cannot tell *which* provider is short (the money is compared as a whole). It does not see money a provider holds back (a reserve, a lien for a chargeback) unless the "available" balance already excludes it. The demo seed and old test accounts trip the inside checks on purpose (a seeded top-up with no payment behind it, test wallets without a currency): the dev database reports findings, a real one should not.
+
+## 8. Money that needs a person: the rules (PAY-07, built 2026-10-31)
+
+Three kinds of money cannot settle by themselves: a **payment in `review`** (the provider confirmed it and SurveyFlow could not simply apply it), a **payout whose outcome nobody knows** (the provider timed out after the request left, or the process died in the middle: debited, deliberately never retried by itself, because a retry could pay twice) and a **gift a payout limit holds for good** (one amount above a cap). Before PAY-07 only the first had a way out; the second stayed debited for ever.
+
+**What an operator does.** Look in the provider's own records first (for the unknown outcome, by the reference `sf-gift-<id>` the command shows), then decide: *the provider paid* (`gift sent`, with the provider's own reference for that payout) or *it did not* (`gift refund`). A held gift is released (`gift release`) or dropped (`gift cancel`).
+
+**The rules are in the functions, not in the operator's care** (`apps/api/src/services/money-resolution.ts`, tested):
+- the amounts come from the **ledger**, never from what is typed; there is no amount to type;
+- each decision is **one compare-and-set**: a second run, or two operators at the same instant, does nothing (a test runs two refunds in parallel and finds one credit);
+- every decision needs **who** and **why**, and "the provider paid" needs the provider's **own reference**; without `--yes` the command only shows what it would do;
+- a decision is recorded **twice**: in full for the operator (who, why, the evidence; unlinked from the customer so the note is never shown to them), and as a bare line in the customer's own activity ("SurveyFlow support took an action on a payment or a gift of your account"), so that nothing done to somebody's money is invisible to them;
+- participants' numbers are **masked**; showing one in full is its own recorded step;
+- the wrong decision for the state (sent on a held gift, a refund on a gift in flight) is refused and changes nothing.
+
+**What it is not.** There is **no staff login**: `--operator` is a name you type and the credential is your access to the database. It cannot enforce that the person who asks is not the person who approves. **No web route reaches these decisions** (a test checks there is none): a staff screen without the protections of the admin backend (ADM-01: separate origin and session, staff accounts, mandatory second factor, roles, the two-person rule) would be exactly the stolen-admin-login risk the backlog names. The screen is part of ADM-02; this is the logic it will call, and the command that works until then.
 

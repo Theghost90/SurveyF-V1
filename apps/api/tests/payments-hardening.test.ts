@@ -693,7 +693,7 @@ describe('CRITICAL C4: money we received but cannot simply apply is never lost a
 describe('CRITICAL: the operator tool for payments in review', () => {
   const run = (...args: string[]) => runNpx(['tsx', 'scripts/payments-review.mts', ...args], { env: process.env });
 
-  it('lists a payment in review, needs a note, credits it exactly once, and refuses to touch anything that is not in review', async () => {
+  it('lists a payment in review, needs who and why, previews before --yes, credits it exactly once, and refuses to touch anything that is not in review', async () => {
     const o = await registerOwner(app);
     const tx = await mkTx(o.userId);
     await settleTransaction(tx.id, paid(3000), quiet);
@@ -709,15 +709,24 @@ describe('CRITICAL: the operator tool for payments in review', () => {
     expect(noNote.stderr).toMatch(/--note/);
     expect(await planOf(o.userId)).toBe('trial');
 
-    const ok = run('credit', tx.reference, '--note', 'paid the rest in cash');
+    // PAY-07: a decision needs who and why, and without --yes the command only says what it would do
+    const noWho = run('credit', tx.reference, '--note', 'paid the rest in cash', '--yes');
+    expect(noWho.status).toBe(1);
+    expect(noWho.stderr).toMatch(/--operator/);
+    const preview = run('credit', tx.reference, '--operator', 'Chantal', '--note', 'paid the rest in cash');
+    expect(preview.status).toBe(0);
+    expect(preview.stdout).toMatch(/Nothing was done/);
+    expect(await planOf(o.userId)).toBe('trial');
+
+    const ok = run('credit', tx.reference, '--operator', 'Chantal', '--note', 'paid the rest in cash', '--yes');
     expect(ok.status).toBe(0);
     expect(ok.stdout).toMatch(/credited/);
     expect(await planOf(o.userId)).toBe('growth');
     expect(run('list').stdout).toMatch(/Nothing in "review"/);
 
-    const again = run('credit', tx.reference, '--note', 'again');
+    const again = run('credit', tx.reference, '--operator', 'Chantal', '--note', 'again', '--yes');
     expect(again.status).toBe(1);
-    expect(again.stdout).toMatch(/not "review"/);
+    expect(again.stderr).toMatch(/not "review"/);
     expect(run('reject', 'does-not-exist', '--note', 'x').status).toBe(1);
   }, 120_000);
 });

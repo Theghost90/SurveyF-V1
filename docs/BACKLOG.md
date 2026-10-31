@@ -21,6 +21,7 @@ Newest first.
 <!-- backlog:table changelog -->
 | Date | Level | Change |
 | --- | --- | --- |
+| 2026-10-31 | major | PAY-07 is built as the logic and a command line, without a screen (Must): unknown-outcome payouts and gifts held for good can now be settled by a person, with who, why, evidence, ledger amounts, one decision once, and a record for the operator and for the customer. The screen stays part of ADM-02 and waits for ADM-01. |
 | 2026-10-31 | major | PAY-02 is built (Must): the exact daily checks of the ledger, top-ups and payouts, the comparison with what the providers hold (typed in, or read from Flutterwave and Campay when switched on), thresholds, one alert a day per finding. The readers have never run against a real provider and the keys are not read-only. |
 | 2026-10-31 | major | PAY-13 is built (Must): a cap on payouts per account and per phone number in any 24 hours, a hold on payouts of young accounts, held gifts released by themselves, the owner's release and retry going through the same check. The numbers are my sizing, not your providers' terms. |
 | 2026-10-31 | major | WA-03 is built (Must): each survey is sent as a utility or a marketing message, marketing by default and unless it qualifies, the owner must accept the cost before every marketing send, and a re-categorisation by Meta is stored, announced and never silently billed. Not yet run against the real Meta. |
@@ -37,21 +38,21 @@ Newest first.
 ## At a glance
 
 <!-- backlog:summary:start -->
-**76 rows: 26 built, 50 not built.** Of the built ones, 9 still have a check open against a real service or device.
+**76 rows: 27 built, 49 not built.** Of the built ones, 10 still have a check open against a real service or device.
 
 | | ✅ Built | ⬜ Not built | Total |
 |---|---|---|---|
-| Must | 14 | 20 | 34 |
+| Must | 15 | 19 | 34 |
 | Should | 8 | 11 | 19 |
 | Could | 4 | 10 | 14 |
 | Won't this release | 0 | 9 | 9 |
-| **All** | **26** | **50** | **76** |
+| **All** | **27** | **49** | **76** |
 
 Each ID in the grid carries its state: ✅ built · ⚠️ built, a check is open · ⬜ not built · 🧑 your action, no code · ⏸ deferred by you · 🔭 next version.
 
 | | Smaller | Small | Big | Bigger |
 |---|---|---|---|---|
-| **MUST** (34) | ⚠️ SEC-07, ⚠️ DAT-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01, 🧑 BIZ-02 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⚠️ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-01, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⚠️ WA-03, ⚠️ PAY-02, ⬜ PAY-07, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, 🧑 LEG-03, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
+| **MUST** (34) | ⚠️ SEC-07, ⚠️ DAT-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01, 🧑 BIZ-02 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⚠️ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-01, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⚠️ WA-03, ⚠️ PAY-02, ⚠️ PAY-07, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, 🧑 LEG-03, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
 | **SHOULD** (19) | ✅ SEC-10, ⚠️ SEC-11, ✅ SEC-14, ⬜ PAY-06 | ⚠️ SEC-13, ⬜ WA-06, ⬜ BIZ-03, 🧑 LEG-05, 🧑 OPS-04 | ✅ SEC-06b, ✅ SEC-09, ✅ SEC-12, ✅ SEC-17, ⬜ ADM-03, ⬜ ADM-04, ⬜ LEG-02b, ⬜ PAY-08b, ⬜ PAY-09, ⬜ WA-05 | none |
 | **COULD** (14) | ✅ SEC-18 | ✅ SEC-19, ✅ SEC-20 | ⬜ WA-07, ⬜ DSN-01, ⬜ ADM-06, ⬜ PAY-12, ⬜ OPS-05 | ✅ SEC-15, ⬜ BIZ-04, ⬜ BIZ-05, ⬜ BIZ-06, ⬜ ADM-05, ⬜ PAY-11 |
 | **WON'T THIS RELEASE** (9) | 🔭 FUT-05 | ⏸ DEF-01, ⏸ DEF-02 | 🔭 FUT-03 | ⏸ DEF-03, ⏸ DEF-04, 🔭 FUT-01, 🔭 FUT-02, 🔭 FUT-04 |
@@ -78,6 +79,7 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 | WA-03 | Per-survey message category (utility or marketing), re-categorisation by Meta, cost warning (built 2026-10-31 on your instruction, D-10) | Must | Big | ⚠️ Built, check open | `packages/shared/src/message-category.test.ts`, `apps/api/tests/message-category.test.ts`, `packages/shared/src/message-category.ts`, `apps/api/prisma/migrations/20261031010000_message_category` | Not run against the real Meta (WA-01): whether it accepts the two invitation wordings in the categories they declare, and whether it re-categorises them. The `template_category_update` field must be ticked in the app's webhook settings. The word list that makes a survey read as promotional is a judgement, not Meta's rule. Rates are Meta's and are not shown in the product | none |
 | PAY-13 | Payout limits: a cap per account and per phone per day, and a hold on payouts for accounts only a few days old (built 2026-10-31 on your instruction, D-10, which lifts the hold of D-07) | Must | Small | ⚠️ Built, check open | `apps/api/tests/payout-limits.test.ts`, `apps/api/src/services/payout-limits.ts`, `apps/api/prisma/migrations/20261031020000_payout_limits`, `docs/PAYMENTS.md` | The numbers (100,000 per account, 5,000 and 3 gifts per phone number, 3 days) are my sizing, NOT your providers' dispute terms: ask each provider for its window and reserve and size them (docs/PAYMENTS.md section 5.2). Not run with a real gift provider. Does not close the card dispute window (about 120 days); a card-funded balance that cannot be paid out for N days is the sharper control and is not built | none |
 | PAY-02 | Daily reconciliation, wallets against the ledger and against provider balances (built 2026-10-31 on your instruction, D-10). I checked for balance APIs: Flutterwave and Notch Pay document one, Campay's is known from third-party SDKs, CinetPay needs a login token, CamerPay's was not found | Must | Big | ⚠️ Built, check open | `apps/api/tests/reconciliation.test.ts`, `apps/api/src/services/reconciliation.ts`, `scripts/reconcile.mts`, `apps/api/prisma/migrations/20261031030000_reconciliation`, `docs/PAYMENTS.md` | The automatic balance readers (Flutterwave, Campay) have never run against the real service, and the keys they use are not read-only; until you have run them once against a dashboard, type the balances in. Notch Pay, CinetPay, CamerPay and PayUnit are typed in. The comparison is global, not per provider. Set OPERATOR_EMAIL | ⚖ |
+| PAY-07 | Resolution of "to verify" gifts and payments: built as the logic and a command line, NOT as a screen (built 2026-10-31 on your instruction, D-10; the screen is delivered inside ADM-02) | Must | Big | ⚠️ Built, check open | `apps/api/tests/money-resolution.test.ts`, `apps/api/src/services/money-resolution.ts`, `scripts/payments-review.mts`, `docs/PAYMENTS.md` | There is no screen and no staff login: the screen needs ADM-01 and ADM-02 (not built), and I did not put a privileged web surface in the customer app without them. `--operator` is a name typed, the credential is database access, the two-person rule cannot be enforced. "The provider paid" is a claim the system cannot check. Not run against a real provider | none |
 | SEC-06b | "Confirm it is you" for large exports and bulk deletes (split from SEC-06, D-02) | Should | Big | ✅ Built | `apps/api/tests/security-2fa-stepup.test.ts`, `apps/api/tests/security-reads.test.ts` | — | none |
 | SEC-09 | Two-factor authentication for customers: authenticator app and recovery codes (finding 7) | Should | Big | ✅ Built | `apps/api/tests/security-2fa-stepup.test.ts`, `apps/api/tests/security-crypto.test.ts` | — | none |
 | SEC-10 | Generic sign-up response, alias normalisation (findings 9 and 15) | Should | Smaller | ✅ Built | `apps/api/tests/security-auth.test.ts` | — | none |
@@ -98,7 +100,6 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 <!-- backlog:table notbuilt -->
 | ID | Item | MoSCoW | Size | State | Waiting on | ⚖/📄 |
 | --- | --- | --- | --- | --- | --- | --- |
-| PAY-07 | Resolution screen for "to verify" gifts and payments (delivered inside ADM-02) | Must | Big | ⬜ Not built | Code | none |
 | ADM-01 | Staff foundation: separate admin app, staff accounts, RBAC, mandatory 2FA, audit log (section G; stays Must for a public launch, D-03, D-08) | Must | Big | ⬜ Not built | Code | ⚖ 📄 |
 | ADM-02 | Money and customer operations console; needs ADM-01, delivers PAY-07 and the screen of PAY-02 (D-03, D-08) | Must | Big | ⬜ Not built | Code | ⚖ |
 | PAY-06 | Unfunded gifts expire after about 30 days | Should | Smaller | ⬜ Not built | Code | none |
@@ -200,6 +201,7 @@ For every row: what it fixes, the risks it brings (with a label), and how they a
 | WA-03 | Wrong cost and category | COST: marketing messages cost more. LEGAL: promotions sent as "utility" | Built: marketing unless the owner says the survey follows something the person did AND no reward is attached AND nothing reads as a promotion (English and French word list, shown as reasons, never overridable); the owner must accept the cost before every marketing send (enforced by the API, 409 otherwise) and every send is in the audit trail with its category; a template Meta moves to marketing is stored, e-mailed once (also when announced in advance) and an invitation accepted as utility is held, never sent at a rate nobody accepted |
 | PAY-13 | A wallet top-up by card followed by gifts to Mobile Money numbers is a cash-out route for stolen cards, and the chargeback arrives after the money has gone | UX: an honest owner meets a cap. PAY: caps set too high do nothing | Built: a cap per account and per phone number (from every account together) in any rolling 24 hours, exact under concurrency (advisory locks); a hold on payouts of young accounts; a held gift is not debited and not promised, the owner sees why and is e-mailed once a day, and it goes by itself, oldest first, when the limit allows; release and retry cannot bypass it; a gift above a cap waits for staff. Not done: sizing against the providers' dispute terms (yours to ask for), top-up limits, card funds locked for N days |
 | PAY-02 | A silent cash shortfall | SEC: balance-read credentials. OPS: false alarms | Built: balances are typed in by default (no new credential); two providers can be read with the key already held, by a GET only, opt-in, and a failed read is "unknown", never a shortfall; the comparison is made only when every provider holding customers' money has a fresh balance; a shortfall under 5,000 francs or 2 % is no alarm; one alert a day per finding. Not done: read-only keys (none could be confirmed), a per-provider comparison |
+| PAY-07 | Unresolved "to verify" money | SEC: a staff screen is a new privileged surface. PAY: manual errors | Built: no web surface at all (a test checks there is none), so nothing new to steal; amounts from the ledger, one decision applies once (compare-and-set), who and why on every decision and the provider's own reference when saying it paid, a preview before --yes, numbers masked, a record for the operator and a bare line for the customer. Not done: a screen, staff accounts and the two-person rule (ADM-01), checking a claim against a provider |
 
 ### Not built yet
 
@@ -217,7 +219,6 @@ For every row: what it fixes, the risks it brings (with a label), and how they a
 | PAY-04 | Owners' prepaid money flows through unverified payout calls | PAY: an irreversible payout to a wrong number. SEC: payout keys can spend money | Tiny live payouts to your own numbers, a spending cap, a separate payout key, a daily ceiling, a kill switch |
 | PAY-05 | An unverified rate source | LEGAL: attribution terms | Check the terms, one real fetch |
 | PAY-06 | Stale gifts to strangers | PAY: an owner loses an obligation unnoticed | Warn before expiry, let the owner release first |
-| PAY-07 | Unresolved "to verify" money | SEC: a staff screen is a new privileged surface. PAY: manual errors | Delivered inside ADM-02 with its containment; the stop-gap is scripts/payments-review.mts |
 | PAY-08a | No answer to "what happens to my leftover money" | LEGAL: promises refunds the team can only do by hand. PAY: a cash-outflow obligation | Wording that matches what support can do, reviewed by counsel, consistent with LEG-03 |
 | PAY-08b | Owners cannot recover unspent money alone | PAY: a stolen-card top-up, then a withdrawal. LEGAL: anti-money-laundering | A cooling period, refund to the original method, KYC above a threshold |
 | PAY-09 | Revenue not collected | PAY: surprise charges | Opt-in, a warning at 80%, invoice e-mails |

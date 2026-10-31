@@ -22,7 +22,8 @@ Profiles: `full` (staging and pilot, everything) and `public` (launch, nothing t
 | Wallet-funded overage | PAY-09 | on | **off** | invoiced through hosted checkout instead |
 | Payout limits (per account, per phone number, young-account hold) | PAY-13 | on | not needed | they limit payouts, which do not exist in `public` |
 | Daily reconciliation of wallets against ledger and provider balances | PAY-02 | on | not needed | there is no wallet in `public` (the job finds nothing to reconcile) |
-| Money admin console and "to verify" screen | ADM-02, PAY-07 | on | not needed | they exist only for the wallet |
+| Settling unknown-outcome payouts and held gifts by a person (command line; no screen yet) | PAY-07 | on | not needed | payouts do not exist in `public` |
+| Money admin console and screen (ADM-02) | ADM-02 | on | not needed | they exist only for the wallet |
 
 ## Open decisions for `public`
 1. **Reward model:** gift allowance bundled in the plan (units, no top-up, no carry-over, no cash value; recommended, ideally airtime or data only), or no gifts at launch, or the owner's own provider account.
@@ -32,6 +33,7 @@ Profiles: `full` (staging and pilot, everything) and `public` (launch, nothing t
 ## Log of changes to this list
 - 2026-10-29: first proposal.
 - 2026-10-29: Google sign-in added as a row (on in `public`): SEC-05 is built and verified.
+- 2026-10-31: PAY-07 split out of the "money admin console" row and built as logic plus a command line (no screen): `full` only; nothing to settle in `public`.
 - 2026-10-31: PAY-02 split out of the "money admin console" row and built: the daily reconciliation is `full` only; with no wallet in `public` it finds nothing to do.
 - 2026-10-31: PAY-13 split out of the "money admin console" row and built: payout limits are `full` only (off in `public`: no payouts there). The hold defaults to 0 days with the mock gift provider.
 - 2026-10-31: WA-03 added as a row (on in `public`). Surveys with a reward are marketing by default: if the reward model is decided as "no gifts", more surveys can qualify as utility; nothing else changes.

@@ -231,6 +231,10 @@ export const en = {
   'sec.act.account_delete_cancelled': 'Cancelled the account deletion',
   'sec.act.account_delete_postponed': 'The deletion was postponed: money was still unresolved',
   'sec.act.account_deleted': 'Account deleted',
+  'sec.act.support_action': 'SurveyFlow support took an action on a payment or a gift of your account',
+  'sec.act.survey_sent': 'A survey was sent',
+  'sec.act.template_recategorised': 'Meta changed the category of a WhatsApp template',
+  'sec.act.payout_held': 'Gifts were held by a safety limit',
 } as const;
 
 export const fr: Record<keyof typeof en, string> = {
@@ -466,4 +470,8 @@ export const fr: Record<keyof typeof en, string> = {
   'sec.act.account_delete_cancelled': 'Suppression du compte annulée',
   'sec.act.account_delete_postponed': 'Suppression reportée : de l’argent n’était pas encore réglé',
   'sec.act.account_deleted': 'Compte supprimé',
+  'sec.act.support_action': 'Le support SurveyFlow a agi sur un paiement ou un cadeau de votre compte',
+  'sec.act.survey_sent': 'Un sondage a été envoyé',
+  'sec.act.template_recategorised': 'Meta a changé la catégorie d’un modèle WhatsApp',
+  'sec.act.payout_held': 'Des cadeaux ont été retenus par une limite de sécurité',
 };

@@ -8,7 +8,7 @@ import { walletCurrency } from '../billing-currency';
 import { getQuote } from '../fx';
 import { receiptToken, receiptUrl } from '../receipts';
 import { creditWallet, debitWallet, heldByGift } from '../wallet';
-import { decidePayout, lockPayoutScope, noteHeld, xafEquivalent, type HoldReason } from '../payout-limits';
+import { decidePayout, lockPayoutScope, noteHeld, xafEquivalent, type HoldReason, type PayoutDecision } from '../payout-limits';
 import { credsFor } from '../whatsapp/accounts';
 import { getGateway } from '../whatsapp/gateway';
 import { enqueueGiftNotice } from '../whatsapp/sender';
@@ -183,7 +183,7 @@ async function processGift(id: string) {
   }
 }
 
-async function notifyGiftSent(gift: { id: string; surveyId: string; contactId: string; giftValue: string | null; notifyViaTemplate: boolean; survey: { language: string; userId: string; giftDeliveryMode: string; account: { phoneNumberId: string; wabaId: string; accessToken: string } | null }; contact: { phone: string } }) {
+export async function notifyGiftSent(gift: { id: string; surveyId: string; contactId: string; giftValue: string | null; notifyViaTemplate: boolean; survey: { language: string; userId: string; giftDeliveryMode: string; account: { phoneNumberId: string; wabaId: string; accessToken: string } | null }; contact: { phone: string } }) {
   try {
     const lang = (gift.survey.language === 'en' ? 'en' : 'fr') as SurveyLang;
     const value = gift.giftValue ?? '';
@@ -219,7 +219,7 @@ async function failAndRefund(id: string, message: string) {
  * same locks as when a gift is planned: pressing "release" or "retry" cannot walk around a cap, it moves the gift to `held` instead. 'insufficient' = the wallet is too low.
  */
 type Reactivation = 'ok' | 'insufficient' | 'held' | 'skipped';
-async function reactivate(from: 'failed' | 'unfunded' | 'held', id: string, now = new Date()): Promise<Reactivation> {
+async function reactivate(from: 'failed' | 'unfunded' | 'held', id: string, now = new Date(), opts: { override?: boolean } = {}): Promise<Reactivation> {
   try {
     return await prisma.$transaction(async (tx) => {
       const g = await tx.giftDelivery.findUnique({
@@ -229,7 +229,8 @@ async function reactivate(from: 'failed' | 'unfunded' | 'held', id: string, now 
       if (!g?.amount) return 'skipped';
       const amountXAF = await xafEquivalent(g.amount, g.currency);
       await lockPayoutScope(tx, g.survey.userId, g.contact.phoneHash);
-      const decision = await decidePayout(tx, { userId: g.survey.userId, phoneHash: g.contact.phoneHash, amountXAF, accountCreatedAt: g.survey.user.createdAt, now });
+      // `override` is an operator's decision (PAY-07), recorded by the caller: the limits are not looked at, the locks and everything else are.
+      const decision: PayoutDecision = opts.override ? { allow: true } : await decidePayout(tx, { userId: g.survey.userId, phoneHash: g.contact.phoneHash, amountXAF, accountCreatedAt: g.survey.user.createdAt, now });
       const eligible = { id, status: from, ...(from === 'failed' ? { refundedAt: { not: null } } : {}) };
       if (!decision.allow) {
         const moved = await tx.giftDelivery.updateMany({
@@ -260,6 +261,43 @@ async function reactivate(from: 'failed' | 'unfunded' | 'held', id: string, now 
   }
 }
 class InsufficientFunds extends Error {}
+
+// ---- operator decisions (PAY-07) -------------------------------------------------------------------------------------------
+// Each is one compare-and-set, so a second run (a double command, two operators) does nothing. The amounts come from the LEDGER, never from what anybody types.
+// Who decided, and why, is recorded by the caller (services/money-resolution.ts); these functions only move the gift.
+
+/** The operator saw in the provider's own records that the payout DID happen: the gift is sent, and the participant is told. */
+export async function resolveUnknownAsSent(id: string, providerRef: string): Promise<boolean> {
+  const claimed = await prisma.giftDelivery.updateMany({
+    where: { id, status: 'failed', refundedAt: null, giftType: { in: [...PAID_GIFT_TYPES] } },
+    data: { status: 'sent', sentAt: new Date(), providerRef: providerRef.slice(0, 120), errorMessage: null },
+  });
+  if (!claimed.count) return false;
+  const gift = await prisma.giftDelivery.findUniqueOrThrow({ where: { id }, include: { contact: true, survey: { include: { account: true } } } });
+  await notifyGiftSent(gift);
+  return true;
+}
+
+/** The operator saw that the payout did NOT happen: what the ledger says this gift holds goes back to the wallet, once. The owner can then retry it. */
+export async function resolveUnknownAsRefunded(id: string): Promise<{ ok: boolean; refunded: number }> {
+  return prisma.$transaction(async (tx) => {
+    const g = await tx.giftDelivery.findUnique({ where: { id }, select: { survey: { select: { userId: true } } } });
+    const claimed = await tx.giftDelivery.updateMany({ where: { id, status: 'failed', refundedAt: null, giftType: { in: [...PAID_GIFT_TYPES] } }, data: { refundedAt: new Date() } });
+    if (!claimed.count || !g) return { ok: false, refunded: 0 };
+    const held = await heldByGift(tx, id);
+    if (held > 0) await creditWallet(tx, g.survey.userId, held, 'gift_refund', id, 'Payout confirmed not made by the provider: refunded');
+    return { ok: true, refunded: held };
+  });
+}
+
+/** An operator lets a held gift out whatever the limits say (a known account, a large legitimate survey): paid like any other, counted in the caps from now on. */
+export const releaseHeldGiftByOperator = (id: string): Promise<Reactivation> => reactivate('held', id, new Date(), { override: true });
+
+/** An operator drops a held gift: it was never debited and never promised, so there is nothing to give back. */
+export async function cancelHeldGift(id: string, note: string): Promise<boolean> {
+  const r = await prisma.giftDelivery.updateMany({ where: { id, status: 'held' }, data: { status: 'failed', refundedAt: new Date(), heldReason: null, heldUntil: null, errorMessage: `cancelled by an operator: ${note}`.slice(0, 300) } });
+  return r.count > 0;
+}
 
 /**
  * The job that lets held gifts go (PAY-13): every held gift whose time has come, oldest first, goes through the same check as a new one. Those the limits still stop
