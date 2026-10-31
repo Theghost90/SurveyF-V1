@@ -21,6 +21,7 @@ Newest first.
 <!-- backlog:table changelog -->
 | Date | Level | Change |
 | --- | --- | --- |
+| 2026-10-31 | minor | SEC-01 narrowed to the owner's own sending domain: a real message was delivered through Gmail SMTP from the owner's PC. |
 | 2026-10-31 | minor | SEC-07 narrowed to the production host (the real-Cloudflare check passed on the owner's phone); sign-out log lines now carry the visitor's address. |
 | 2026-10-31 | minor | SEC-16 is fully built: the Windows fix check passed on the owner's own Windows PC. SEC-11 stays open for macOS only (its Windows half passed). |
 | 2026-10-29 | minor | SEC-05 is fully built: the owner signed in with a genuine Google account on their own computer and it works; the open check is closed. |
@@ -58,7 +59,7 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 <!-- backlog:table built -->
 | ID | Item | MoSCoW | Size | State | Evidence | Open check | ⚖/📄 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| SEC-01 | E-mail verification and e-mail sending (findings 1 and 9) | Must | Big | ⚠️ Built, check open | `apps/api/tests/security-auth.test.ts`, `apps/api/tests/mail-providers.test.ts`, `apps/api/tests/mail-templates.test.ts`, `apps/api/prisma/migrations/20261020000000_security_hardening` | No real e-mail provider has been contacted: acceptance and SPF, DKIM and DMARC need your provider key and your sending domain (`npx tsx --env-file=.env scripts/preflight.mts --only mail --domain <yours> --mail-to <you>`) | 📄 e-mail provider |
+| SEC-01 | E-mail verification and e-mail sending (findings 1 and 9) | Must | Big | ⚠️ Built, check open | `apps/api/tests/security-auth.test.ts`, `apps/api/tests/mail-providers.test.ts`, `apps/api/tests/mail-templates.test.ts`, `apps/api/prisma/migrations/20261020000000_security_hardening` | The SMTP adapter delivered a real confirmation message through Gmail SMTP on the owner's PC (2026-10-31, `preflight --only mail`; it reached the inbox, not spam). Still open: acceptance, SPF, DKIM and DMARC of **your own sending domain** with Resend or Brevo (`npx tsx --env-file=.env scripts/preflight.mts --only mail --domain <yours> --mail-to <you>`); the Gmail test proves Gmail's own signing, not yours | 📄 e-mail provider |
 | SEC-02 | Password reset (finding 2) | Must | Small | ✅ Built | `apps/api/tests/security-auth.test.ts` | — | none |
 | SEC-03 | Revocable sessions, sign out everywhere, rotating refresh tokens (finding 3) | Must | Small | ✅ Built | `apps/api/tests/security-auth.test.ts`, `apps/web/tests/proxy-renewal.test.ts`, `scripts/e2e-security.mjs` | — | none |
 | SEC-04 | Brute-force defence: rising delays, CAPTCHA after failures, alerts (findings 5 and 10) | Must | Small | ⚠️ Built, check open | `apps/api/tests/security-auth.test.ts`, `apps/api/src/lib/captcha.ts` | Cloudflare Turnstile has never been reached from the build environment (host blocked), and the check fails open when it cannot be reached: run `preflight --only captcha` on your machine, then the widget in a browser on your domain | 📄 CAPTCHA vendor |
