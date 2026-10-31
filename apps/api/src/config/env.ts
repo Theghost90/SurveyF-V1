@@ -95,6 +95,12 @@ const schema = z.object({
   /** Plans (comma-separated) whose owners must turn on two-factor authentication before exporting or deleting in bulk. */
   REQUIRE_2FA_PLANS: z.string().default('business'),
   AUDIT_RETENTION_DAYS: z.coerce.number().int().min(30).default(400),
+  /** DAT-01: days between asking to delete the account and the deletion (the owner can cancel until then). */
+  ACCOUNT_DELETION_GRACE_DAYS: z.coerce.number().int().min(1).max(90).default(30),
+  /** DAT-01: years the financial archive (no names, no numbers) is kept after an account is deleted. A default for counsel to confirm, not a legal statement. */
+  FINANCIAL_RETENTION_YEARS: z.coerce.number().int().min(1).max(20).default(10),
+  /** DAT-01: whole-account downloads per owner per day. */
+  ACCOUNT_EXPORT_PER_DAY: z.coerce.number().int().min(1).max(20).default(3),
   /** An account whose address was never confirmed is deleted after this many hours. */
   UNVERIFIED_PURGE_HOURS: z.coerce.number().int().min(1).default(24),
   /**

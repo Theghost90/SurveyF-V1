@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/page-header';
 import { AnalyticsBotCard } from '@/components/settings/analytics-bot-card';
+import { DataTab } from '@/components/settings/data-tab';
 import { SecurityTab } from '@/components/settings/security-tab';
 import { WhatsAppConnect } from '@/components/settings/whatsapp-connect';
 import { useAccount } from '@/lib/account';
@@ -104,12 +105,13 @@ function SettingsTabs() {
     <>
       <PageHeader title={t('app.nav.settings')} />
       <Tabs value={tab} onValueChange={(v) => router.replace(`/settings?tab=${v}`)}>
-        <TabsList><TabsTrigger value="profile">{t('s.profile')}</TabsTrigger><TabsTrigger value="whatsapp">WhatsApp</TabsTrigger><TabsTrigger value="analytics">{t('ab.tab')}</TabsTrigger><TabsTrigger value="integrations">{t('s.integrations')}</TabsTrigger><TabsTrigger value="security">{t('s.security')}</TabsTrigger></TabsList>
+        <TabsList><TabsTrigger value="profile">{t('s.profile')}</TabsTrigger><TabsTrigger value="whatsapp">WhatsApp</TabsTrigger><TabsTrigger value="analytics">{t('ab.tab')}</TabsTrigger><TabsTrigger value="integrations">{t('s.integrations')}</TabsTrigger><TabsTrigger value="security">{t('s.security')}</TabsTrigger><TabsTrigger value="data">{t('dt.tab')}</TabsTrigger></TabsList>
         <TabsContent value="profile"><Profile /></TabsContent>
         <TabsContent value="whatsapp"><Card><CardHeader><CardTitle>{t('w.title')}</CardTitle></CardHeader><CardContent><WhatsAppConnect /></CardContent></Card></TabsContent>
         <TabsContent value="analytics"><AnalyticsBotCard /></TabsContent>
         <TabsContent value="integrations"><Integrations /></TabsContent>
         <TabsContent value="security"><SecurityTab /></TabsContent>
+        <TabsContent value="data"><DataTab /></TabsContent>
       </Tabs>
     </>
   );

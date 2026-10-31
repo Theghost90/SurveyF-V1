@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DeletionBanner } from '@/components/deletion-banner';
 import { VerifyBanner } from '@/components/verify-banner';
 import { WhatsAppRequiredDialog } from '@/components/whatsapp-gate';
 import { useWallet } from '@/components/wallet/use-wallet';
@@ -111,6 +112,7 @@ export function AppShell({ children, showSimulator }: { children: React.ReactNod
         </div>
       </header>
 
+      {account?.user.deletionScheduledFor && <DeletionBanner scheduledFor={account.user.deletionScheduledFor} />}
       {account && account.user.emailVerified === false && <VerifyBanner email={account.user.email} />}
       {banner && (
         <div role="status" className={cn('border-b text-sm', banner.tone === 'danger' ? 'border-red-200 bg-red-50 text-red-900' : banner.tone === 'warn' ? 'border-amber/40 bg-amber-soft text-amber-ink' : 'border-mint-2/50 bg-mint/50 text-ink')}>

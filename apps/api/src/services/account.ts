@@ -23,6 +23,7 @@ export function userDto(u: User) {
     emailVerified: !!u.emailVerifiedAt,
     twoFactorEnabled: !!u.totpEnabledAt,
     hasPassword: !!u.passwordHash,
+    deletionScheduledFor: u.deletionScheduledFor,
   };
 }
 

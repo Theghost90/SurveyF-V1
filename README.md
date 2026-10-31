@@ -42,6 +42,7 @@ In demo mode (`WHATSAPP_MODE=mock`, `PSP_MOCK=true`, `GIFT_PROVIDER=mock`) nothi
   abandonment.
 * **Sign-up asks for a confirmed e-mail address.** In demo mode nothing is sent: the "check your e-mail" page shows the message with a button (the mock mailbox: **any visitor of a shared demo can read any test mailbox, so never use a real address**).
   The seeded demo account is already confirmed.
+* **Settings → Your data** downloads the whole account as one file (after "confirm it is you") and schedules its deletion: 30 days read-only, cancellable, refused while money is unresolved (`docs/SECURITY.md` §20).
 * Subscribing opens a **demo checkout** (`/billing/mock-checkout`) that exercises the real verification + activation path.
 * Gifts are "delivered" by a mock provider. **The survey owner pays for gifts** from a prepaid wallet (Billing → Gift wallet, topped up
   through the same mock checkout). The seeded demo account has a funded wallet; a fresh account starts at 0, so its participants get a plain
@@ -51,7 +52,7 @@ For a production-like preview: `npm run build && npm start` (the API reads the r
 
 ## Going live (checklist)
 
-1. Postgres + Redis; `npx prisma migrate deploy --config apps/api/prisma.config.ts` (Prisma 7 reads its settings from that file; `apps/api/prisma/migrations`, eleven: `init`, `gift_wallet`, `reminders_geo_segment`, `multicurrency_wallet`, `payments_notices`, `payments_reconcile`, `explore_activate`, `analytics_bot`, `analytics_alerts`, `security_hardening`, `read_caps_sheets_reconfirm`; applied from scratch and diffed against the schema — no drift, checked 2026-10-28 on Prisma 7 with `prisma migrate diff`). Node 22.12 or newer on the host.
+1. Postgres + Redis; `npx prisma migrate deploy --config apps/api/prisma.config.ts` (Prisma 7 reads its settings from that file; `apps/api/prisma/migrations`, twelve: `init`, `gift_wallet`, `reminders_geo_segment`, `multicurrency_wallet`, `payments_notices`, `payments_reconcile`, `explore_activate`, `analytics_bot`, `analytics_alerts`, `security_hardening`, `read_caps_sheets_reconfirm`, `account_data_rights`; applied from scratch and diffed against the schema — no drift, checked 2026-10-28 on Prisma 7 with `prisma migrate diff`). Node 22.12 or newer on the host.
 2. Set **production** env: `NODE_ENV=production`, `JWT_SECRET`, `ENCRYPTION_KEYS` (`k1:` + `openssl rand -base64 32`), `BLIND_INDEX_KEY` (`openssl rand -base64 32`), `NEXTAUTH_SECRET`, `NEXTAUTH_URL` and `PUBLIC_WEB_URL` (both https),
    `EMAIL_PROVIDER` (`smtp`, `resend` or `brevo`) with its key and a verified `EMAIL_FROM`, `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY` (or `CAPTCHA_DISABLED=true`), and on the website `CLIENT_IP_HEADER` (e.g. `cf-connecting-ip`) or `TRUSTED_PROXY_HOPS`,
    `WHATSAPP_MODE=live`, `META_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, PSP keys, `GIFT_PROVIDER=campay`. **The API refuses to start**
@@ -79,6 +80,7 @@ apps/api            Fastify API, Prisma schema + migrations, workers (send queue
   src/services/{analytics,exports,gifts,subscription}/
   src/services/analytics-bot.ts      Analytics Bot: owner linking, commands, shared formatters (analytics-alerts.ts: milestone and slowdown alerts)
   src/services/{reminders,fx,wallet,receipts,funnel}.ts
+  src/services/account-data.ts       the owner's own data: whole-account download, deletion with a grace period, the pseudonymised money archive (DAT-01)
 apps/web            Next.js app (marketing, auth, dashboard, builder, analytics, billing, simulator)
 packages/shared     plans & prices (single source of truth), phone normalisation, WhatsApp message builders
 apps/web/tests      tests of the website's API proxy (token renewal, cookie rules, refusals)
@@ -99,7 +101,7 @@ docs/META_CHECK.md  running the WhatsApp integration against a real Meta test ap
 ## Tests
 
 ```bash
-npm test                          # shared (71) + API (465) + website (22) tests, then the script tests (37) and the backlog check. Needs the local Postgres/Redis (`docker compose up -d`); the API tests use their own `surveyflow_test` database, which `npm test` creates and migrates by itself first (`npm run test:db`, `scripts/test-db.mjs`)
+npm test                          # shared (71) + API (480) + website (22) tests, then the script tests (37) and the backlog check. Needs the local Postgres/Redis (`docker compose up -d`); the API tests use their own `surveyflow_test` database, which `npm test` creates and migrates by itself first (`npm run test:db`, `scripts/test-db.mjs`)
 npm run typecheck                 # the three workspaces
 npm run audit:gate                # npm audit --omit=dev: fails on a high or critical advisory that is not written in docs/audit-allowlist.json with a reason and an end date
 npm run release:check             # typecheck + the website's lint + npm test + the audit gate: before every release

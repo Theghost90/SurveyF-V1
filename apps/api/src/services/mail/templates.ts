@@ -8,7 +8,8 @@ export type Lang = 'en' | 'fr';
 
 export type MailKind =
   | 'verify_email' | 'register_existing' | 'reset_password' | 'password_changed' | 'new_device' | 'failed_logins'
-  | 'export_alert' | 'bulk_delete_alert' | 'bulk_read_alert' | 'sheets_sync_paused' | 'two_factor_changed' | 'sessions_revoked' | 'link_google' | 'step_up_code';
+  | 'export_alert' | 'bulk_delete_alert' | 'bulk_read_alert' | 'sheets_sync_paused' | 'two_factor_changed' | 'sessions_revoked' | 'link_google' | 'step_up_code'
+  | 'deletion_requested' | 'deletion_cancelled' | 'account_deleted';
 
 export interface MailParams {
   url?: string;
@@ -105,6 +106,18 @@ function build(kind: MailKind, lang: Lang, p: MailParams): Body {
       return fr
         ? { subject: 'Confirmez la liaison de votre compte Google', lines: [hi, 'Un compte Google avec cette adresse veut se connecter à votre compte SurveyFlow existant. Confirmez pour les lier. Le lien est valable 30 minutes.'], button: { label: 'Lier mon compte Google', url: p.url! }, foot: 'Si ce n’était pas vous, ignorez ce message : rien ne sera lié.' }
         : { subject: 'Confirm linking your Google account', lines: [hi, 'A Google account with this address wants to sign in to your existing SurveyFlow account. Confirm to link them. The link is valid for 30 minutes.'], button: { label: 'Link my Google account', url: p.url! }, foot: 'If it was not you, ignore this message: nothing will be linked.' };
+    case 'deletion_requested':
+      return fr
+        ? { subject: 'La suppression de votre compte SurveyFlow est programmée', lines: [hi, `Vous avez demandé la suppression de votre compte. Elle aura lieu le ${p.when}, soit dans ${p.count} jours : vos sondages, participants, réponses et réglages seront alors effacés. Seuls les justificatifs d’argent reçu ou versé sont conservés, sans nom ni numéro, comme la comptabilité l’exige.`, 'Vos sondages ont été mis en pause et vous avez été déconnecté des autres appareils. Vous pouvez annuler jusqu’à cette date en vous connectant : Paramètres, Mes données.', notYou] }
+        : { subject: 'Your SurveyFlow account is scheduled for deletion', lines: [hi, `You asked for your account to be deleted. It will happen on ${p.when}, in ${p.count} days: your surveys, participants, answers and settings will then be erased. Only the records of money received or paid out are kept, without any name or number, as accounting rules require.`, 'Your surveys were paused and you were signed out of your other devices. You can cancel until then by signing in: Settings, Your data.', notYou] };
+    case 'deletion_cancelled':
+      return fr
+        ? { subject: 'La suppression de votre compte est annulée', lines: [hi, 'La suppression de votre compte a été annulée. Rien n’a été effacé. Vos sondages restent en pause : reprenez-les quand vous voulez.', notYou] }
+        : { subject: 'Your account deletion was cancelled', lines: [hi, 'The deletion of your account was cancelled. Nothing was erased. Your surveys stay paused: resume them whenever you like.', notYou] };
+    case 'account_deleted':
+      return fr
+        ? { subject: 'Votre compte SurveyFlow a été supprimé', lines: [hi, 'Votre compte et les données qu’il contenait ont été effacés. Conservez ce message comme preuve : nous n’avons plus rien qui vous identifie, hormis les justificatifs financiers décrits dans notre politique de confidentialité.'] }
+        : { subject: 'Your SurveyFlow account was deleted', lines: [hi, 'Your account and the data it held have been erased. Keep this message as your proof: we hold nothing that identifies you any more, apart from the financial records described in our privacy policy.'] };
     case 'step_up_code':
       return fr
         ? { subject: `Votre code de confirmation SurveyFlow : ${p.code}`, lines: [hi, `Votre code de confirmation est ${p.code}. Il est valable 10 minutes.`], foot: 'Ne le communiquez à personne. SurveyFlow ne vous le demandera jamais par téléphone ou message.' }

@@ -55,6 +55,26 @@ export async function guardExport(req: FastifyRequest, opts: { kind: ExportKind;
   await sendMail(o.email, 'export_alert', o.locale === 'en' ? 'en' : 'fr', { name: o.name, rows: opts.rows, what: `${opts.kind.toUpperCase()}, ${opts.surveyTitle}`, when: stamp(), place: placeOf(req) });
 }
 
+/**
+ * Call before building the whole-account download (DAT-01). It always needs a recent "confirm it is you": the file holds every participant's name and number.
+ * Counted against the daily export caps, written to the audit trail BEFORE the file exists, and e-mailed to the owner.
+ */
+export async function guardAccountExport(req: FastifyRequest): Promise<void> {
+  const rows = await prisma.contact.count({ where: { userId: req.userId } });
+  if ((await peek(`acct-exp:n:${req.userId}`)) >= env.ACCOUNT_EXPORT_PER_DAY) {
+    throw new AppError(429, 'export_cap', 'You already downloaded your account data today. It can be done again within 24 hours.');
+  }
+  // NOT assertCap: the daily rows cap would shut out, for good, an owner whose list is bigger than the cap, and the law gives everybody a copy of their data (s.43).
+  // What contains a stolen session here is the confirmation every time, the few downloads a day, the alert e-mail and the trail; the rows still count towards
+  // today's total, so every other download that day is held to the shared cap.
+  await assertStepUp(req);
+  await hit(`acct-exp:n:${req.userId}`, DAY);
+  await count(req.userId, 'exp', rows);
+  await auditStrict(auditContext(req), { action: 'account_export', meta: { people: rows } });
+  const o = await owner(req.userId);
+  await sendMail(o.email, 'export_alert', o.locale === 'en' ? 'en' : 'fr', { name: o.name, rows, what: o.locale === 'en' ? 'whole account' : 'compte entier', when: stamp(), place: placeOf(req) });
+}
+
 /** Call before deleting `rows` contacts at once. */
 export async function guardBulkDelete(req: FastifyRequest, rows: number): Promise<void> {
   await assertCap(req.userId, 'bulk', rows);

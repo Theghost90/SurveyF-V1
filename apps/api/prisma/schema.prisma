@@ -123,6 +123,10 @@ model User {
   totpSecret        String?
   totpEnabledAt     DateTime?
   totpLastStep      Int?
+  // ADDED (DAT-01, law 2024/017 s.38-43): the owner asked for the account to be erased. Nothing is deleted until deletionScheduledFor (30 days later); signing in and
+  // cancelling is possible until then. While it is set the account only reads: surveys are paused and every change except cancelling and downloading is refused.
+  deletionRequestedAt  DateTime?
+  deletionScheduledFor DateTime?
 
   whatsappAccounts WhatsAppAccount[]
   surveys          Survey[]
@@ -698,6 +702,29 @@ model AuditLog {
 
   @@index([userId, at])
   @@index([action, at])
+}
+
+/**
+ * ADDED (DAT-01): what must outlive a deleted account, and nothing else. Accounting rules oblige a seller to keep the record of money received and paid out for years,
+ * while the person asked to be erased: so each payment, wallet movement and paid-out gift is copied here WITHOUT any name, address, phone number or e-mail, under a keyed
+ * pseudonym of the former account (`ownerRef`, not reversible without the key), and removed after `keepUntil`.
+ */
+model FinancialArchive {
+  id         String   @id @default(cuid())
+  kind       String // payment | wallet_entry | gift_payout
+  ref        String // the original id or reference
+  ownerRef   String // keyed hash of the former account id
+  amount     Int
+  currency   String
+  status     String
+  provider   String?
+  purpose    String?
+  occurredAt DateTime
+  archivedAt DateTime @default(now())
+  keepUntil  DateTime
+
+  @@index([ownerRef])
+  @@index([keepUntil])
 }
 
 /**

@@ -72,10 +72,13 @@ export function api<T = any>(path: string, init: { method?: string; body?: unkno
 export const WHATSAPP_REQUIRED_EVENT = 'sf:whatsapp-required';
 export const TWO_FACTOR_REQUIRED_EVENT = 'sf:two-factor-required';
 
-/** Downloads a binary export through the proxy (keeps the filename the API chose). */
-export function download(path: string, fallbackName: string) {
+/** Downloads a file through the proxy (keeps the filename the API chose). `init.method: 'POST'` for a download that is asked for rather than fetched. */
+export function download(path: string, fallbackName: string, init: { method?: string; body?: unknown } = {}) {
   return withStepUp(async () => {
-    const res = await fetch(`/proxy${path}`, { cache: 'no-store' });
+    const res = await fetch(`/proxy${path}`, {
+      method: init.method ?? 'GET', cache: 'no-store',
+      headers: init.body !== undefined ? { 'Content-Type': 'application/json' } : undefined, body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       if (res.status === 401 && data?.error === 'unauthorized') void signOut({ callbackUrl: '/login?expired=1' });

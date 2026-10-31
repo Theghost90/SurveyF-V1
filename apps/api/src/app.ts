@@ -23,6 +23,7 @@ import whatsappRoutes from './routes/whatsapp';
 import paymentRoutes from './routes/payments';
 import subscriptionRoutes from './routes/subscription';
 import walletRoutes from './routes/wallet';
+import accountDataRoutes from './routes/account-data';
 import receiptRoutes from './routes/receipts';
 import pricingRoutes from './routes/pricing';
 import googleRoutes from './routes/google';
@@ -141,6 +142,7 @@ export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance
   await app.register(paymentRoutes);
   await app.register(subscriptionRoutes);
   await app.register(walletRoutes);
+  await app.register(accountDataRoutes);
   await app.register(receiptRoutes);
   await app.register(pricingRoutes);
   await app.register(googleRoutes);

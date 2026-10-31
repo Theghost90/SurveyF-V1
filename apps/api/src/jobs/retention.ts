@@ -1,5 +1,6 @@
 import { env } from '../config/env';
 import { prisma } from '../lib/prisma';
+import { runAccountRetention } from '../services/account-data';
 
 /**
  * Housekeeping that keeps old security data from piling up (and, for the audit trail, from being kept longer than needed):
@@ -7,7 +8,8 @@ import { prisma } from '../lib/prisma';
  *   - used or expired e-mail links, 7 days after;
  *   - ended sessions, 30 days after;
  *   - audit rows older than AUDIT_RETENTION_DAYS (the one thing allowed to delete from the append-only table);
- *   - the payload of a finished parked reply (it holds a participant's number).
+ *   - the payload of a finished parked reply (it holds a participant's number);
+ *   - accounts whose erasure was asked for and whose grace period is over (DAT-01), and the financial archive rows past their retention.
  */
 export async function runRetention(now = new Date()) {
   const day = 86_400_000;
@@ -27,5 +29,6 @@ export async function runRetention(now = new Date()) {
   });
   // A reply that was parked for retry holds the participant's number (encrypted) and the message: once the job is over, neither is needed.
   const parked = await prisma.$executeRaw`UPDATE "SendJob" SET "payload" = NULL WHERE "kind" = 'session_message' AND "status" IN ('done', 'failed') AND "payload" IS NOT NULL`;
-  return { unverifiedAccounts: unverified.count, emailTokens: tokens.count, sessions: sessions.count, auditRows: audit.count, parkedPayloads: parked };
+  const accounts = await runAccountRetention(now);
+  return { accountsDeleted: accounts.deleted, accountDeletionsPostponed: accounts.postponed, financialArchiveRows: accounts.archiveRows, unverifiedAccounts: unverified.count, emailTokens: tokens.count, sessions: sessions.count, auditRows: audit.count, parkedPayloads: parked };
 }

@@ -22,12 +22,11 @@ Legend as in `DECISIONS.md`: ✅ done and tested here · ⚠️ built, but could
 | 10 | Sign-up abuse and CPU load | SEC-04 (CAPTCHA), SEC-11 (argon2id) | ✅ (⚠️ CAPTCHA) | §3, §4 |
 | 11 | Participant data is plain text in the database | **DAT-02 (not built)**; SEC-15 (built, §11) | see §11 | §11, §12 |
 | 12 | Owner separation only in application code | SEC-12 | ✅ (test and guard, **not** Postgres RLS) | §13 |
-| 13 | No account deletion or erasure; no security e-mails; no audit log | **DAT-01 (not built)**; the e-mails and the audit log are built (SEC-01/04/06/08) | partly | §9, §12 |
+| 13 | No account deletion or erasure; no security e-mails; no audit log | **DAT-01 (built 2026-10-31)**; the e-mails and the audit log (SEC-01/04/06/08) | ✅ (limits in §20) | §9, §20 |
 | 14 | Search terms in log URLs | SEC-14 | ✅ | §14 |
 | 15 | Missing browser protections, aliases, 72-byte truncation | SEC-13, SEC-10, SEC-11 | ✅ | §3.2, §4.1, §10 |
 
-Not built, on purpose: **finding 11** and **finding 13** as such (they are the matrix items DAT-02 and DAT-01: encrypted disks and backups depend on the hosting choice,
-deletion and export need counsel's retention rules first); **Postgres row-level security** (§13 explains the choice); **any staff console or role system** (ADM-01 to ADM-06).
+Not built, on purpose: **finding 11** as such (the matrix item DAT-02: encrypted disks and backups depend on the hosting choice; finding 13, DAT-01, was built later, §20); **Postgres row-level security** (§13 explains the choice); **any staff console or role system** (ADM-01 to ADM-06).
 
 ### 1.1 Matrix items added after the review (SEC-16 to SEC-20)
 
@@ -194,7 +193,7 @@ resumes, sending the rows it missed, when the owner confirms again. *Test:* `sec
 refresh reuse, password reset/change, step-up success and failure, two-factor changes, recovery codes (used, regenerated), Google sign-in and link, exports, bulk deletes, reveals, prize-draw winners, a wrong password on a confirmation page (`verify_password_failed`), lists read past the soft or the hard number (`bulk_read`, `bulk_read_blocked`),
 Google Sheets auto-sync confirmed and paused (`sheets_autosync_confirmed`, `sheets_autosync_paused`).
 The owner sees their own trail in **Settings → Security → Activity**. E-mails go out for: confirmation, "you already have an account", reset, password changed, new device, repeated failed sign-ins, export, bulk delete,
-two-factor on/off, sign-out everywhere, Google link, the step-up code, a list read past the soft number, and a paused Sheets sync. *Not recorded:* single-contact edits and deletes, survey changes, billing, anything done by staff (there is no staff console yet).
+two-factor on/off, sign-out everywhere, Google link, the step-up code, a list read past the soft number, a paused Sheets sync, and the account download and deletion (asked, cancelled, done; §20). *Not recorded:* single-contact edits and deletes, survey changes, billing, anything done by staff (there is no staff console yet).
 
 ## 10. Trusted client address and browser protections (SEC-07, SEC-13; findings 8, 15)
 
@@ -238,7 +237,7 @@ two-factor on/off, sign-out everywhere, Google link, the step-up code, a list re
 3. **Names and answers** in lists are not masked. One login can list at most `READ_HARD_PEOPLE` different participants a day and needs a recent confirmation past `READ_SOFT_PEOPLE` (§8), but a stolen session can still read up to the soft number without any confirmation.
 4. **Google Sheets auto-sync** now needs a confirmation to be switched on and pauses itself after 30 days without a new one (§8); in between it keeps pushing new rows.
 5. **Staff and operators**: no console, no roles, no staff 2FA, no audit of staff actions; database access by the operator is unlogged. Matrix items ADM-01 to ADM-02 (Must for a public launch) cover this.
-6. **Account deletion, data export, retention beyond the table in `LEGAL_FACTS_SHEET.md`** (DAT-01), **encrypted disks and backups** (DAT-02), a **breach-notification procedure**.
+6. **Encrypted disks and backups** (DAT-02), a **breach-notification procedure**, handling a *participant's* own request to the owner, and **retention periods that counsel has not confirmed** (the 10 years kept for money records, §20, is our default). Account deletion and download exist (§20).
 7. **Postgres row-level security**: owner separation is application code, guarded by a test over every route (§13). One forgotten filter in *new* code that the guard does not see would still leak.
 8. **Denial of service** beyond the rate limits (no WAF, no per-tenant quotas on CPU-heavy PDF exports other than the per-minute and daily caps). The general limit counts per verified session with a ceiling per address (§10.1), so a crowd behind one carrier address is not throttled for nothing; the numbers are to be tuned with real traffic.
 9. **Dependencies**: `npm audit --omit=dev` reports **0 advisories** since 2026-10-28 and `npm run audit:gate` fails a release on any high or critical one that is not written in `docs/audit-allowlist.json` with a reason and an end date (§18); a new advisory can appear tomorrow. **Secrets management** is the deployment's job (the application reads environment variables).
@@ -268,7 +267,7 @@ The request log keeps the **path without its query string** (search terms, token
 | `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`★ (or `CAPTCHA_DISABLED=true`) | CAPTCHA |
 | `CLIENT_IP_HEADER` or `TRUSTED_PROXY_HOPS` (website) | where the visitor's address comes from |
 | `NEXTAUTH_SECRET`★, `NEXTAUTH_URL` (website) | cookie encryption; https in production. Blank in development gets a fixed throw-away secret (`apps/web/next.config.mjs`); **blank in production signs nobody in** |
-| `CSP_MODE`, `HIBP_CHECK`, `ARGON2_*`, `ACCESS_TOKEN_TTL_SECONDS`, `SESSION_TTL_HOURS`, `AUTH_MIN_RESPONSE_MS`, `SIGNUP_PER_IP_HOUR`, `EXPORT_*`, `STEP_UP_*`, `REVEAL_PER_DAY`, `REQUIRE_2FA_PLANS`, `AUDIT_RETENTION_DAYS`, `UNVERIFIED_PURGE_HOURS`, `RATE_LIMIT_SESSION_PER_MINUTE`, `RATE_LIMIT_IP_PER_MINUTE`, `CONFIRM_REQUIRES_PASSWORD`, `READ_SOFT_PEOPLE`, `READ_HARD_PEOPLE`, `SHEETS_AUTOSYNC_DAYS` | the tunable limits above |
+| `CSP_MODE`, `HIBP_CHECK`, `ARGON2_*`, `ACCESS_TOKEN_TTL_SECONDS`, `SESSION_TTL_HOURS`, `AUTH_MIN_RESPONSE_MS`, `SIGNUP_PER_IP_HOUR`, `EXPORT_*`, `STEP_UP_*`, `REVEAL_PER_DAY`, `REQUIRE_2FA_PLANS`, `AUDIT_RETENTION_DAYS`, `UNVERIFIED_PURGE_HOURS`, `ACCOUNT_DELETION_GRACE_DAYS`, `FINANCIAL_RETENTION_YEARS`, `ACCOUNT_EXPORT_PER_DAY`, `RATE_LIMIT_SESSION_PER_MINUTE`, `RATE_LIMIT_IP_PER_MINUTE`, `CONFIRM_REQUIRES_PASSWORD`, `READ_SOFT_PEOPLE`, `READ_HARD_PEOPLE`, `SHEETS_AUTOSYNC_DAYS` | the tunable limits above |
 
 Generate secrets with `openssl rand -base64 32` (use `-base64 48` for `JWT_SECRET`).
 
@@ -297,7 +296,7 @@ setting, not code)** and one real confirmation e-mail received · Turnstile keys
 ## 16. What was verified, and what could not be
 
 **Verified in this environment** (real Postgres, Redis, headless Chromium):
-- **595 automated tests** (71 shared in 6 files, 465 API in 28 files, 22 website in 3 files, 37 script tests) and the backlog check, run together by `npm test`: sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed) and the password they ask for, purge, squatter replacement, aliases, password policy and hash upgrade,
+- **610 automated tests** (71 shared in 6 files, 480 API in 29 files, 22 website in 3 files, 37 script tests) and the backlog check, run together by `npm test`: sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed) and the password they ask for, purge, squatter replacement, aliases, password policy and hash upgrade,
   the three login counters and the CAPTCHA paths, sessions and refresh rotation (race, grace, reuse, revoke, expiry), JWT rotation, password reset/change, Google sign-in (stubbed JWKS: wrong audience/issuer/signature, unverified e-mail, linking, squatter), TOTP (RFC vectors, replay, recovery codes, disable),
   step-up (methods, window per session, limits), masking, reveal, export and bulk-delete controls, caps, the read caps, the Sheets re-confirmation, e-mails and audit rows, the rate limits per session and per address, key ring, rotation script (child process), blind index, parked payloads, production boot refusals, log hygiene,
   the append-only trigger, **every API route** against a second owner, the website proxy's rules, token renewal and cookie handling (14 tests), the post-sign-in redirect rule, the audit gate and the backlog checker.
@@ -381,3 +380,23 @@ it runs the production code against the real services, on the computer or host y
 - **The strict Content-Security-Policy caught a defect that came with a dependency upgrade** (§18): zod 4 probes for `eval` when it builds its first schema, and the browser reported that as a policy violation on the sign-up, sign-in and check-your-mail pages although zod coped. Fixed by running zod in its plain mode in browsers (`packages/shared/src/zod-setup.ts`); the policy was not loosened.
 - **The first version of that fix did not type-check.** The shared package is compiled without the browser library, so the name `window` is unknown there. Only `npm run typecheck`, run at the end, found it: it was red on the pushed branch until the fix (`globalThis.window`). The browser check was then repeated on a fresh production build: the security run 19 of 19, including "the Content-Security-Policy blocked nothing the product does", and the interface run 29 of 29. The gate to trust is `npm run release:check` (typecheck, lint, tests and the audit gate together), not any one of them.
 - **Test flakes** are in `docs/DECISIONS.md` §4. None was a product bug; one (a deadlock between the test reset and a leftover best-effort write) could not be reproduced and is handled by a retry.
+
+## 20. The owner's own data: download, erasure, retention (DAT-01)
+
+Law No. 2024/017 (certified text in `docs/legal/`): erasure s.37 and s.38, a copy s.39, a structured machine-readable copy and portability s.43. Where it lives: `services/account-data.ts`, `routes/account-data.ts`, `guardAccountExport` in `services/security/data-guard.ts`, the read-only freeze in `plugins/auth.ts`, the hourly `jobs/retention.ts`. The screen: Settings → Your data.
+
+**Download (`POST /api/account/export`).** One JSON file: profile, plan and payments, wallet ledger, surveys with questions, participants (name and number in clear, the file says to keep it safe), answers, gifts, the owner's own activity trail, their WhatsApp numbers. **Never** a password hash, token, authenticator secret or key; the survey part is an explicit list of fields, so a column added later is not exported until somebody decides it should be. Containment: built on the spot and sent to the browser that asked (nothing stored, no link to forward, `Cache-Control: no-store`); a confirmed e-mail address; "confirm it is you" **every time** (the authenticator code on plans that require it); at most `ACCOUNT_EXPORT_PER_DAY` (3) a day; written to the audit trail *before* the file exists (no record, no file); an e-mail to the owner each time. It is **not** held to the daily rows cap of §8, on purpose: that cap would lock out for good an owner whose list is bigger than it, and the law gives everybody a copy; the rows still count, so every other download that day meets the cap.
+
+**Erasure (`POST /api/account/delete`).** The word `DELETE` and a fresh "confirm it is you". **Refused (409) while money is unresolved**: a wallet balance, a gift waiting to be paid or released, a payment still open or in review, so an erasure cannot swallow somebody's money or a payout in flight. When accepted: the date is fixed `ACCOUNT_DELETION_GRACE_DAYS` (30) ahead, active surveys are paused, **every other session ends**, an e-mail says when and how to cancel, and the account **only reads** (every change answers 423 `account_pending_deletion`; still possible: reading, downloading, cancelling, signing in and out). Cancelling needs no confirmation (it can only keep things as they are), lifts the freeze and leaves the surveys paused for the owner to resume. On the day the hourly retention job **checks again** for money (one that arrived in the grace period postpones the erasure a week and says so in the trail), then in one transaction copies the money records to `FinancialArchive`, deletes the account (every table cascades from `User`, plus the Sheets rows) and e-mails the owner that it is done.
+
+**What stays, and why.** s.38(2) makes erasure "subject to the requirements for personal data retention". Kept for `FINANCIAL_RETENTION_YEARS` (10), then swept by the same job: payments, wallet movements and paid-out gifts as amount, currency, status, provider, purpose and date, under a **keyed pseudonym** of the account id (`keyedHash`, so it cannot be recomputed without the secret and is not the account id), with **no name, number, e-mail or participant**. The security audit trail keeps ids, counts and a coarse place until `AUDIT_RETENTION_DAYS`. **The 10 years is our default, not a legal statement: counsel confirms it.**
+
+**What it does not do.**
+1. s.38(2) says erasure is done *immediately* on request. The 30 days are a safety delay the backlog asked for; the account stops acting at once, but the data is erased later. Whether that delay is acceptable is counsel's call (`DECISIONS.md` §3.9); `ACCOUNT_DELETION_GRACE_DAYS` can be set down to 1.
+2. **Backups.** Copies of the database in backups last until the backup expires (DAT-02).
+3. **Participants' requests.** The owner is the one holding participants' data; a participant who writes to the owner is handled by the owner, by hand (no queue in the product yet; ADM-02).
+4. **A hostile owner** can use the 30 days to get a paused account's data out by the download (3 a day, confirmed each time, e-mailed). That is the intended right.
+5. **Large accounts.** The file is built in memory in one go: an account with millions of answers will be slow and heavy. Not measured.
+6. **Not run in a real browser yet**: the screen is type-checked, linted and covered by the API tests, not driven by `e2e-*`.
+
+*Tests:* `apps/api/tests/account-data.test.ts` (15): file content and what it must not contain, alert/trail/cap, not shut out by the rows cap, unconfirmed and signed-out refusals, step-up and `DELETE`, refusal for each kind of unresolved money, the freeze (and what stays possible), cancelling, the erasure and its cascade, the archive without any name, number or e-mail, the postponement.

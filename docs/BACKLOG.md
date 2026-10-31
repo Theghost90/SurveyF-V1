@@ -21,6 +21,7 @@ Newest first.
 <!-- backlog:table changelog -->
 | Date | Level | Change |
 | --- | --- | --- |
+| 2026-10-31 | major | DAT-01 is built (Must): export of the whole account, deletion with a 30-day grace, a pseudonymised financial archive kept for N years, all behind confirmation, caps, e-mails and the audit log. Its web screen has not been driven in a real browser yet. |
 | 2026-10-31 | minor | SEC-01 narrowed to the owner's own sending domain: a real message was delivered through Gmail SMTP from the owner's PC. |
 | 2026-10-31 | minor | SEC-07 narrowed to the production host (the real-Cloudflare check passed on the owner's phone); sign-out log lines now carry the visitor's address. |
 | 2026-10-31 | minor | SEC-16 is fully built: the Windows fix check passed on the owner's own Windows PC. SEC-11 stays open for macOS only (its Windows half passed). |
@@ -32,21 +33,21 @@ Newest first.
 ## At a glance
 
 <!-- backlog:summary:start -->
-**76 rows: 21 built, 55 not built.** Of the built ones, 5 still have a check open against a real service or device.
+**76 rows: 22 built, 54 not built.** Of the built ones, 5 still have a check open against a real service or device.
 
 | | ✅ Built | ⬜ Not built | Total |
 |---|---|---|---|
-| Must | 9 | 25 | 34 |
+| Must | 10 | 24 | 34 |
 | Should | 8 | 11 | 19 |
 | Could | 4 | 10 | 14 |
 | Won't this release | 0 | 9 | 9 |
-| **All** | **21** | **55** | **76** |
+| **All** | **22** | **54** | **76** |
 
 Each ID in the grid carries its state: ✅ built · ⚠️ built, a check is open · ⬜ not built · 🧑 your action, no code · ⏸ deferred by you · 🔭 next version.
 
 | | Smaller | Small | Big | Bigger |
 |---|---|---|---|---|
-| **MUST** (34) | ⚠️ SEC-07, ⬜ DAT-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01, 🧑 BIZ-02 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⬜ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-01, 🧑 WA-04 | ⚠️ SEC-01, ⬜ DAT-01, ⬜ PAY-02, ⬜ PAY-07, ⬜ WA-03, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, 🧑 LEG-03, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
+| **MUST** (34) | ⚠️ SEC-07, ⬜ DAT-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01, 🧑 BIZ-02 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⬜ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-01, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⬜ PAY-02, ⬜ PAY-07, ⬜ WA-03, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, 🧑 LEG-03, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
 | **SHOULD** (19) | ✅ SEC-10, ⚠️ SEC-11, ✅ SEC-14, ⬜ PAY-06 | ⚠️ SEC-13, ⬜ WA-06, ⬜ BIZ-03, 🧑 LEG-05, 🧑 OPS-04 | ✅ SEC-06b, ✅ SEC-09, ✅ SEC-12, ✅ SEC-17, ⬜ ADM-03, ⬜ ADM-04, ⬜ LEG-02b, ⬜ PAY-08b, ⬜ PAY-09, ⬜ WA-05 | none |
 | **COULD** (14) | ✅ SEC-18 | ✅ SEC-19, ✅ SEC-20 | ⬜ WA-07, ⬜ DSN-01, ⬜ ADM-06, ⬜ PAY-12, ⬜ OPS-05 | ✅ SEC-15, ⬜ BIZ-04, ⬜ BIZ-05, ⬜ BIZ-06, ⬜ ADM-05, ⬜ PAY-11 |
 | **WON'T THIS RELEASE** (9) | 🔭 FUT-05 | ⏸ DEF-01, ⏸ DEF-02 | 🔭 FUT-03 | ⏸ DEF-03, ⏸ DEF-04, 🔭 FUT-01, 🔭 FUT-02, 🔭 FUT-04 |
@@ -68,6 +69,7 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 | SEC-07 | Trusted client IP behind the proxy (finding 8) | Must | Smaller | ⚠️ Built, check open | `apps/api/tests/security-ops.test.ts`, `apps/web/src/lib/client-ip.ts`, `apps/web/tests/signout-address.test.ts` | Rehearsed behind a local TLS proxy, then through a real Cloudflare edge on the owner's phone (2026-10-31: the activity list showed the phone's own address, headers check 11 passed, 0 failed). The sign-out lines had shown the server's address; fixed, and confirmed on the owner's phone through the tunnel (one line, the phone's own address). Still open: at deploy set CLIENT_IP_HEADER, let the origin accept traffic only from the CDN (sent straight to the origin, a spoofed header is believed) and switch on Always Use HTTPS; the outbound-only tunnel cannot test that | none |
 | SEC-08 | Audit log: the owner's own trail, append-only (D-01, was Should) | Must | Small | ✅ Built | `apps/api/tests/security-ops.test.ts`, `apps/api/prisma/migrations/20261020000000_security_hardening` | Limit: staff actions arrive with ADM-01 | none |
 | SEC-16 | Upgrade the website framework (Next.js 14.2.35 to 15.5.28, React 19): 25 advisories, one a critical remote-code-execution flaw on Windows servers | Must | Small | ✅ Built | `apps/web/package.json`, `apps/web/tests/proxy-renewal.test.ts`, `scripts/preflight.mts` | Own commit, `git revert` undoes it. The fix is checked under Windows path rules (`preflight --only next`: fails on 15.5.23, passes on 15.5.28) and it was run on the owner's own Windows PC (win32-x64, Node 24.21.0, 2026-10-31): 9 of 9 hostile lookups refused. It is that code run on that Node, not an attack on a running Windows server; the advisory's own page could not be read | none |
+| DAT-01 | Account deletion, data export, retention rules (finding 13; built 2026-10-31 on your instruction, D-10, which lifts D-05 for this row) | Must | Big | ✅ Built | `apps/api/tests/account-data.test.ts`, `apps/api/src/services/account-data.ts`, `apps/api/prisma/migrations/20261031000000_account_data_rights` | Limits: the web screen (Settings, Your data) is type-checked and linted but not driven in a real browser yet. The 10 years kept for financial records is a default for counsel to confirm, not a legal statement. Nobody on staff sees the requests until ADM-02 (the retention job carries them out after the grace period). Copies in database backups last until the backup expires (DAT-02) | ⚖ |
 | SEC-06b | "Confirm it is you" for large exports and bulk deletes (split from SEC-06, D-02) | Should | Big | ✅ Built | `apps/api/tests/security-2fa-stepup.test.ts`, `apps/api/tests/security-reads.test.ts` | — | none |
 | SEC-09 | Two-factor authentication for customers: authenticator app and recovery codes (finding 7) | Should | Big | ✅ Built | `apps/api/tests/security-2fa-stepup.test.ts`, `apps/api/tests/security-crypto.test.ts` | — | none |
 | SEC-10 | Generic sign-up response, alias normalisation (findings 9 and 15) | Should | Smaller | ✅ Built | `apps/api/tests/security-auth.test.ts` | — | none |
@@ -88,7 +90,6 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 <!-- backlog:table notbuilt -->
 | ID | Item | MoSCoW | Size | State | Waiting on | ⚖/📄 |
 | --- | --- | --- | --- | --- | --- | --- |
-| DAT-01 | Account deletion, data export, retention rules (finding 13; its e-mails and audit log are built; left unbuilt on your instruction, D-05) | Must | Big | ⬜ Not built | Code | ⚖ |
 | PAY-02 | Daily reconciliation, wallets against provider balances. Pilot stop-gap: a daily manual check with the SQL query; the automated job before scale (D-02). Not verified: whether providers offer a balance API | Must | Big | ⬜ Not built | Code | none |
 | PAY-07 | Resolution screen for "to verify" gifts and payments (delivered inside ADM-02) | Must | Big | ⬜ Not built | Code | none |
 | PAY-13 | Payout limits: a cap per account and per phone per day, and a hold on payouts for accounts only a few days old. Counted in the matrix, not built (D-07); a Must for any launch with real payouts | Must | Small | ⬜ Not built | Code | none |
@@ -190,13 +191,13 @@ For every row: what it fixes, the risks it brings (with a label), and how they a
 | SEC-18 | Busy pages throttled because many mobile subscribers share one address | ABUSE: one source multiplying sessions | A ceiling per address on top of the per-session limit, keys from verified tokens only |
 | SEC-19 | The last account pre-hijacking path | UX: one more step on the confirmation page | Five wrong passwords burn the link, a switch (CONFIRM_REQUIRES_PASSWORD) |
 | SEC-20 | Only numbers were protected from bulk reading; names and answers were not | UX: friction for large legitimate lists. ABUSE: a slow scraper under the soft cap | A count of distinct people per 24 hours, step-up past the soft number, a hard stop, one e-mail, an audit row |
+| DAT-01 | No erasure or export | DATA: irreversible deletion; the export file is a leak. PAY: the ledger must stay | Built: no stored export (built on the spot, sent to the requesting browser only, no link to forward), a step-up confirmation every time, a daily cap and an e-mail each time; deletion needs the word DELETE and a step-up, is refused while wallet, gifts or payments are unresolved, waits 30 days read-only (cancelable, e-mailed), is postponed if money appears in the grace, and keeps only a pseudonymised money record (keyed hash, no name, number or e-mail) for the retention period |
 
 ### Not built yet
 
 <!-- backlog:table risks -->
 | ID | Fixes | New risks | Containment |
 | --- | --- | --- | --- |
-| DAT-01 | No erasure or export | DATA: irreversible deletion; the export file is a leak. PAY: the ledger must stay | A 30-day grace period, re-authentication, keep minimal financial records, an expiring signed link |
 | DAT-02 | Plain text at rest and in backups | OPS: a lost key. COST: managed encryption | Managed encryption, restore tests |
 | LEG-01 | No counsel-approved text | LEGAL: promises beyond the product | The lawyer works from the facts sheet, updated when the product changes |
 | LEG-02 | Unclear consent responsibility | DATA: consent proof is more personal data | Timestamp and owner only |
@@ -264,6 +265,7 @@ Your decisions that rows cite. A row that is deferred, or that changed its MoSCo
 | D-07 | 2026-10-28 | Of the five proposed rows, SEC-17 to SEC-20 are applied and built; PAY-13 is counted in the final matrix but not applied or built. | "apply and build all the SEC do not build/apply the PAY-13, but count all the proposed rows in the final matrix" |
 | D-08 | 2026-10-27 | The full admin backend with RBAC is added as ADM-01 to ADM-06. | "add also the full admin backend feature with RBAC mechanism" |
 | D-09 | 2026-10-17 | The check against a real Meta app (WA-01) is postponed by you; the reminder you asked for is still owed. | "I'll verify real Meta as per META_CHECK.md later (you'll remind me later this weekend …)" |
+| D-10 | 2026-10-31 | DAT-01, DAT-02, PAY-02, WA-03, PAY-13, PAY-07, BIZ-04 and FUT-05 are to be built, each with the containment written in section D. This lifts D-05 for DAT-01 and DAT-02 and the hold of D-07 on PAY-13. | "Build DAT-01, DAT-02, PAY-02, WA-03, PAY-13, PAY-07, BIZ-04 and FUT-05. Make sure you consider the containment while building each" |
 
 ## F. Open questions for you
 

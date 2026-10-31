@@ -7,6 +7,9 @@ import { activeSession } from '../services/security/sessions';
 import { assertFeature, loadAccount } from '../services/subscription/limits';
 import type { PlanFeatures } from '@surveyflow/shared';
 
+/** What a frozen account may still do: everything about signing in and proving who you are, the download, and cancelling the deletion. */
+const FROZEN_OK = /^\/api\/(auth\/|account\/(export|delete\/cancel)$)/;
+
 declare module 'fastify' {
   interface FastifyRequest {
     userId: string;
@@ -36,6 +39,11 @@ export default fp(async function authPlugin(app: FastifyInstance) {
     if (!(await activeSession(who.sessionId, who.userId))) throw unauthorized('Session ended');
     req.userId = who.userId;
     req.sessionId = who.sessionId;
+    // DAT-01: an account that asked to be erased only reads (the owner can still download, cancel, confirm it is them and sign out). One indexed read, and only for changes.
+    if (req.method !== 'GET' && req.method !== 'HEAD' && !FROZEN_OK.test(req.url.split('?')[0]!)) {
+      const u = await prisma.user.findUnique({ where: { id: who.userId }, select: { deletionScheduledFor: true } });
+      if (u?.deletionScheduledFor) throw new AppError(423, 'account_pending_deletion', 'This account is scheduled for deletion, so it can only be read. Cancel the deletion in Settings, Your data, to change things again.', { scheduledFor: u.deletionScheduledFor });
+    }
   });
 
   app.decorate('authenticateVerified', async (req: FastifyRequest, reply: FastifyReply) => {
