@@ -1,11 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { rl } from '../lib/ratelimit';
-import { OVERAGE, PAID_PLAN_KEYS, PLANS, identityQuote, overagePerBlock, planPrices, type PaidPlanKey } from '@surveyflow/shared';
+import { ANNUAL_MONTHS_CHARGED, OVERAGE, PAID_PLAN_KEYS, PLANS, convertFromXAF, identityQuote, overagePerBlock, planPrices, prorationCreditFCFA, replacesCurrentPeriod, type PaidPlanKey } from '@surveyflow/shared';
+import { env } from '../config/env';
 import { conflict } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { accountSummary } from '../services/account';
 import { billingQuote, methodsFor } from '../services/billing-currency';
-import { initiatePayment, txDto } from '../services/payments/service';
+import { PLAN_RANK, initiatePayment, txDto } from '../services/payments/service';
 import { initiateSchema } from './payments';
 
 
@@ -18,8 +19,18 @@ export default async function subscriptionRoutes(app: FastifyInstance) {
     const { quote, fallback, requested } = await billingQuote(summary.user);
     const prices = planPrices(quote);
     const invoices = await prisma.paymentTransaction.findMany({ where: { userId: req.userId, status: 'success', purpose: 'subscription' }, orderBy: { paidAt: 'desc' }, take: 24 });
+    // PAY-12: what moving to each plan would take off today, in the owner's currency (0 when nothing is replaced: the free plan, a renewal, a lapsed plan).
+    const sub = await prisma.subscription.findUnique({ where: { userId: req.userId } });
+    const now = new Date();
+    const upgradeCredit = Object.fromEntries(PAID_PLAN_KEYS.map((p) => [p, Object.fromEntries((['monthly', 'annual'] as const).map((i) => {
+      const fcfa = env.PRORATION_ENABLED && sub && PLAN_RANK[p]! > PLAN_RANK[sub.plan]! && replacesCurrentPeriod({ plan: sub.plan, status: sub.status, periodEnd: sub.currentPeriodEnd, paidFCFA: sub.amountFCFA }, p, now)
+        ? prorationCreditFCFA({ paidFCFA: sub.amountFCFA, periodStart: sub.currentPeriodStart, periodEnd: sub.currentPeriodEnd, now, newPriceFCFA: PLANS[p].priceFCFA * (i === 'annual' ? ANNUAL_MONTHS_CHARGED : 1) })
+        : 0;
+      return [i, fcfa ? convertFromXAF(fcfa, quote) : 0];
+    }))]));
     return {
       ...summary,
+      upgradeCredit,
       /** What this owner is charged in: their currency at the live rate (CFA francs when no fresh rate exists: `fallback`). */
       currency: quote.currency,
       requestedCurrency: requested,

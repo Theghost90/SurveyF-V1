@@ -22,6 +22,7 @@ import { useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 import { GiftSettings } from './gift-settings';
 import { QuestionCard } from './question-card';
+import { JoinLinkCard } from './join-link-card';
 import { MessageType } from './message-type';
 import { ReminderSettings } from './reminder-settings';
 import { SendPanel } from './send-panel';
@@ -220,6 +221,8 @@ export function SurveyBuilder({ id }: { id: string }) {
           <MessageType draft={draft} onChange={setDraft} />
 
           <SendPanel surveyId={id} status={survey.status} language={draft.language} onPublish={publish} publishing={busy === 'publish'} dirty={dirty} />
+
+          {survey.status !== 'draft' && <JoinLinkCard surveyId={id} hasGift={draft.gift.giftType !== 'none' && draft.gift.giftType !== 'custom'} />}
         </div>
 
         <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto" aria-label={t('b.pv.title')}>

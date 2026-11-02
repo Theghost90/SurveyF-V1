@@ -2,7 +2,7 @@
   "name": "surveyflow",
   "private": true,
   "version": "1.0.0",
-  "description": "SurveyFlow — WhatsApp-native survey SaaS for Cameroon",
+  "description": "SurveyFlow \u2014 WhatsApp-native survey SaaS for Cameroon",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -25,7 +25,8 @@
     "backup": "node --env-file=.env scripts/backup.mjs",
     "restore:test": "tsx --env-file=.env scripts/restore-test.mts",
     "release:check": "npm run typecheck && npm run lint -w @surveyflow/web && npm test && npm run audit:gate",
-    "share": "node scripts/share-demo.mjs"
+    "share": "node scripts/share-demo.mjs",
+    "tokens": "npx tsx scripts/export-tokens.mts"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",

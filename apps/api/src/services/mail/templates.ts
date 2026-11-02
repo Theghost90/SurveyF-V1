@@ -10,7 +10,7 @@ export type MailKind =
   | 'verify_email' | 'register_existing' | 'reset_password' | 'password_changed' | 'new_device' | 'failed_logins'
   | 'export_alert' | 'bulk_delete_alert' | 'bulk_read_alert' | 'sheets_sync_paused' | 'two_factor_changed' | 'sessions_revoked' | 'link_google' | 'step_up_code'
   | 'deletion_requested' | 'deletion_cancelled' | 'account_deleted' | 'template_recategorised' | 'payouts_held' | 'reconciliation_alert'
-  | 'team_invite' | 'team_joined' | 'team_removed' | 'overage_warning' | 'overage_invoice';
+  | 'team_invite' | 'team_joined' | 'team_removed' | 'overage_warning' | 'overage_invoice' | 'jobs_late';
 
 export interface MailParams {
   url?: string;
@@ -173,6 +173,9 @@ function build(kind: MailKind, lang: Lang, p: MailParams): Body {
             : 'Responses beyond the plan are invoiced only if you agreed to it under Billing. Move up a plan, or agree to the invoicing, before the month ends if you want to keep receiving responses without limit.',
           `Billing: ${p.url ?? ''}`] };
     }
+    case 'jobs_late':
+      return { subject: `SurveyFlow: ${(p.items ?? []).length} background job(s) are not running`, lines: ['The watchdog found jobs that did not run when they should have:', ...(p.items ?? []).map((i) => `• ${i}`),
+        'What this means: sends, gifts, reminders, billing or the daily checks are waiting. Check that the worker process (npm run worker, or the API with RUN_JOBS=true) is up and can reach the database and Redis. One message a day while the same jobs stay late.'] };
     case 'overage_invoice':
       return fr
         ? { subject: `Facture : réponses au-delà de votre offre (${p.what ?? ''})`, lines: [hi,

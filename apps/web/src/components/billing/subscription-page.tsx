@@ -16,6 +16,7 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { PageHeader } from '@/components/page-header';
 import { planFeatures } from '@/components/marketing/pricing-client';
 import { WalletCard } from '@/components/wallet/wallet-card';
+import { OverageCard } from './overage-card';
 import type { Account } from '@/lib/account';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { dateShort, money, num } from '@/lib/format';
@@ -33,6 +34,8 @@ type SubscriptionData = Account & {
   /** Mobile Money only exists in CFA francs: every other currency pays by card. */
   methods: Array<'mobile_money' | 'card'>;
   overagePer100: number;
+  /** PAY-12: what moving to each plan would take off today, in this owner's currency. */
+  upgradeCredit: Record<PaidPlanKey, { monthly: number; annual: number }>;
   prices: Record<PaidPlanKey, { monthly: number; annual: number; currency: string }>;
   invoices: Array<{ id: string; plan: string; interval: string; method: string; psp: string; amount: number; currency: string; paidAt: string | null; reference: string }>;
 };
@@ -121,6 +124,7 @@ export function SubscriptionPage({ initialPlan, initialInterval }: { initialPlan
               <p className="text-sm text-muted-foreground">{t(`plan.${key}Who`)}</p>
               <div className="flex items-baseline gap-1.5"><span className="font-display text-4xl font-extrabold tracking-tight">{num(interval === 'annual' ? price.annual : price.monthly, locale)}</span><span className="text-sm text-muted-foreground">{price.currency === 'XAF' || price.currency === 'XOF' ? 'FCFA' : price.currency} / {interval === 'annual' ? t('bill.year') : t('bill.month')}</span></div>
               {interval === 'monthly' && <p className="-mt-2 text-sm text-muted-foreground">{t('pricing.orYear', { price: `${num(price.annual, locale)} ${price.currency === 'XAF' || price.currency === 'XOF' ? 'FCFA' : price.currency}` })}</p>}
+              {(data.upgradeCredit?.[key]?.[interval] ?? 0) > 0 && <p className="-mt-2 rounded-lg bg-mint/50 px-3 py-2 text-sm font-medium text-ink" data-testid="plan-credit">{t('pr.credit', { amount: money(data.upgradeCredit[key][interval], price.currency, locale) })}</p>}
               <Button size="lg" variant={featured ? 'brand' : 'default'} disabled={lower} onClick={() => setCheckout(key)}>{current ? t('bill.renew') : lower ? t('bill.lower') : t('bill.select')}</Button>
               <ul className="flex flex-col gap-2 text-sm">
                 {planFeatures(key, t, locale).map((f) => <li key={f.text} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-leaf" strokeWidth={2.6} aria-hidden /><span>{f.text}{f.soon && <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">{t('pricing.soon')}</span>}</span></li>)}
@@ -137,6 +141,8 @@ export function SubscriptionPage({ initialPlan, initialInterval }: { initialPlan
           <TBody>{data.invoices.map((i) => <TR key={i.id}><TD>{i.paidAt ? dateShort(i.paidAt, locale) : '—'}</TD><TD>{t(`plan.${i.plan as 'starter'}`)} · {i.interval === 'annual' ? t('pricing.annual').split(' ·')[0] : t('pricing.monthly')}</TD><TD>{i.method === 'card' ? t('bill.card') : t('bill.momo')} · {i.psp}</TD><TD className="text-right font-semibold tabular-nums">{money(i.amount, i.currency, locale)}</TD></TR>)}</TBody>
         </Table>
       )}
+
+      <OverageCard currency={data.currency} methods={data.methods} />
 
       <CheckoutDialog plan={checkout} interval={interval} data={data} onClose={() => setCheckout(null)} />
     </>
@@ -156,7 +162,9 @@ function CheckoutDialog({ plan, interval, data, onClose }: { plan: PaidPlanKey |
 
   if (!plan) return null;
   const price = data.prices[plan];
-  const amount = interval === 'annual' ? price.annual : price.monthly;
+  const gross = interval === 'annual' ? price.annual : price.monthly;
+  const credit = data.upgradeCredit?.[plan]?.[interval] ?? 0;
+  const amount = gross - credit;
 
   async function pay() {
     setBusy(true);
@@ -208,7 +216,9 @@ function CheckoutDialog({ plan, interval, data, onClose }: { plan: PaidPlanKey |
             {method === 'mobile_money' && <Field label={t('bill.momoPhone')} htmlFor="pay-phone" hint={t('bill.momoHint')}><Input id="pay-phone" type="tel" placeholder={example} value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" /></Field>}
             {error && <p role="alert" className="text-sm font-medium text-destructive">{error}</p>}
             {data.subscription.amountFCFA > 0 && ['active', 'past_due'].includes(data.subscription.status) && data.subscription.plan !== plan && new Date(data.subscription.currentPeriodEnd) > new Date() && (
-              <p className="text-xs text-muted-foreground" data-testid="no-proration">{t('bill.noProration', { date: dateShort(data.subscription.currentPeriodEnd, locale) })}</p>
+              <p className="text-xs text-muted-foreground" data-testid="no-proration">{credit > 0
+                ? t('bill.proration', { date: dateShort(data.subscription.currentPeriodEnd, locale), credit: money(credit, price.currency, locale), pay: money(amount, price.currency, locale) })
+                : t('bill.noProration', { date: dateShort(data.subscription.currentPeriodEnd, locale) })}</p>
             )}
             <DialogFooter><Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button><Button size="lg" variant="brand" loading={busy} onClick={pay}>{t('bill.pay', { amount: money(amount, price.currency, locale) })}</Button></DialogFooter>
             <p className="text-xs text-muted-foreground">{t('bill.secure')}</p>

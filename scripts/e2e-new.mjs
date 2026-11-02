@@ -123,6 +123,59 @@ await step('WA-03: saying the survey follows something the people did, with noth
   expect(await page.getByTestId('message-category').getAttribute('data-category') === 'marketing', 'a reward makes it marketing, even when declared a follow-up');
 });
 
+await step('WA-05: on a live survey the owner switches the join link on: a link, a QR code and an end date appear, and the limits can be saved', async () => {
+  await page.goto(`${base}/surveys/${s1}`);
+  await page.getByTestId('join-on').waitFor({ timeout: 20000 });
+  await page.getByTestId('join-on').click();
+  await page.getByTestId('join-link').waitFor({ timeout: 15000 });
+  const link = await page.getByTestId('join-link').inputValue();
+  expect(/^https:\/\/wa\.me\/\d+\?text=JOIN%20[a-z2-7]{26}$/.test(link), `a wa.me link that types the join words: ${link}`);
+  expect((await page.getByTestId('join-qr').getAttribute('src'))?.startsWith('data:image/png'), 'a QR code');
+  await page.getByTestId('join-max').fill('40');
+  await page.getByTestId('join-countries').fill('cm, ci');
+  await page.getByTestId('join-save').click();
+  await toast(page, 'Saved');
+  await page.reload();
+  await page.getByTestId('join-max').waitFor({ timeout: 20000 });
+  expect((await page.getByTestId('join-max').inputValue()) === '40', 'the maximum was saved');
+  expect((await page.getByTestId('join-countries').inputValue()) === 'CM, CI', 'the countries were saved, upper-cased');
+  expect((await page.getByTestId('join-gifts').isDisabled()), 'with no gift on the survey, the gifts switch is off and disabled');
+  await shot(page, 'wa05-join-card');
+  await page.getByTestId('join-rotate').click();
+  await page.waitForFunction((old) => document.querySelector('[data-testid=join-link]')?.value !== old, link, { timeout: 10000 });
+  await page.getByTestId('join-off').click();
+  await page.getByTestId('join-on').waitFor({ timeout: 10000 });
+});
+
+await step('PAY-12: after the plan was paid for, the price of the next plan shows the credit for the days left, in the card and in the checkout', async () => {
+  sql(`update "Subscription" set "amountFCFA" = 39000, "currentPeriodStart" = now() - interval '9.5 days', "currentPeriodEnd" = now() + interval '20.5 days', status = 'active' where "userId" = (select id from "User" where email = '${ownerEmail}')`);
+  await page.goto(`${base}/billing`);
+  const credit = page.getByTestId('plan-credit');
+  await credit.first().waitFor({ timeout: 20000 });
+  expect(/−|-/.test(await credit.first().innerText()), 'a credit line on the bigger plan');
+  expect((await credit.count()) === 1, 'only the Business plan is a move up from Growth');
+  await shot(page, 'pay12-credit');
+  await page.getByRole('button', { name: /^activate$/i }).last().click();
+  const note = page.getByTestId('no-proration');
+  await note.waitFor({ timeout: 10000 });
+  expect(/unused days of your current plan/.test(await note.innerText()), 'the checkout says what is credited');
+  await shot(page, 'pay12-checkout');
+  await page.keyboard.press('Escape');
+});
+
+await step('PAY-09: the owner agrees to be invoiced for responses beyond the plan; an open invoice shows with its Pay button', async () => {
+  await page.goto(`${base}/billing`);
+  await page.getByTestId('overage-card').waitFor({ timeout: 20000 });
+  await page.getByTestId('overage-optin').click();
+  await page.waitForFunction(() => document.querySelector('[data-testid=overage-optin]')?.getAttribute('data-state') === 'checked', null, { timeout: 8000 });
+  sql(`insert into "OverageInvoice" (id, "userId", period, plan, allowance, responses, units, "amountFCFA", status, "dueAt") select 'inv_e2e', id, '2026-10-01', 'growth', 3000, 3250, 3, 1500, 'open', now() + interval '10 days' from "User" where email = '${ownerEmail}'`);
+  await page.reload();
+  await page.getByTestId('overage-invoice').waitFor({ timeout: 20000 });
+  expect(/250 responses beyond 3000/.test(await page.getByTestId('overage-invoice').innerText()), 'the invoice says how many responses beyond what');
+  expect((await page.getByTestId('overage-pay').count()) === 1, 'a Pay button');
+  await shot(page, 'pay09-overage');
+});
+
 await step('DAT-01: the whole account downloads as one file after "confirm it is you", with no password or secret in it', async () => {
   await page.goto(`${base}/settings?tab=data`);
   await page.getByTestId('dt-export').waitFor({ timeout: 20000 });

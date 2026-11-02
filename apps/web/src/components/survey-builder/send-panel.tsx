@@ -18,6 +18,7 @@ import { useLocale, useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 import { formatPhone } from '@surveyflow/shared';
 import { ReasonText } from './message-type';
+import { JoinLinkCard } from './join-link-card';
 
 interface ContactRow { id: string; name: string; phone: string; tags: string[]; optedOut: boolean }
 interface Contacts { total: number; tags: string[]; items: ContactRow[] }

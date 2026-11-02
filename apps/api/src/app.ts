@@ -1,3 +1,4 @@
+import { jobHealth } from './jobs/watchdog';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
@@ -43,6 +44,8 @@ export interface BuildOptions {
   /** Tests only: told about every route as it is registered (the route inventory that security-isolation.test.ts holds the whole API to). */
   onRoute?: (route: { method: string | string[]; url: string }) => void;
 }
+
+const bootedAt = new Date();
 
 export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
@@ -127,7 +130,8 @@ export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance
     try {
       await prisma.$queryRaw`SELECT 1`;
       await redis.ping();
-      return { ok: true, whatsapp: env.waMode, time: new Date().toISOString() };
+      // `jobs` is information, never a reason to answer 503: a restart would not fix a stopped worker, and the platform's health check must not loop on it.
+      return { ok: true, whatsapp: env.waMode, jobs: (await jobHealth(new Date(), bootedAt)).overall, time: new Date().toISOString() };
     } catch {
       return reply.code(503).send({ ok: false });
     }

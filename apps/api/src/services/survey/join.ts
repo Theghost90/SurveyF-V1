@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import QRCode from 'qrcode';
 import type { Prisma, WhatsAppAccount } from '@prisma/client';
 import { joinConsentText, joinInvalidText, joinLink, joinRefusal, sys, type SurveyLang } from '@surveyflow/shared';
 import { badRequest, notFound } from '../../lib/errors';
@@ -34,10 +35,12 @@ export async function getJoin(userId: string, surveyId: string) {
   const completed = await prisma.surveyRecipient.count({ where: { surveyId, via: 'join', status: 'completed' } });
   const joinedIds = (await prisma.surveyRecipient.findMany({ where: { surveyId, via: 'join' }, select: { contactId: true } })).map((r) => r.contactId);
   const giftsGiven = joinedIds.length ? await prisma.giftDelivery.count({ where: { surveyId, contactId: { in: joinedIds } } }) : 0;
+  const link = s.joinCode && account?.displayPhone ? joinLink(account.displayPhone, s.joinCode) : null;
   return {
     enabled: s.joinEnabled, code: s.joinCode, expiresAt: s.joinExpiresAt, max: s.joinMax, countries: s.joinCountries, gifts: s.joinGifts, giftMax: s.joinGiftMax,
     joined, completed, giftsGiven,
-    link: s.joinCode && account?.displayPhone ? joinLink(account.displayPhone, s.joinCode) : null,
+    link,
+    qr: link ? await QRCode.toDataURL(link, { margin: 1, width: 280, errorCorrectionLevel: 'M' }) : null,
     live: s.status === 'active',
   };
 }
