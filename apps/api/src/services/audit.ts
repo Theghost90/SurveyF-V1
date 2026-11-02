@@ -21,7 +21,7 @@ export type AuditAction =
   | 'account_export' | 'account_delete_requested' | 'account_delete_cancelled' | 'account_delete_postponed' | 'account_deleted'
   | 'survey_sent' | 'template_recategorised' | 'payout_held' | 'reconciliation_alert'
   | 'staff_gift_resolved' | 'staff_payment_resolved' | 'staff_number_revealed' | 'support_action'
-  | 'team_invited' | 'team_invite_revoked' | 'team_member_joined' | 'team_role_changed' | 'team_member_removed' | 'team_member_left' | 'member_request' | 'member_denied';
+  | 'join_link_on' | 'join_link_off' | 'join_link_rotated' | 'join_link_changed' | 'overage_opt_in' | 'overage_opt_out' | 'overage_invoice' | 'team_invited' | 'team_invite_revoked' | 'team_member_joined' | 'team_role_changed' | 'team_member_removed' | 'team_member_left' | 'member_request' | 'member_denied';
 
 /** `actorId`: set when a team member acted on an owner's workspace (BIZ-04): `userId` is then the owner, whose trail it is, and `actorId` is who did it. */
 export interface AuditContext { userId?: string | null; actorId?: string | null; sessionId?: string | null; ip?: string | null; userAgent?: string | null }

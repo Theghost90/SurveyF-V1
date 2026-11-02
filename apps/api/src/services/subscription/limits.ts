@@ -1,4 +1,5 @@
-import { PLANS, getPlan, type PlanDef, type PlanFeatures, type PlanKey } from '@surveyflow/shared';
+import { recordCapSignal } from '../cap-signals';
+import { PLANS, getPlan, sliceAt, type PlanDef, type PlanFeatures, type PlanKey } from '@surveyflow/shared';
 import type { Subscription, User } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { paymentRequired, notFound } from '../../lib/errors';
@@ -58,11 +59,13 @@ export async function loadAccount(userId: string): Promise<AccountContext> {
   const user = await prisma.user.findUnique({ where: { id: userId }, include: { subscription: true } });
   if (!user || !user.subscription) throw notFound('Account');
   const { subscription, ...rest } = user;
+  // The limits are PER MONTH, so usage is counted over the month of the subscription period that today is in, not over the whole period (twelve months for an annual plan).
+  const month = sliceAt(subscription.currentPeriodStart, subscription.currentPeriodEnd, new Date());
   return {
     user: rest as User,
     subscription,
     plan: getPlan(user.plan),
-    usage: await computeUsage(userId, subscription.currentPeriodStart, subscription.currentPeriodEnd, getPlan(user.plan).limits.recipients !== null),
+    usage: await computeUsage(userId, month.start, month.end, getPlan(user.plan).limits.recipients !== null),
   };
 }
 
@@ -119,6 +122,7 @@ export async function assertCanAddRecipients(ctx: AccountContext, contactIds: st
   const fresh = await freshRecipientCount(ctx.user.id, contactIds);
   const remaining = Math.max(0, cap - ctx.usage.recipients);
   if (fresh > remaining) {
+    await recordCapSignal(ctx.user.id, 'send_blocked', { plan: ctx.plan.key, cap, reached: ctx.usage.recipients, wanted: fresh }); // BIZ-03: the cap is judged on facts
     throw paymentRequired('plan_limit', remaining
       ? `Explore lets you reach ${cap} people for free and ${remaining} are left. Activate a plan to send to everyone.`
       : `You have reached the ${cap} people Explore includes. Activate a plan to send to everyone.`, {

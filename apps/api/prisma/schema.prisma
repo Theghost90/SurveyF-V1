@@ -128,6 +128,9 @@ model User {
   totpLastStep         Int?
   // ADDED (DAT-01, law 2024/017 s.38-43): the owner asked for the account to be erased. Nothing is deleted until deletionScheduledFor (30 days later); signing in and
   // cancelling is possible until then. While it is set the account only reads: surveys are paused and every change except cancelling and downloading is refused.
+  // ADDED (PAY-09): the owner agreed to be invoiced for responses beyond the plan. Off until they say so.
+  overageOptIn   Boolean   @default(false)
+  overageOptInAt DateTime?
   deletionRequestedAt  DateTime?
   deletionScheduledFor DateTime?
 
@@ -143,6 +146,8 @@ model User {
   teamMembers      TeamMember[]         @relation("Workspace") // people who work on this owner's workspace
   memberships      TeamMember[]         @relation("Member") // the workspaces this person works on
   teamInvites      TeamInvite[]         @relation("Invites")
+  capSignals       CapSignal[]
+  overageInvoices  OverageInvoice[]
   funnelEvents     FunnelEvent[]
   botAlerts        BotAlert[]
   ownerPhones      OwnerPhone[]
@@ -212,6 +217,17 @@ model Survey {
   // The owner's statement that the people get this because of something they did with the business (a purchase, a booking, a visit). Without it the
   // invitation goes out as MARKETING (packages/shared/src/message-category.ts, WA-03).
   followsTransaction Boolean @default(false)
+
+  // ADDED (WA-05, WA-06): joining by a link or a QR code. `joinCode` is 128 random bits and unique across all surveys; the link is a WhatsApp link to the owner's own
+  // number with the words "JOIN <code>" typed. Off until the owner turns it on; ends at `joinExpiresAt`, after `joinMax` people, or when the survey is not live.
+  // `joinCountries` = ISO codes the numbers must belong to (empty = no limit). People who joined this way get NO gift unless `joinGifts`, and at most `joinGiftMax` of them.
+  joinCode      String?   @unique
+  joinEnabled   Boolean   @default(false)
+  joinExpiresAt DateTime?
+  joinMax       Int?
+  joinCountries String[]  @default([])
+  joinGifts     Boolean   @default(false)
+  joinGiftMax   Int?
 
   // ADDED (automatic reminders). `kind` = general | event; `deadlineAt` is required for events. The two switches are
   // independent and OFF by default: SurveyFlow, not the owner, decides when a reminder is polite (shared/reminders.ts).
@@ -293,6 +309,7 @@ model SurveyRecipient {
   waMessageId String? // id of the invitation message (delivery status webhooks)
   remindedAt  DateTime?
   createdAt   DateTime  @default(now())
+  via         String? // how the person got into the survey when it was not the owner's send: 'join' (a link or a QR code, WA-05)
 
   // ADDED (automatic reminders): when the participant was flagged abandoned; which rule produced the reminder
   // (standard | event); whether it was automatic (only automatic reminders get a closing note); when the note went out.
@@ -309,6 +326,7 @@ model SurveyRecipient {
   @@unique([surveyId, contactId])
   @@index([surveyId, status])
   @@index([waMessageId])
+  @@index([surveyId, via])
 }
 
 // ADDED: DB-backed outbound queue (claimed with FOR UPDATE SKIP LOCKED).
@@ -461,6 +479,13 @@ model PaymentTransaction {
   // ([{psp, at, ok, ambiguous?, error?}]) — the trail an operator needs when "did the customer pay?" is the question.
   lastCheckedAt DateTime?
   attempts      Json?
+  // ADDED (PAY-12): the credit for the unused days of the plan this payment replaces, in CFA francs, and what it was taken from. The amount above is already net of it.
+  // If the subscription is no longer that one when the payment lands, the credit would be spent twice: the payment goes to review instead of being applied.
+  creditFCFA          Int       @default(0)
+  creditFromPlan      String?
+  creditFromPeriodEnd DateTime?
+  // ADDED (PAY-09): the overage invoice this payment settles (purpose = 'overage').
+  overageInvoiceId    String?
 
   subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -822,4 +847,46 @@ model TeamInvite {
 
   @@index([workspaceId])
   @@index([emailCanonical])
+}
+
+// ADDED (BIZ-03). What happened around the free plan's cap on different people reached, so that the cap can be judged on facts instead of guessed: an owner who was stopped by it,
+// a person refused at a join link because of it, and the moment an owner paid (with how many people they had reached). Counts and a plan name only: no participant, no number.
+model CapSignal {
+  id      String   @id @default(cuid())
+  userId  String
+  kind    String // send_blocked | join_refused | activated
+  cap     Int? // the plan's cap when it happened (null = none)
+  reached Int // different people reached so far
+  wanted  Int? // how many new people the blocked action needed
+  plan    String // the plan the owner was on
+  at      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, at])
+  @@index([kind, at])
+}
+
+// ADDED (PAY-09). Responses beyond a paid plan's allowance, invoiced after the period they were collected in, to owners who agreed to it. Nothing is ever charged without the
+// owner paying it themselves: Mobile Money has no card on file to debit, so an invoice is a request with a pay button, not a withdrawal. `period` is the start of the subscription
+// period it covers, so a period can never be invoiced twice.
+model OverageInvoice {
+  id          String    @id @default(cuid())
+  userId      String
+  period      String // ISO date of the period start
+  plan        String
+  allowance   Int
+  responses   Int
+  units       Int // blocks of 100 beyond the allowance
+  amountFCFA  Int
+  status      String    @default("open") // open | paid | void
+  dueAt       DateTime
+  paidAt      DateTime?
+  noticeAt    DateTime? // the invoice e-mail went out
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, period])
+  @@index([userId, status])
 }

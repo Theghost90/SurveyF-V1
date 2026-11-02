@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { PAID_GIFT_TYPES, currencyLabel, normalizeQuestion, publishProblems, surveyInputSchema, TEMPLATE_NAMES, walletLimits, type SurveyInput } from '@surveyflow/shared';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { prisma } from '../lib/prisma';
+import { assertNoOverdueOverage } from '../services/overage';
 import { assertCanActivateSurvey, assertCanAddRecipients, assertCanSendMessages, assertFeature, assertNotSuspended, freshRecipientCount, loadAccount, messagesRemaining, recipientsRemaining } from '../services/subscription/limits';
 import { enqueueInvitations } from '../services/whatsapp/sender';
 import { manualReminderState, sendManualReminders } from '../services/reminders';
@@ -255,6 +256,7 @@ export default async function surveyRoutes(app: FastifyInstance) {
     try {
       await assertCanAddRecipients(ctx, contacts.map((c) => c.id)); // Explore: 5 people in all; the wall is here, at the moment they want to reach everyone
       assertCanSendMessages(ctx, contacts.length); // 402 with the upgrade hint when over the plan's message quota
+      await assertNoOverdueOverage(req.userId); // PAY-09: off by default; stops new sends (never responses) when an overage invoice is long overdue
     } catch (err) {
       if (err instanceof AppError && err.status === 402) await track(req.userId, 'paywall_view', { code: err.code });
       throw err;

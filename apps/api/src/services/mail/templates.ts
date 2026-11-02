@@ -10,7 +10,7 @@ export type MailKind =
   | 'verify_email' | 'register_existing' | 'reset_password' | 'password_changed' | 'new_device' | 'failed_logins'
   | 'export_alert' | 'bulk_delete_alert' | 'bulk_read_alert' | 'sheets_sync_paused' | 'two_factor_changed' | 'sessions_revoked' | 'link_google' | 'step_up_code'
   | 'deletion_requested' | 'deletion_cancelled' | 'account_deleted' | 'template_recategorised' | 'payouts_held' | 'reconciliation_alert'
-  | 'team_invite' | 'team_joined' | 'team_removed';
+  | 'team_invite' | 'team_joined' | 'team_removed' | 'overage_warning' | 'overage_invoice';
 
 export interface MailParams {
   url?: string;
@@ -157,6 +157,32 @@ function build(kind: MailKind, lang: Lang, p: MailParams): Body {
         ? { subject: `Rapprochement quotidien : ${items.length} point(s) à regarder`, lines: ['Le contrôle quotidien des porte-monnaie et des fonds chez les prestataires a trouvé :', ...items.map((i) => `• ${i}`), 'Rien n’a été modifié par ce contrôle. Détail : npx tsx --env-file=.env scripts/reconcile.mts status. Cette alerte n’est envoyée qu’une fois par jour et par point.'] }
         : { subject: `Daily reconciliation: ${items.length} item(s) to look at`, lines: ['The daily check of the wallets and of the funds at the payment providers found:', ...items.map((i) => `• ${i}`), 'This check changed nothing. Details: npx tsx --env-file=.env scripts/reconcile.mts status. This alert is sent once a day for each item.'] };
     }
+    case 'overage_warning': {
+      const full = (p.count ?? 80) >= 100;
+      return fr
+        ? { subject: full ? 'Vous avez atteint le nombre de réponses de votre offre' : 'Vous approchez du nombre de réponses de votre offre', lines: [hi,
+          `Ce mois-ci, ${p.rows ?? ''} réponses ont été reçues sur les ${p.what ?? ''} de votre offre (${p.count ?? 80} %). Aucune réponse n’est jamais refusée : vos participants peuvent continuer.`,
+          p.enabled
+            ? 'Vous avez accepté d’être facturé(e) pour les réponses au-delà de l’offre : 500 FCFA par tranche de 100. Vous recevrez une facture à la fin du mois, à régler vous-même ; rien n’est prélevé.'
+            : 'Les réponses au-delà de l’offre ne vous sont facturées que si vous l’avez accepté dans Facturation. Passez à l’offre supérieure, ou acceptez la facturation, avant la fin du mois si vous voulez continuer de recevoir des réponses sans limite.',
+          `Facturation : ${p.url ?? ''}`] }
+        : { subject: full ? 'You have reached the number of responses in your plan' : 'You are close to the number of responses in your plan', lines: [hi,
+          `This month, ${p.rows ?? ''} responses came in out of the ${p.what ?? ''} in your plan (${p.count ?? 80}%). No response is ever refused: your participants can carry on.`,
+          p.enabled
+            ? 'You agreed to be invoiced for responses beyond the plan: 500 FCFA per block of 100. You will get an invoice at the end of the month, which you pay yourself; nothing is taken from you.'
+            : 'Responses beyond the plan are invoiced only if you agreed to it under Billing. Move up a plan, or agree to the invoicing, before the month ends if you want to keep receiving responses without limit.',
+          `Billing: ${p.url ?? ''}`] };
+    }
+    case 'overage_invoice':
+      return fr
+        ? { subject: `Facture : réponses au-delà de votre offre (${p.what ?? ''})`, lines: [hi,
+          `Pour la période commencée le ${p.what ?? ''}, ${p.rows ?? ''} réponses ont été reçues au-delà de votre offre, soit ${p.count ?? ''} FCFA (500 FCFA par tranche de 100). Vous avez accepté cette facturation.`,
+          `À régler avant le ${p.when ?? ''} depuis la page Facturation. Rien n’est prélevé automatiquement. ${p.url ?? ''}`,
+          'Pour ne plus recevoir de facture de ce type, retirez votre accord dans Facturation : les réponses ne seront jamais refusées pour autant.'] }
+        : { subject: `Invoice: responses beyond your plan (${p.what ?? ''})`, lines: [hi,
+          `For the period that began on ${p.what ?? ''}, ${p.rows ?? ''} responses came in beyond your plan: ${p.count ?? ''} FCFA (500 FCFA per block of 100). You agreed to this invoicing.`,
+          `Please pay before ${p.when ?? ''} from the Billing page. Nothing is taken automatically. ${p.url ?? ''}`,
+          'To stop receiving invoices like this one, withdraw your agreement under Billing: responses are never refused either way.'] };
     case 'team_invite': {
       const role = p.template === 'editor' ? ['éditeur', 'editor'] : ['lecteur', 'viewer'];
       return fr

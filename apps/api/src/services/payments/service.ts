@@ -1,6 +1,6 @@
 import { customAlphabet } from 'nanoid';
 import type { PaymentTransaction, Plan, Prisma } from '@prisma/client';
-import { PLANS, PSP_CHARGE_CURRENCIES, convertToXAF, currencyLabel, isCfa, normalizePhone, phoneExampleFor, planPriceIn, toWaId, walletLimits, type Currency, type FxQuote, type PaidPlanKey, type PaymentMethod } from '@surveyflow/shared';
+import { ANNUAL_MONTHS_CHARGED, PLANS, PSP_CHARGE_CURRENCIES, convertFromXAF, convertToXAF, prorationCreditFCFA, replacesCurrentPeriod, currencyLabel, isCfa, normalizePhone, phoneExampleFor, planPriceIn, toWaId, walletLimits, type Currency, type FxQuote, type PaidPlanKey, type PaymentMethod } from '@surveyflow/shared';
 import { env } from '../../config/env';
 import { AppError, badRequest, conflict, notFound } from '../../lib/errors';
 import { prisma } from '../../lib/prisma';
@@ -9,6 +9,7 @@ import { billingQuote, methodsFor, walletCurrency, walletQuote } from '../billin
 import { fixedFeeConverter } from '../fx';
 import { breakerFail, breakerOk, breakerOpen } from './breaker';
 import { track } from '../funnel';
+import { getOpenInvoice } from '../overage';
 import { pspRouter, type PSPRouter } from './router';
 import { PLAN_RANK, settleTransaction, type SettleLog, type SettleOutcome } from './settlement';
 import { PspError, type PSPAdapter } from './types';
@@ -36,7 +37,7 @@ export const failCodeOf = (reason: string | null): FailCode =>
 
 export const txDto = (t: PaymentTransaction) => ({
   id: t.id, reference: t.reference, purpose: t.purpose, plan: t.plan, interval: t.interval, method: t.method, psp: t.pspProvider,
-  amount: t.amount, currency: t.currency, status: t.status, checkoutUrl: t.status === 'pending' ? t.checkoutUrl : null,
+  amount: t.amount, currency: t.currency, creditFCFA: t.creditFCFA, status: t.status, checkoutUrl: t.status === 'pending' ? t.checkoutUrl : null,
   paymentToken: t.status === 'pending' && !t.checkoutUrl ? t.pspReference : null, createdAt: t.createdAt, paidAt: t.paidAt,
   failCode: t.status === 'failed' ? failCodeOf(t.failReason) : null,
 });
@@ -151,7 +152,20 @@ export async function initiatePayment(userId: string, input: InitiateInput, rout
   const { quote } = await billingQuote(user);
   const payCurrency = quote.currency;
   assertMethodForCurrency(input.method, payCurrency);
-  const amount = planPriceIn(input.plan, input.interval, quote);
+  const gross = planPriceIn(input.plan, input.interval, quote);
+
+  // PAY-12: moving to another plan replaces the period the customer paid for. The unused whole days of it are taken off the price, once (the payment remembers what it was
+  // taken from, and settlement refuses it if that is no longer the subscription).
+  const now = new Date();
+  let creditFCFA = 0;
+  if (env.PRORATION_ENABLED && replacesCurrentPeriod({ plan: sub.plan, status: sub.status, periodEnd: sub.currentPeriodEnd, paidFCFA: sub.amountFCFA }, input.plan, now)) {
+    creditFCFA = prorationCreditFCFA({
+      paidFCFA: sub.amountFCFA, periodStart: sub.currentPeriodStart, periodEnd: sub.currentPeriodEnd, now,
+      newPriceFCFA: PLANS[input.plan].priceFCFA * (input.interval === 'annual' ? ANNUAL_MONTHS_CHARGED : 1),
+    });
+  }
+  const credit = creditFCFA ? Math.min(convertFromXAF(creditFCFA, quote), Math.floor(gross * 0.9)) : 0; // in the currency charged: never more than 90 percent of the price, after any rounding
+  const amount = gross - credit;
   // What the provider will settle in XAF for the amount charged (not the canonical FCFA price: the two differ by the price rounding,
   // and this column is what a provider's settlement report is reconciled against — the canonical price is Subscription.amountFCFA).
   const amountXAF = convertToXAF(amount, quote);
@@ -165,6 +179,7 @@ export async function initiatePayment(userId: string, input: InitiateInput, rout
     {
       subscriptionId: sub.id, userId, pspProvider: chain[0]!.name, amount, currency: payCurrency, amountXAF, fxRate: fxRateOf(quote), status: 'pending',
       reference: `sf${refId()}`, purpose: 'subscription', plan: input.plan as Plan, interval: input.interval, method: input.method, phone: phone || null,
+      ...(creditFCFA ? { creditFCFA, creditFromPlan: sub.plan, creditFromPeriodEnd: sub.currentPeriodEnd } : {}),
     },
   );
   if (!fresh) return awaitDispatch(tx);
@@ -268,6 +283,33 @@ export async function initiateGiftTopup(userId: string, input: TopupInput, route
   );
   if (!fresh) return awaitDispatch(tx);
   return dispatchCheckout(tx, chain, user, 'SurveyFlow gift wallet top-up', phone);
+}
+
+/**
+ * Pays an overage invoice (PAY-09). The amount is the invoice's, in the owner's billing currency at today's rate; nothing else about the subscription changes. The same
+ * rules as every other payment apply (one at a time, failover, late success, review), because it goes through the same code.
+ */
+export async function initiateOveragePayment(userId: string, invoiceId: string, input: { method: PaymentMethod; phone?: string }, router: PSPRouter = pspRouter): Promise<PaymentTransaction> {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { subscription: true } });
+  if (!user.subscription) throw notFound('Subscription');
+  const inv = await getOpenInvoice(userId, invoiceId);
+  const { quote } = await billingQuote(user);
+  const currency = quote.currency;
+  assertMethodForCurrency(input.method, currency);
+  const amount = convertFromXAF(inv.amountFCFA, quote);
+  const amountXAF = convertToXAF(amount, quote);
+  const chain = router.chain({ country: user.country, currency, method: input.method, amountXAF }, undefined, await fixedFeeConverter());
+  if (!chain.length) throw new AppError(503, 'no_psp_available', 'No payment provider is available for this country / payment method right now');
+  const phone = payerPhone(input as never, user, input.method);
+  const { tx, fresh } = await reserveTransaction(
+    userId, input.method, { purpose: 'overage', overageInvoiceId: inv.id, method: input.method },
+    {
+      subscriptionId: user.subscription.id, userId, pspProvider: chain[0]!.name, amount, currency, amountXAF, fxRate: fxRateOf(quote), status: 'pending',
+      reference: `sf${refId()}`, purpose: 'overage', plan: null, interval: 'monthly', method: input.method, phone: phone || null, overageInvoiceId: inv.id,
+    },
+  );
+  if (!fresh) return awaitDispatch(tx);
+  return dispatchCheckout(tx, chain, user, `SurveyFlow responses beyond plan (${inv.period})`, phone);
 }
 
 /**

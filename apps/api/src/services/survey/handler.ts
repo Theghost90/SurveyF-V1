@@ -1,5 +1,5 @@
 import type { Contact, Prisma, SurveyRecipient, WhatsAppAccount } from '@prisma/client';
-import { START_WORDS, STOP_WORDS, fromWaId, parseAnswerId, parseTemplatePayload, sys, type OutboundMessage, type SurveyLang } from '@surveyflow/shared';
+import { START_WORDS, STOP_WORDS, fromWaId, parseJoinMessage, parseAnswerId, parseTemplatePayload, sys, type OutboundMessage, type SurveyLang } from '@surveyflow/shared';
 import { phoneIndex, prisma } from '../../lib/prisma';
 import { redis, withLock } from '../../lib/redis';
 import { autoSyncCompleted } from '../exports/sheets';
@@ -13,6 +13,7 @@ import { checkMilestone } from '../analytics-alerts';
 import { track } from '../funnel';
 import { audit } from '../audit';
 import { sendMail } from '../mail';
+import { handleJoin } from './join';
 
 /** Subset of Meta's webhook message object that we read. */
 export interface WaInboundMessage {
@@ -57,8 +58,9 @@ export async function processWebhookPayload(body: unknown, log: Logger): Promise
       for (const st of (value.statuses ?? []) as Array<{ id: string; status: string; errors?: Array<{ title?: string; message?: string }> }>) {
         await applyDeliveryStatus(st.id, st.status, st.errors?.[0]?.title ?? st.errors?.[0]?.message);
       }
+      const names = new Map<string, string>(((value.contacts ?? []) as Array<{ wa_id?: string; profile?: { name?: string } }>).filter((c) => c.wa_id && c.profile?.name).map((c) => [c.wa_id!, c.profile!.name!]));
       for (const msg of (value.messages ?? []) as WaInboundMessage[]) {
-        await handleMessage(phoneNumberId, msg, log);
+        await handleMessage(phoneNumberId, msg, log, names.get(msg.from));
       }
     }
   }
@@ -154,11 +156,11 @@ export function normalizeInbound(msg: WaInboundMessage): { inbound: Inbound; sur
   return { inbound: { kind: 'unsupported' } };
 }
 
-async function handleMessage(phoneNumberId: string, msg: WaInboundMessage, log: Logger) {
+async function handleMessage(phoneNumberId: string, msg: WaInboundMessage, log: Logger, profileName?: string) {
   if (!msg.id || !msg.from) return;
   if (!(await claim(msg.id))) return; // duplicate delivery (Meta retries) — already handled or in flight
   try {
-    await withLock(`${phoneNumberId}:${msg.from}`, () => turn(phoneNumberId, msg, log));
+    await withLock(`${phoneNumberId}:${msg.from}`, () => turn(phoneNumberId, msg, log, profileName));
     await markDone(msg.id);
   } catch (err) {
     await release(msg.id); // let Meta's retry reprocess it
@@ -184,7 +186,7 @@ async function findRecipient(where: Prisma.SurveyRecipientWhereInput, orderBy?: 
   return survey ? { ...r, survey } : null;
 }
 
-async function turn(phoneNumberId: string, msg: WaInboundMessage, log: Logger) {
+async function turn(phoneNumberId: string, msg: WaInboundMessage, log: Logger, profileName?: string) {
   // Messages to SurveyFlow's OWN number come from owners asking the Analytics Bot, never from survey participants.
   if (isPlatformNumber(phoneNumberId)) return handleOwnerMessage(msg, log);
   const account = await prisma.whatsAppAccount.findUnique({ where: { phoneNumberId }, include: { user: { select: { locale: true } } } });
@@ -192,7 +194,12 @@ async function turn(phoneNumberId: string, msg: WaInboundMessage, log: Logger) {
     log.warn({ phoneNumberId }, 'webhook for unknown phone_number_id');
     return;
   }
-  // Only people the owner actually imported can interact: no walk-in sessions, no gift farming.
+  // WA-05: "JOIN <code>" from a link or a QR code is the one way in for somebody the owner did not import. It is handled on its own and never reaches the survey engine.
+  if (msg.type === 'text') {
+    const code = parseJoinMessage(msg.text?.body ?? '');
+    if (code) return handleJoin({ ...account }, msg.from, fromWaId(msg.from), code, profileName, log);
+  }
+  // Everybody else: only people the owner actually imported (or who joined as above) can interact: no walk-in sessions, no gift farming.
   const contact = await prisma.contact.findUnique({ where: { userId_phoneHash: { userId: account.userId, phoneHash: phoneIndex(fromWaId(msg.from)) } } });
   if (!contact) return;
 
@@ -294,7 +301,7 @@ async function turn(phoneNumberId: string, msg: WaInboundMessage, log: Logger) {
         if (done.count === 0) break; // completed by a concurrent delivery: no second gift
         completed = true;
         completedRecipientId = recipient!.id;
-        const gift = await planGift(tx, survey, contact);
+        const gift = await planGift(tx, survey, contact, recipient!.via);
         heldGift = gift.held;
         messages.push({ kind: 'text', body: thankYouText(survey, gift) });
         break;

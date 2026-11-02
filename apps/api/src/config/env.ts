@@ -97,6 +97,12 @@ const schema = z.object({
   AUDIT_RETENTION_DAYS: z.coerce.number().int().min(30).default(400),
   /** DAT-01: days between asking to delete the account and the deletion (the owner can cancel until then). */
   ACCOUNT_DELETION_GRACE_DAYS: z.coerce.number().int().min(1).max(90).default(30),
+  // PAY-12: credit for the unused days of a plan that an upgrade replaces. On by default; counsel confirms the terms (docs/BACKLOG.md). The new plan always costs at least 10 percent.
+  PRORATION_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  // PAY-09: how many days an overage invoice stays open before it is a reminder, and after how many days a plan with an unpaid invoice may not SEND (0 = never block: responses are
+  // never refused either way). Off by default: blocking is a term of the contract that counsel has not yet written.
+  OVERAGE_DUE_DAYS: z.coerce.number().int().min(1).max(90).default(14),
+  OVERAGE_BLOCK_SENDS_AFTER_DAYS: z.coerce.number().int().min(0).max(365).default(0),
   /** DAT-01: years the financial archive (no names, no numbers) is kept after an account is deleted. A default for counsel to confirm, not a legal statement. */
   FINANCIAL_RETENTION_YEARS: z.coerce.number().int().min(1).max(20).default(10),
   /** DAT-01: whole-account downloads per owner per day. */

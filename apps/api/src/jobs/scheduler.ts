@@ -1,3 +1,4 @@
+import { runOverageBilling } from '../services/overage';
 import { refreshRates } from '../services/fx';
 import { tryLeader } from '../lib/redis';
 import { processDueGifts, releaseHeldGifts } from '../services/gifts';
@@ -55,5 +56,6 @@ export function startJobs(log: Log): () => void {
   every('renewal-notices', 6 * 3_600_000, () => runRenewalNotices(), { leader: true, initialDelay: 40_000 });
   // Unconfirmed accounts, spent e-mail links, ended sessions and old audit rows (jobs/retention.ts).
   every('retention', 3_600_000, () => runRetention(), { leader: true, initialDelay: 60_000 });
+  every('overage-billing', 3_600_000, () => runOverageBilling(new Date(), { warn: (o, m) => log.info(o, m) }), { leader: true, initialDelay: 100_000 });
   return () => timers.forEach((t) => { clearTimeout(t); clearInterval(t); });
 }

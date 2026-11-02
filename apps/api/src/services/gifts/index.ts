@@ -49,9 +49,22 @@ const nextTopOfHour = () => {
  * Falls back to "none" (plain thank-you) when the plan no longer includes gifts or the
  * survey's gift budget is exhausted — never promising something we will not deliver.
  */
-export async function planGift(tx: Tx, survey: SurveyWithOwner, contact: Pick<Contact, 'id' | 'phoneHash'>): Promise<GiftPlan> {
+/**
+ * `via`: how the person got into the survey. 'join' = a link or a QR code (WA-05): a public door is the classic way to farm gifts, so those people get nothing unless the owner
+ * switched gifts on for them, and then at most `joinGiftMax` of them (WA-06). One gift per number per survey holds for everybody (a database key), and the daily caps per
+ * number and per account of PAY-13 apply on top.
+ */
+export async function planGift(tx: Tx, survey: SurveyWithOwner, contact: Pick<Contact, 'id' | 'phoneHash'>, via: string | null = null): Promise<GiftPlan> {
   const type = survey.giftType;
   if (type === 'none' || type === 'custom') return { type: 'none' };
+  if (via === 'join') {
+    if (!survey.joinGifts) return { type: 'none' };
+    if (survey.joinGiftMax) {
+      const joiners = (await tx.surveyRecipient.findMany({ where: { surveyId: survey.id, via: 'join' }, select: { contactId: true } })).map((r) => r.contactId);
+      const used = joiners.length ? await tx.giftDelivery.count({ where: { surveyId: survey.id, contactId: { in: joiners } } }) : 0;
+      if (used >= survey.joinGiftMax) return { type: 'none' };
+    }
+  }
   if (!getPlan(survey.user.plan).features.giftAutomation) return { type: 'none' };
 
   if (survey.giftMaxCount) {

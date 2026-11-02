@@ -1,3 +1,5 @@
+import { invoiceCutShortMonth } from '../overage';
+import { recordCapSignal } from '../cap-signals';
 import { Prisma, type PaymentTransaction } from '@prisma/client';
 import { ANNUAL_MONTHS_CHARGED, PLANS, currencyLabel, type Currency, type PaidPlanKey } from '@surveyflow/shared';
 import { prisma, type Tx } from '../../lib/prisma';
@@ -62,7 +64,11 @@ async function parkForReview(tx: PaymentTransaction, reason: string, log: Settle
 
 /** What a paid transaction does to the account. Runs inside the caller's database transaction: all of it happens or none of it. */
 async function applyPaid(db: Tx, tx: PaymentTransaction, pspTxId?: string) {
-  if (tx.purpose === 'gift_topup') {
+  if (tx.purpose === 'overage') {
+    // PAY-09: the invoice this payment was for. A compare-and-set, so a payment settled twice marks it paid once.
+    if (!tx.overageInvoiceId) throw new Error(`overage payment ${tx.id} has no invoice`);
+    await db.overageInvoice.updateMany({ where: { id: tx.overageInvoiceId, status: 'open' }, data: { status: 'paid', paidAt: new Date() } });
+  } else if (tx.purpose === 'gift_topup') {
     // Credit what we ASKED for (tx.amount), not what the PSP says it collected: an overpayment must not mint wallet balance.
     await creditWallet(db, tx.userId, tx.amount, 'topup', tx.id, `Top-up (${tx.method === 'card' ? 'card' : 'Mobile Money'} · ${tx.pspProvider})`, tx.currency as Currency);
   } else {
@@ -71,7 +77,7 @@ async function applyPaid(db: Tx, tx: PaymentTransaction, pspTxId?: string) {
 }
 
 const paidText = (tx: PaymentTransaction) =>
-  tx.purpose === 'gift_topup' ? `✅ SurveyFlow: ${tx.amount.toLocaleString('en')} ${currencyLabel(tx.currency)} added to your gift wallet.` : `✅ SurveyFlow: payment received. Your ${tx.plan} plan is active.`;
+  tx.purpose === 'overage' ? `✅ SurveyFlow: your invoice for responses beyond your plan is paid. Thank you.` : tx.purpose === 'gift_topup' ? `✅ SurveyFlow: ${tx.amount.toLocaleString('en')} ${currencyLabel(tx.currency)} added to your gift wallet.` : `✅ SurveyFlow: payment received. Your ${tx.plan} plan is active.`;
 
 /** One settlement at a time per subscription: two payments of one customer landing together must not read the same "current plan". */
 const lockSubscription = (db: Tx, subscriptionId: string) => db.$queryRaw`SELECT "id" FROM "Subscription" WHERE "id" = ${subscriptionId} FOR UPDATE`;
@@ -109,11 +115,18 @@ export async function settleTransaction(txId: string, v: VerifyResult, log: Sett
     log.warn({ txId, expected: `${tx.amount} ${tx.currency}`, got: `${v.amount} ${v.currency}` }, 'payment OVERPAID — credited the asked amount only, check with the provider');
   }
 
-  let result: 'activated' | 'already' | 'downgrade';
+  // PAY-09: what the subscription was BEFORE this payment replaces it, to invoice the month it cuts short once the payment is committed.
+  const before = tx.purpose === 'subscription' ? await prisma.subscription.findUnique({ where: { id: tx.subscriptionId } }) : null;
+  let result: 'activated' | 'already' | 'downgrade' | 'stale_credit';
   try {
     result = await prisma.$transaction(async (db) => {
       await lockSubscription(db, tx.subscriptionId);
-      if (tx.purpose !== 'gift_topup' && isDowngrade(await db.subscription.findUniqueOrThrow({ where: { id: tx.subscriptionId } }), tx.plan)) return 'downgrade';
+      if (tx.purpose === 'subscription') {
+        const cur = await db.subscription.findUniqueOrThrow({ where: { id: tx.subscriptionId } });
+        if (isDowngrade(cur, tx.plan)) return 'downgrade';
+        // PAY-12: the price was reduced by the days left of a particular plan. If that is no longer what the customer has (they changed plan in between), the credit was already used.
+        if (tx.creditFCFA > 0 && (cur.plan !== tx.creditFromPlan || cur.currentPeriodEnd.getTime() !== tx.creditFromPeriodEnd?.getTime())) return 'stale_credit';
+      }
       const claimed = await db.paymentTransaction.updateMany({
         where: { id: txId, status: { in: [...SETTLEABLE] } },
         data: { status: 'success', paidAt: new Date(), pspReference: v.pspReference ?? tx.pspReference, failReason: null },
@@ -126,13 +139,20 @@ export async function settleTransaction(txId: string, v: VerifyResult, log: Sett
     if (isTransientDbError(err)) throw err;
     return parkForReview(tx, `activation_failed: ${(err as Error).message.slice(0, 300)}`, log);
   }
+  if (result === 'stale_credit') {
+    return parkForReview(tx, `proration_stale: the price had a credit of ${tx.creditFCFA} FCFA for the ${tx.creditFromPlan} plan, which is no longer the active subscription — decide: credit it anyway or refund`, log);
+  }
   if (result === 'downgrade') {
     // Applying it would replace the higher plan the customer has now (a payment started before they upgraded, landing late) and burn what is left of it.
     return parkForReview(tx, `lower_plan_than_active: paid ${tx.plan}, a higher plan is active — decide: credit it anyway or refund`, log);
   }
   if (result === 'activated') {
     void notifyOwner(tx.userId, paidText(tx)).catch(() => undefined);
-    if (tx.purpose !== 'gift_topup') void track(tx.userId, 'paid', { plan: tx.plan, interval: tx.interval, psp: tx.pspProvider });
+    if (before && before.status === 'active' && before.plan !== tx.plan && before.currentPeriodEnd > new Date()) void invoiceCutShortMonth(before);
+    if (tx.purpose === 'subscription') {
+      void track(tx.userId, 'paid', { plan: tx.plan, interval: tx.interval, psp: tx.pspProvider });
+      void noteActivation(tx.userId, tx.plan); // BIZ-03
+    }
     return 'activated';
   }
   return 'already_settled';
@@ -189,4 +209,18 @@ export async function resolveReview(txId: string, decision: 'credit' | 'reject',
   log.warn({ txId, reference: tx.reference }, 'review credited by operator');
   void notifyOwner(tx.userId, paidText(tx)).catch(() => undefined);
   return 'credited';
+}
+
+/**
+ * BIZ-03: the moment somebody paid for the first time, with how many different people they had reached by then. Only an owner who was on the free plan counts, and only the
+ * first payment (the signal is keyed once per owner). Best effort: it never fails a settlement.
+ */
+async function noteActivation(userId: string, plan: string | null): Promise<void> {
+  try {
+    if (await prisma.capSignal.findFirst({ where: { userId, kind: 'activated' }, select: { id: true } })) return;
+    const reached = (await prisma.surveyRecipient.findMany({ where: { survey: { userId } }, select: { contactId: true }, distinct: ['contactId'] })).length;
+    await recordCapSignal(userId, 'activated', { plan: plan ?? 'unknown', cap: null, reached });
+  } catch {
+    /* measuring must never break a payment */
+  }
 }
