@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Funnel, FunnelChart, LabelList, ResponsiveContainer, Tooltip } from 'recharts';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { useLocale, useT } from '@/lib/i18n/client';
@@ -27,8 +27,22 @@ export function worstStepIndex(counts: number[]): number {
   return max > 0 ? lost.indexOf(max) : -1;
 }
 
+/** True below 640 px. The chart keeps its step names to the right of the shape on wide screens; on a phone there is no room for them, so they go in a list under it. */
+function useNarrow(): boolean {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    const on = () => setNarrow(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return narrow;
+}
+
 export function FunnelView({ steps }: { steps: FunnelStep[] }) {
   const t = useT();
+  const narrow = useNarrow();
   const locale = useLocale();
   const [view, setView] = useState<'chart' | 'bars'>('chart');
   const first = Math.max(1, steps[0]?.count ?? 1);
@@ -50,17 +64,26 @@ export function FunnelView({ steps }: { steps: FunnelStep[] }) {
       </div>
 
       {view === 'chart' ? (
+        <>
         <div role="img" aria-label={`${t('a.funnel')}. ${summary}`} data-testid="funnel-chart" style={{ height: Math.max(260, steps.length * 46) }}>
           <ResponsiveContainer width="100%" height="100%">
-            <FunnelChart margin={{ top: 4, right: 130, bottom: 4, left: 4 }}>
+            <FunnelChart margin={{ top: 4, right: narrow ? 4 : 130, bottom: 4, left: 4 }}>
               <Tooltip formatter={(v: number, _n, item) => [`${fmt(v)} (${(item?.payload as { share?: string })?.share ?? ''})`, t('a.funnelPeople')]} />
               <Funnel dataKey="value" data={data} isAnimationActive={false} stroke="#fff">
                 <LabelList position="center" dataKey="value" fill="#fff" stroke="none" fontSize={13} fontWeight={700} />
-                <LabelList position="right" dataKey="name" fill="#3F534A" stroke="none" fontSize={12} />
+                {!narrow && <LabelList position="right" dataKey="name" fill="#3F534A" stroke="none" fontSize={12} />}
               </Funnel>
             </FunnelChart>
           </ResponsiveContainer>
         </div>
+        {narrow && (
+            <ol className="mt-3 grid gap-1 text-sm" data-testid="funnel-legend" aria-hidden>
+              {data.map((d) => (
+                <li key={d.key} className="flex items-center gap-2"><span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: d.fill }} /><span className="truncate">{d.name}</span><span className="ml-auto font-bold tabular-nums">{d.value}</span></li>
+              ))}
+            </ol>
+          )}
+        </>
       ) : (
         <div className="flex flex-col gap-3" data-testid="funnel-bars">
           {steps.map((f, i) => (
