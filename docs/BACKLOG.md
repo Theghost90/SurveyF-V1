@@ -21,6 +21,7 @@ Newest first.
 <!-- backlog:table changelog -->
 | Date | Level | Change |
 | --- | --- | --- |
+| 2026-11-02 | major | WA-05, WA-06, BIZ-03, PAY-09, PAY-12 and OPS-05 are built (D-11), DSN-02 is split out of DSN-01 and built, DSN-01 (dark theme, Storybook), LEG-01 and LEG-02 stay open with what exists said in the row. Two defects found on the way are fixed: the analytics charts lost their axes and bars under React 19 (a mismatched react-is; a test now guards it) and the funnel was a sliver on a phone; and the monthly limits were counted over the whole subscription period (twelve months for an annual plan). The new screens were run in a real browser (scripts/e2e-new.mjs, 12 steps). |
 | 2026-10-31 | major | FUT-05 is built and moves from Won't to Could (D-10): the analytics funnel is a Recharts funnel chart, with the bars one click away and a table of the same numbers for screen readers. The screens of DAT-01, WA-03, BIZ-04 and FUT-05 were run in a real browser (scripts/e2e-new.mjs, scripts/e2e-ui.mjs). |
 | 2026-10-31 | major | BIZ-04 is built (Could): team members as viewer or editor with their own login and two-step verification, deny by default over every route, a per-member trail, invitations only the right confirmed person can accept, seats from the plan. Pricing no longer says "soon" for team members. Not driven in a real browser yet. |
 | 2026-10-31 | major | PAY-07 is built as the logic and a command line, without a screen (Must): unknown-outcome payouts and gifts held for good can now be settled by a person, with who, why, evidence, ledger amounts, one decision once, and a record for the operator and for the customer. The screen stays part of ADM-02 and waits for ADM-01. |
@@ -40,23 +41,23 @@ Newest first.
 ## At a glance
 
 <!-- backlog:summary:start -->
-**76 rows: 29 built, 47 not built.** Of the built ones, 11 still have a check open against a real service or device.
+**77 rows: 36 built, 41 not built.** Of the built ones, 16 still have a check open against a real service or device.
 
 | | ✅ Built | ⬜ Not built | Total |
 |---|---|---|---|
 | Must | 15 | 19 | 34 |
-| Should | 8 | 11 | 19 |
-| Could | 6 | 9 | 15 |
+| Should | 12 | 7 | 19 |
+| Could | 9 | 7 | 16 |
 | Won't this release | 0 | 8 | 8 |
-| **All** | **29** | **47** | **76** |
+| **All** | **36** | **41** | **77** |
 
 Each ID in the grid carries its state: ✅ built · ⚠️ built, a check is open · ⬜ not built · 🧑 your action, no code · ⏸ deferred by you · 🔭 next version.
 
 | | Smaller | Small | Big | Bigger |
 |---|---|---|---|---|
 | **MUST** (34) | ⚠️ SEC-07, ⚠️ DAT-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01, 🧑 BIZ-02 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⚠️ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-01, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⚠️ WA-03, ⚠️ PAY-02, ⚠️ PAY-07, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, 🧑 LEG-03, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
-| **SHOULD** (19) | ✅ SEC-10, ⚠️ SEC-11, ✅ SEC-14, ⬜ PAY-06 | ⚠️ SEC-13, ⬜ WA-06, ⬜ BIZ-03, 🧑 LEG-05, 🧑 OPS-04 | ✅ SEC-06b, ✅ SEC-09, ✅ SEC-12, ✅ SEC-17, ⬜ ADM-03, ⬜ ADM-04, ⬜ LEG-02b, ⬜ PAY-08b, ⬜ PAY-09, ⬜ WA-05 | none |
-| **COULD** (15) | ✅ FUT-05, ✅ SEC-18 | ✅ SEC-19, ✅ SEC-20 | ⬜ WA-07, ⬜ DSN-01, ⬜ ADM-06, ⬜ PAY-12, ⬜ OPS-05 | ⚠️ BIZ-04, ✅ SEC-15, ⬜ BIZ-05, ⬜ BIZ-06, ⬜ ADM-05, ⬜ PAY-11 |
+| **SHOULD** (19) | ✅ SEC-10, ⚠️ SEC-11, ✅ SEC-14, ⬜ PAY-06 | ⚠️ SEC-13, ✅ WA-06, ⚠️ BIZ-03, 🧑 LEG-05, 🧑 OPS-04 | ✅ SEC-06b, ✅ SEC-09, ✅ SEC-12, ✅ SEC-17, ⚠️ WA-05, ⚠️ PAY-09, ⬜ ADM-03, ⬜ ADM-04, ⬜ LEG-02b, ⬜ PAY-08b | none |
+| **COULD** (16) | ✅ FUT-05, ✅ SEC-18, ✅ DSN-02 | ✅ SEC-19, ✅ SEC-20 | ⚠️ PAY-12, ⚠️ OPS-05, ⬜ WA-07, ⬜ DSN-01, ⬜ ADM-06 | ⚠️ BIZ-04, ✅ SEC-15, ⬜ BIZ-05, ⬜ BIZ-06, ⬜ ADM-05, ⬜ PAY-11 |
 | **WON'T THIS RELEASE** (8) | none | ⏸ DEF-01, ⏸ DEF-02 | 🔭 FUT-03 | ⏸ DEF-03, ⏸ DEF-04, 🔭 FUT-01, 🔭 FUT-02, 🔭 FUT-04 |
 <!-- backlog:summary:end -->
 
@@ -96,6 +97,13 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 | SEC-18 | Rate limit keyed by verified session instead of shared address, with a ceiling per address (D-07) | Could | Smaller | ✅ Built | `apps/api/tests/security-ratelimit.test.ts` | — | none |
 | SEC-19 | The registrant's password on the confirmation page, closing the last pre-hijacking path (D-07) | Could | Small | ✅ Built | `apps/api/tests/security-auth.test.ts` | — | none |
 | SEC-20 | Names and answers: a cap on distinct people read per day, and Google Sheets auto-sync needing re-confirmation (D-07) | Could | Small | ✅ Built | `apps/api/tests/security-reads.test.ts`, `apps/api/tests/exports.test.ts`, `apps/api/prisma/migrations/20261028000000_read_caps_sheets_reconfirm` | — | none |
+| WA-05 | Join a survey by link or QR code (built 2026-11-02 on your instruction, D-11; your four answers were not given, so the defaults in D-11 were used) | Should | Big | ⚠️ Built, check open | `apps/api/tests/join-links.test.ts`, `packages/shared/src/join.test.ts`, `apps/api/src/services/survey/join.ts`, `apps/api/prisma/migrations/20261101000000_join_links`, `scripts/e2e-new.mjs` | Never run against the real Meta (WA-01): whether a message typed from a wa.me link reaches the webhook as plain text in every WhatsApp client is not checked. The four defaults (D-11) are mine, not your answers: change them if they are wrong. The consent wording is a draft for counsel (LEG-02). The link needs the connected number's display number: an account connected without it gets no link. | ⚖ consent |
+| WA-06 | Gift caps for people who join by link: no gift unless switched on (and then with a step-up), a ceiling on gifts to them, one gift per number per survey (built 2026-11-02, D-11) | Should | Small | ✅ Built | `apps/api/tests/join-links.test.ts`, `apps/api/src/services/gifts/index.ts`, `apps/api/prisma/migrations/20261101000000_join_links` | none | none |
+| BIZ-03 | Measure the 5-person Explore cap: signals and an aggregate report, without waiting for the platform dashboard (built 2026-11-02, D-11) | Should | Small | ⚠️ Built, check open | `apps/api/tests/cap-signals.test.ts`, `apps/api/src/services/cap-report.ts`, `scripts/explore-cap-report.mts`, `apps/api/prisma/migrations/20261101010000_cap_signals` | Needs real owners to mean anything: the report says "fewer than 5" until then, and cannot say why somebody paid or left. The platform dashboard it was meant to feed (ADM-03) is not built; run `npx tsx --env-file=.env scripts/explore-cap-report.mts` after the first weeks. | none |
+| PAY-09 | Overage invoices for responses beyond the plan, opt-in, with a warning at 80 and 100 percent (built 2026-11-02, D-11): an invoice is a request the owner pays, not a debit | Should | Big | ⚠️ Built, check open | `apps/api/tests/proration-overage.test.ts`, `apps/api/src/services/overage.ts`, `packages/shared/src/billing-slices.test.ts`, `apps/api/prisma/migrations/20261101020000_proration_overage`, `scripts/e2e-new.mjs` | Not an automatic debit: Mobile Money has no card on file, so "automatic" is the invoice, not the charge; a card mandate would need a provider agreement. What happens to an owner who never pays is a term counsel has not written (the setting OVERAGE_BLOCK_SENDS_AFTER_DAYS is off). The 500 FCFA per 100 comes from the pricing page; nothing was run against a real provider. Found on the way and fixed: the monthly limits were counted over the whole subscription period (twelve months for an annual plan). | ⚖ terms |
+| PAY-12 | Proration: the unused whole days of the plan an upgrade replaces are credited, never below 10 percent of the new price (built 2026-11-02, D-11) | Could | Big | ⚠️ Built, check open | `apps/api/tests/proration-overage.test.ts`, `packages/shared/src/proration.test.ts`, `packages/shared/src/proration.ts`, `scripts/e2e-new.mjs` | The terms are counsel's (a credit is a statement about refunds and unused time). The 10 percent floor and rounding down to whole days are my choices. Not run with a real provider. | ⚖ terms |
+| OPS-05 | Highly available jobs: a worker process of their own, heartbeats, a watchdog in the API that e-mails the operator (built 2026-11-02, D-11) | Could | Big | ⚠️ Built, check open | `apps/api/tests/jobs-watchdog.test.ts`, `apps/api/src/worker.ts`, `apps/api/src/jobs/watchdog.ts` | Never run as two workers on a real host, and the hosting templates (deploy/) were not changed: starting a second process, and restarting a dead one, is the platform's job. The watchdog sees that jobs run, not whether they decide well. | none |
+| DSN-02 | Design tokens exported from the one place they are defined, with a test that they have not drifted (split out of DSN-01, built 2026-11-02, D-11) | Could | Smaller | ✅ Built | `apps/web/tests/design-tokens.test.ts`, `apps/web/src/design/tokens.ts`, `scripts/export-tokens.mts` | none | none |
 
 ## B. Not built yet
 
@@ -107,14 +115,12 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 | ADM-01 | Staff foundation: separate admin app, staff accounts, RBAC, mandatory 2FA, audit log (section G; stays Must for a public launch, D-03, D-08) | Must | Big | ⬜ Not built | Code | ⚖ 📄 |
 | ADM-02 | Money and customer operations console; needs ADM-01, delivers PAY-07 and the screen of PAY-02 (D-03, D-08) | Must | Big | ⬜ Not built | Code | ⚖ |
 | PAY-06 | Unfunded gifts expire after about 30 days | Should | Smaller | ⬜ Not built | Code | none |
-| WA-06 | Gift caps per phone and per survey (Must if WA-05 ships) | Should | Small | ⬜ Not built | Code | none |
-| BIZ-03 | Measure the 5-person Explore cap; evidence comes from ADM-03 | Should | Small | ⬜ Not built | Code | none |
 | ADM-03 | Platform analytics, aggregates only; needs ADM-01 (D-08) | Should | Big | ⬜ Not built | Code | none |
 | ADM-04 | Maintenance and health console; needs ADM-01 (D-08) | Should | Big | ⬜ Not built | Code | none |
 | WA-07 | Daily summary e-mail and a "50% completed" alert (SEC-01 now exists) | Could | Big | ⬜ Not built | Code | none |
 | BIZ-05 | API access | Could | Bigger | ⬜ Not built | Code | ⚖ |
 | BIZ-06 | White-label | Could | Bigger | ⬜ Not built | Code | ⚖ |
-| DSN-01 | Dark theme, token export, Storybook | Could | Big | ⬜ Not built | Code | none |
+| DSN-01 | Dark theme and Storybook (the token export was split out as DSN-02 and is built; a dark theme means turning 81 hard-coded whites and hundreds of fixed colours into tokens and looking at every screen, and Storybook adds about 600 packages to the audit gate: neither was done half-way) | Could | Big | ⬜ Not built | Code | none |
 | ADM-05 | Support impersonation ("view as customer"); needs ADM-01 and ADM-02 (D-08) | Could | Bigger | ⬜ Not built | Code | ⚖ |
 | ADM-06 | Content and config management; needs ADM-01 (D-08) | Could | Big | ⬜ Not built | Code | ⚖ |
 
@@ -125,8 +131,8 @@ Counsel, a payment provider, Meta, the host, Google, or an action or decision of
 <!-- backlog:table notbuilt -->
 | ID | Item | MoSCoW | Size | State | Waiting on | ⚖/📄 |
 | --- | --- | --- | --- | --- | --- | --- |
-| LEG-01 | Privacy Policy and Terms from counsel (the one-page facts sheet is ready: `docs/LEGAL_FACTS_SHEET.md`) | Must | Bigger | 🧑 Your action | Counsel, You | ⚖ |
-| LEG-02 | Consent responsibility text (retention moved to LEG-02b, D-02) | Must | Small | 🧑 Your action | Counsel | ⚖ |
+| LEG-01 | Privacy Policy and Terms from counsel (the facts sheet `docs/LEGAL_FACTS_SHEET.md` was updated 2026-11-02, and the draft pages `/privacy` and `/terms` now describe what the product does, still marked unreviewed: counsel's text replaces them) | Must | Bigger | 🧑 Your action | Counsel, You | ⚖ |
+| LEG-02 | Consent responsibility text (retention moved to LEG-02b, D-02): a draft with the questions only counsel can answer is in `docs/legal/DRAFT_Consent_Responsibility.md` | Must | Small | 🧑 Your action | Counsel | ⚖ |
 | LEG-03 | Is the prepaid wallet regulated as e-money? | Must | Bigger | 🧑 Your action | Counsel | ⚖ 📄 |
 | LEG-04 | Data-processing agreement, cross-border clauses (D-02, was Should) | Must | Small | 🧑 Your action | Counsel | ⚖ |
 | PAY-01 | Real gift fee from the actual tariffs, card versus Mobile Money | Must | Smaller | ⬜ Not built | Provider | 📄 Campay |
@@ -145,12 +151,8 @@ Counsel, a payment provider, Meta, the host, Google, or an action or decision of
 | LEG-02b | Enforced retention deletion (split from LEG-02, D-02). Partly done: sessions, links, audit rows and unconfirmed accounts are purged. Must if counsel says the law requires it at launch | Should | Big | ⬜ Not built | Code, Counsel | ⚖ |
 | LEG-05 | Google OAuth verification, `drive.file` scope (Must if Sheets ships) | Should | Small | 🧑 Your action | Google, You | 📄 Google |
 | PAY-08b | Mechanism to refund or withdraw unspent balance | Should | Big | ⬜ Not built | Code, Counsel | ⚖ 📄 |
-| PAY-09 | Automatic overage billing | Should | Big | ⬜ Not built | Code, Counsel | ⚖ terms |
-| WA-05 | Join a survey by link or QR code; waits for your four answers | Should | Big | ⬜ Not built | You, Code | ⚖ consent |
 | OPS-04 | Test on real iPhone and Android phones | Should | Small | 🧑 Your action | You | none |
 | PAY-11 | Provider-statement reconciliation, automatic refunds and payouts | Could | Bigger | ⬜ Not built | Code, Provider | ⚖ |
-| PAY-12 | Proration on plan changes | Could | Big | ⬜ Not built | Code, Counsel | ⚖ terms |
-| OPS-05 | Highly available jobs process | Could | Big | ⬜ Not built | Code, Host | none |
 
 ## C. Won't this release (not built)
 
@@ -205,6 +207,13 @@ For every row: what it fixes, the risks it brings (with a label), and how they a
 | PAY-13 | A wallet top-up by card followed by gifts to Mobile Money numbers is a cash-out route for stolen cards, and the chargeback arrives after the money has gone | UX: an honest owner meets a cap. PAY: caps set too high do nothing | Built: a cap per account and per phone number (from every account together) in any rolling 24 hours, exact under concurrency (advisory locks); a hold on payouts of young accounts; a held gift is not debited and not promised, the owner sees why and is e-mailed once a day, and it goes by itself, oldest first, when the limit allows; release and retry cannot bypass it; a gift above a cap waits for staff. Not done: sizing against the providers' dispute terms (yours to ask for), top-up limits, card funds locked for N days |
 | PAY-02 | A silent cash shortfall | SEC: balance-read credentials. OPS: false alarms | Built: balances are typed in by default (no new credential); two providers can be read with the key already held, by a GET only, opt-in, and a failed read is "unknown", never a shortfall; the comparison is made only when every provider holding customers' money has a fresh balance; a shortfall under 5,000 francs or 2 % is no alarm; one alert a day per finding. Not done: read-only keys (none could be confirmed), a per-provider comparison |
 | PAY-07 | Unresolved "to verify" money | SEC: a staff screen is a new privileged surface. PAY: manual errors | Built: no web surface at all (a test checks there is none), so nothing new to steal; amounts from the ledger, one decision applies once (compare-and-set), who and why on every decision and the provider's own reference when saying it paid, a preview before --yes, numbers masked, a record for the operator and a bare line for the customer. Not done: a screen, staff accounts and the two-person rule (ADM-01), checking a claim against a provider |
+| WA-05 | Owners cannot reach people outside their contacts | ABUSE: gift farming and spam. DATA: public numbers. SEC: guessable links. COST: quota use | Built: a 128-bit code per survey, off until switched on and then ending by itself in 30 days; a maximum, a country list, the free plan's cap on different people counted (the refusal is recorded as a count); every refusal looks the same to the person; six tries an hour per number and a ceiling per business after which the number stops answering; the first message asks for consent and says how to stop, and nothing starts until START; STOP works. Not done: a run against the real Meta, a check that a link-typed message arrives as plain text everywhere |
+| WA-06 | Gift farming through a public link | UX: honest users capped | Built: people who join by link win nothing unless the owner switches it on (a fresh "confirm it is you"), then at most the ceiling the owner sets; one gift per number per survey (a database key); the daily caps of PAY-13 on top |
+| BIZ-03 | A guess about the 5-person cap | PAY: a cap that is too low loses customers, too high gives the product away. DATA: counts about owners | Built: counts and a plan name only, no participant and no number; one signal of each kind per owner per hour; a report that shows "fewer than 5" for any small group and never a share of one; it says what it cannot show. Not done: the platform dashboard (ADM-03) |
+| PAY-09 | Revenue not collected | PAY: surprise charges. LEGAL: a term about unpaid invoices that nobody has written | Built: opt-in with the rate in front of the owner; a warning at 80 and at 100 percent of each month; invoices by the month (a year of an annual plan is twelve months, each against one month's allowance), once each, e-mailed; nothing is debited, the owner pays; an unpaid invoice stops nothing unless a setting says so, and then only new sends, never responses. Not done: a card mandate, the unpaid-invoice term |
+| PAY-12 | An upgrade starts a new period | PAY: calculation errors. LEGAL: a credit is a refund term | Built: whole unused days, rounded down; never more than was paid; the new plan never below 10 percent of its price; no credit for a renewal, a lapsed plan or the free plan; the credit is remembered by the payment and refused if the subscription is no longer the one it came from (the payment goes to review); the month an upgrade cuts short is invoiced (PAY-09). Not done: counsel on the terms |
+| OPS-05 | Jobs that stop with the web server, and nobody noticing | OPS: a worker nobody restarts. COST: a second process | Built: the jobs can run in a process of their own; leader jobs take a lease that another process takes over when the holder dies; every run leaves a heartbeat; a watchdog in the API (so it does not depend on the jobs being up) e-mails the operator once a day for the same late jobs; the health check reports the state and never fails because of it. Not done: two real workers on a host, restart policy (the platform's) |
+| DSN-02 | Colours handed to a designer that the product no longer uses | UX: drift | Built: generated from the Tailwind config and the stylesheet, never typed; a test fails when the committed file differs |
 
 ### Not built yet
 
@@ -212,6 +221,8 @@ For every row: what it fixes, the risks it brings (with a label), and how they a
 | ID | Fixes | New risks | Containment |
 | --- | --- | --- | --- |
 | LEG-01 | No counsel-approved text | LEGAL: promises beyond the product | The lawyer works from the facts sheet, updated when the product changes |
+| OPS-04 | Untested devices | none notable | Use the funnel events, test real devices |
+| DSN-01 | No dark theme | UX: a dark theme half done reads worse than none. COST: Storybook adds about 600 packages to the audit gate | Not started: it needs every screen turned from fixed colours to tokens and looked at (the token export, DSN-02, is the first step and is built) |
 | LEG-02 | Unclear consent responsibility | DATA: consent proof is more personal data | Timestamp and owner only |
 | LEG-02b | Data kept longer than promised | DATA: irreversible deletion | A grace period, counsel sets the periods, a dry-run report first |
 | LEG-03 | Holding customer money without a licence | PAY: may force a licensed-partner redesign | Decide before any real top-up |
@@ -224,18 +235,12 @@ For every row: what it fixes, the risks it brings (with a label), and how they a
 | PAY-06 | Stale gifts to strangers | PAY: an owner loses an obligation unnoticed | Warn before expiry, let the owner release first |
 | PAY-08a | No answer to "what happens to my leftover money" | LEGAL: promises refunds the team can only do by hand. PAY: a cash-outflow obligation | Wording that matches what support can do, reviewed by counsel, consistent with LEG-03 |
 | PAY-08b | Owners cannot recover unspent money alone | PAY: a stolen-card top-up, then a withdrawal. LEGAL: anti-money-laundering | A cooling period, refund to the original method, KYC above a threshold |
-| PAY-09 | Revenue not collected | PAY: surprise charges | Opt-in, a warning at 80%, invoice e-mails |
 | PAY-11 | Manual refunds, no statement matching | PAY: automatic refunds can loop | Limits and an approval step |
-| PAY-12 | An upgrade starts a new period | PAY: calculation errors | A cap, tests, counsel on the terms |
 | WA-01, WA-02, WA-04 | Unverified Meta, no approval, unsubmitted templates | COST: Meta billing. OPS: rejections. SEC: tokens in tests | A test app first, an alert on rejection, tokens only in the environment |
-| WA-05 | Owners cannot reach people outside their contacts | ABUSE: gift farming and spam. DATA: public numbers. SEC: guessable links. COST: quota use | Unguessable codes, expiry, caps (WA-06), a country limit, a consent line and STOP, joiners count toward the Explore cap |
-| WA-06 | Gift farming through a public link | UX: honest users capped | One gift per number per survey, a per-survey ceiling, a gifts switch |
 | WA-07 | No owner alerts by e-mail or WhatsApp | COST: billed to SurveyFlow. ABUSE: spam | Reuse the bot's caps and mute |
 | BIZ-01, BIZ-02, OPS-03 | Unpublished support, false "soon" claims, open pricing | LEGAL/UX: promising what does not exist | Publish only what you can honour |
-| BIZ-03, OPS-04 | A guessed cap, untested devices | none notable | Use the funnel events, test real devices |
 | BIZ-05 | No integrations | SEC: leaked keys and contact scraping | Scoped hashed keys, rate limits, an IP allowlist |
 | BIZ-06 | No branding | SEC: custom-domain takeover. LEGAL: Meta display-name rules | DNS verification, manual review |
-| DSN-01, OPS-05 | No dark theme, a single-leader jobs process | PAY: several leaders could double-process | Keep the claim-once locks |
 | OPS-01, OPS-02 | An untested deploy, no backup proof | DATA: backups hold personal data. SEC: secrets in logs | Encrypted backups with retention, boot checks |
 | ADM-01 | Operators would otherwise work in SQL and scripts, with no roles or trail | SEC: one stolen admin login exposes everything. SEC: a larger attack surface, with IDOR risk | Mandatory 2FA, a separate origin and session, VPN or gateway, short sessions, login alerts, the same security tests as the customer app, an access check on every record |
 | ADM-02 | Owners' money problems and deletion requests have no tool | DATA: insider access to participants' data is the biggest new leak. ABUSE: refund fraud, snooping. PAY: manual errors | Masking and aggregates by default, a logged reveal with a reason, no bulk export from admin, two-person approval for money, amounts from the ledger, an immutable audit log, a quarterly access review |
@@ -274,6 +279,7 @@ Your decisions that rows cite. A row that is deferred, or that changed its MoSCo
 | D-08 | 2026-10-27 | The full admin backend with RBAC is added as ADM-01 to ADM-06. | "add also the full admin backend feature with RBAC mechanism" |
 | D-09 | 2026-10-17 | The check against a real Meta app (WA-01) is postponed by you; the reminder you asked for is still owed. | "I'll verify real Meta as per META_CHECK.md later (you'll remind me later this weekend …)" |
 | D-10 | 2026-10-31 | DAT-01, DAT-02, PAY-02, WA-03, PAY-13, PAY-07, BIZ-04 and FUT-05 are to be built, each with the containment written in section D. This lifts D-05 for DAT-01 and DAT-02 and the hold of D-07 on PAY-13. | "Build DAT-01, DAT-02, PAY-02, WA-03, PAY-13, PAY-07, BIZ-04 and FUT-05. Make sure you consider the containment while building each" |
+| D-11 | 2026-11-02 | WA-06, BIZ-03, DSN-01, LEG-01, LEG-02, PAY-09, WA-05, PAY-12 and OPS-05 are to be built, with the containment in section D. Where an item cannot be completed by code (LEG-01, LEG-02 are counsel's; DSN-01's dark theme and Storybook were not done), the row says so. WA-05 waits for "your four answers", which were not in the conversation: the defaults used are (1) anyone with the link may join, the number being proven by WhatsApp itself; (2) the link ends after 30 days unless the owner sets another end, and has no maximum unless set; (3) people who join get no gift unless the owner switches it on; (4) no country limit unless the owner lists countries. | "Build the following: WA-06, BIZ-03, DSN-01, LEG-01, LEG-02, PAY-09, WA-05, PAY-12, OPS-05 and update everything and/or all the docs" |
 
 ## F. Open questions for you
 

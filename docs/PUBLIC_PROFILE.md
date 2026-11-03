@@ -16,12 +16,19 @@ Profiles: `full` (staging and pilot, everything) and `public` (launch, nothing t
 | Message category per survey (utility or marketing), cost acknowledgement before every marketing send, re-categorisation by Meta | WA-03 | on | **on** | no money is held; WhatsApp messages are the core product and Meta bills the owner directly. Needed so that promotions are not sent as utility |
 | Team members: viewer and editor with their own login, two-step verification, a trail (Settings, Team) | BIZ-04 | on | **on** | no money is held; the owner's colleagues work on the owner's own account. Nothing in it is specific to payouts |
 | The analytics funnel as a chart | FUT-05 | on | **on** | a display of the owner's own results; nothing to do with money |
+| Join a survey by link or QR code, with its limits (a code per survey, ends by itself, maximum, country list, consent message first) | WA-05 | on | **on** | no money; messages to the owner's own number. Gifts for people who join are WA-06 below |
+| Gift ceiling and switch for people who join by link (off by default, one gift per number per survey) | WA-06 | on | on only if gifts exist | it limits gifts; it matters only when the reward model allows them |
+| Measurement of the free plan's cap (counts only; `scripts/explore-cap-report.mts`) | BIZ-03 | on | **on** | no money; aggregates, small groups hidden |
+| Overage invoices for responses beyond the plan: opt-in, warned at 80 and 100 percent, invoiced by the month, paid by the owner through the hosted checkout | PAY-09 | on | **on** | SurveyFlow is the merchant for its own service; nothing is debited and no stored value is involved. The term for an unpaid invoice is counsel's |
+| Credit for the unused days when moving to a bigger plan | PAY-12 | on | **on** | SurveyFlow's own subscription price; no money is held for others. The terms are counsel's |
+| Background jobs in a worker process of their own, heartbeats and a watchdog | OPS-05 | on | **on** | operations only |
+| Design tokens exported for a designer | DSN-02 | on | **on** | no money |
 | Receipts, proof of gift | core | on | on only if gifts exist | depends on the reward model |
 | Wallet top-up (card, Mobile Money) | PAY-08 | on | **off** | stored value held for owners (LEG-03) |
 | Stored balance debited per gift; release of unfunded gifts; refund to wallet | PAY-06, PAY-07 | on | **off** | stored value |
 | Cash payouts to participants from owners' money | PAY-04 | on | **off** | money transmission |
 | Payout currency conversion; wallet, gifts, overage in non-CFA currencies | PAY-05 | on | **off** | exchange/transfer service |
-| Wallet-funded overage | PAY-09 | on | **off** | invoiced through hosted checkout instead |
+| Wallet-funded overage (from the gift wallet) | PAY-09 | on | **off** | stored value; not built that way |
 | Payout limits (per account, per phone number, young-account hold) | PAY-13 | on | not needed | they limit payouts, which do not exist in `public` |
 | Daily reconciliation of wallets against ledger and provider balances | PAY-02 | on | not needed | there is no wallet in `public` (the job finds nothing to reconcile) |
 | Settling unknown-outcome payouts and held gifts by a person (command line; no screen yet) | PAY-07 | on | not needed | payouts do not exist in `public` |
@@ -43,3 +50,4 @@ Profiles: `full` (staging and pilot, everything) and `public` (launch, nothing t
 - 2026-10-31: WA-03 added as a row (on in `public`). Surveys with a reward are marketing by default: if the reward model is decided as "no gifts", more surveys can qualify as utility; nothing else changes.
 - 2026-10-31: DAT-02 added as a row (on in `public`, no switch: it is tooling run by the operator, not a route). It is a Must for any public launch with real owners' data; its host half is not done.
 - 2026-10-31: DAT-01 added as a row (on in `public`): account download and deletion are built. The "rights handling (s.38 to 43)" data-law item below is now partly met: erasure, copy and portability exist; rectification (s.42) is the owner editing their own data, and handling a **participant's** request to the owner is not built.
+- 2026-11-02: rows added for WA-05, WA-06, BIZ-03, PAY-12, OPS-05 and DSN-02, and PAY-09 split in two: the wallet-funded overage stays `off` in `public`; the opt-in invoice paid through the hosted checkout (built) is `on`. LEG-01 and LEG-02 (counsel's texts) and DSN-01 (dark theme, Storybook) are unchanged: still open.

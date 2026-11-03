@@ -297,7 +297,7 @@ setting, not code)** and one real confirmation e-mail received · Turnstile keys
 ## 16. What was verified, and what could not be
 
 **Verified in this environment** (real Postgres, Redis, headless Chromium):
-- **732 automated tests** (84 shared in 7 files, 559 API in 34 files, 32 website in 5 files, 57 script tests) and the backlog check, run together by `npm test`: sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed) and the password they ask for, purge, squatter replacement, aliases, password policy and hash upgrade,
+- **822 automated tests** (108 shared in 10 files, 618 API in 38 files, 39 website in 7 files, 57 script tests) and the backlog check, run together by `npm test`: sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed) and the password they ask for, purge, squatter replacement, aliases, password policy and hash upgrade,
   the three login counters and the CAPTCHA paths, sessions and refresh rotation (race, grace, reuse, revoke, expiry), JWT rotation, password reset/change, Google sign-in (stubbed JWKS: wrong audience/issuer/signature, unverified e-mail, linking, squatter), TOTP (RFC vectors, replay, recovery codes, disable),
   step-up (methods, window per session, limits), masking, reveal, export and bulk-delete controls, caps, the read caps, the Sheets re-confirmation, e-mails and audit rows, the rate limits per session and per address, key ring, rotation script (child process), blind index, parked payloads, production boot refusals, log hygiene,
   the append-only trigger, **every API route** against a second owner, the website proxy's rules, token renewal and cookie handling (14 tests), the post-sign-in redirect rule, the audit gate and the backlog checker.
@@ -443,3 +443,27 @@ A colleague works on an owner's workspace with **their own login, password and s
 5. **A deleted owner account** takes its team rows with it (the workspace is erased, §20); a deleted member leaves the trail rows that name them by id.
 6. **Driven in a real browser on 2026-10-31** (`scripts/e2e-new.mjs`): inviting, a second browser accepting, the editor working in the workspace, the trail, the removal. Not clicked: the workspace switcher in the account menu. Not run: a phone's width, a real e-mail provider, an authenticator app's enrolment for the colleague (set in the database for the test).
 
+
+## 23. Join by link or QR code (WA-05, WA-06)
+
+The one way in for a number the owner did not import. **No public page exists**: the link is a WhatsApp link to the owner's own number with `JOIN <code>` typed, so there is no form on SurveyFlow's side to attack and the number is proven by WhatsApp itself.
+
+- **The code**: 16 random bytes in base32 (26 characters, 128 bits), unique across surveys, off until switched on, ending after 30 days unless the owner sets another end; replaceable at once (the old link stops). Only the owner (verified e-mail) can read or change it; a team member cannot (the routes are not in `MEMBER_ROUTES`); another owner gets 404 (the cross-owner guard of §SEC-12 covers both routes).
+- **Refusals are identical**: an unknown code, a closed survey, an expired or full link, a country not on the list, the free plan's cap all answer "this link is not valid any more". The person learns nothing about limits or whether a code exists.
+- **Flood control**: six tries an hour per number; past 300 attempts an hour per business the number stops answering, so it cannot be turned into a tool that messages strangers.
+- **Consent first**: the first message names the business, says what is kept (answers and the WhatsApp number) and how to stop; nothing starts until the person replies START. STOP works as for everybody.
+- **What it can win**: nothing unless the owner switches gifts on for joiners (which asks for a fresh "confirm it is you"), then at most the ceiling the owner sets; one gift per number per survey is a database key; PAY-13's daily caps apply on top. A test removes each of these guards one at a time and fails.
+- **The free plan's cap counts joiners.** The refusal is recorded as a count (BIZ-03: no number, no name).
+
+Not covered: a run against the real Meta; a determined attacker with many numbers can still join up to the survey's maximum, which is why the maximum, the country list and the end date exist. The owner is responsible for where the link is shared.
+
+## 24. Overage invoices and the credit on an upgrade (PAY-09, PAY-12)
+
+- **Nothing is debited.** An invoice is a request the owner pays through the same payment page and the same settlement code as every other payment (one at a time, late success, review). It is made only for an owner who agreed (audited), after the month it covers, once (unique key on owner and month); it is paid once (a compare-and-set).
+- **A defect found on the way:** the monthly limits were counted over the whole subscription period (twelve months for an annual plan). Usage is now counted by the month of the period that today is in.
+- **The credit**: whole unused days, rounded down, never more than was paid, the new plan never below 10 percent of its price; remembered by the payment and refused (the payment goes to review) if the subscription is no longer the one it came from, so a credit cannot be spent twice.
+- **Consequence of an unpaid invoice**: none by default. `OVERAGE_BLOCK_SENDS_AFTER_DAYS` can stop new sends (never responses). Counsel has not written the term.
+
+## 25. The jobs process and its watchdog (OPS-05)
+
+The jobs can run in a process of their own. A job that is late is noticed by a watchdog **in the API process**, which does not depend on the jobs being up, and the operator is e-mailed once a day for the same late jobs (`OPERATOR_EMAIL`; without it the state is only logged). `/healthz` reports `jobs: ok | late | starting` and never answers 503 because of it. Not covered: a job that runs and decides wrongly; two real workers on a real host.

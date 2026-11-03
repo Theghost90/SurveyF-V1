@@ -1,7 +1,7 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { env } from '../src/config/env';
 import { beat } from '../src/jobs/heartbeat';
-import { buildJobs, startJobs } from '../src/jobs/scheduler';
+import { buildJobs, runJobOnce } from '../src/jobs/scheduler';
 import { jobHealth, watchOnce } from '../src/jobs/watchdog';
 import { prisma } from '../src/lib/prisma';
 import { redis, tryLeader } from '../src/lib/redis';
@@ -62,14 +62,18 @@ describe('heartbeats and the watchdog', () => {
     expect(h.jobs.find((j) => j.name === 'gifts')).toMatchObject({ state: 'failing', error: 'connection refused' });
   });
 
-  it('startJobs leaves a heartbeat for a job that ran, and a failed run is recorded with its error', async () => {
-    vi.useFakeTimers();
-    const stop = startJobs(quiet);
-    await vi.advanceTimersByTimeAsync(1000); // the jobs with no start-up delay run once
-    stop();
-    vi.useRealTimers();
-    const sendQueue = JSON.parse((await redis.get('sf:job:hb:send-queue'))!);
-    expect(sendQueue).toMatchObject({ ms: 2000, ok: true });
+  it('a run leaves a heartbeat, a failed run leaves one with its error, and a leader job that is not the leader leaves none', async () => {
+    const ok = { name: 't-ok', ms: 2000, leader: false, initialDelay: 0, fn: async () => ({ done: 1 }) };
+    const bad = { name: 't-bad', ms: 2000, leader: false, initialDelay: 0, fn: async () => { throw new Error('database down'); } };
+    const led = { name: 't-led', ms: 60_000, leader: true, initialDelay: 0, fn: async () => ({}) };
+    expect(await runJobOnce(ok, quiet)).toBe('ran');
+    expect(await runJobOnce(bad, quiet)).toBe('failed');
+    expect(JSON.parse((await redis.get('sf:job:hb:t-ok'))!)).toMatchObject({ ms: 2000, ok: true });
+    expect(JSON.parse((await redis.get('sf:job:hb:t-bad'))!)).toMatchObject({ ok: false, error: 'database down' });
+    expect(await runJobOnce(led, quiet)).toBe('ran'); // takes the lease
+    await redis.del('sf:job:hb:t-led');
+    expect(await runJobOnce(led, quiet)).toBe('skipped'); // another replica holds it: nothing runs, nothing is recorded
+    expect(await redis.get('sf:job:hb:t-led')).toBeNull();
   });
 });
 

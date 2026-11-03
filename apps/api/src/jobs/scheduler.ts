@@ -50,6 +50,25 @@ export function buildJobs(log: Log): JobDef[] {
 }
 
 /**
+ * One run of one job: a leader job runs only if this process holds (or takes) the lease; whatever happens, a run that took place leaves a heartbeat, a failed one with its error.
+ * Returns what happened, for the tests.
+ */
+export async function runJobOnce(job: JobDef, log: Log): Promise<'ran' | 'skipped' | 'failed'> {
+  if (job.leader && !(await tryLeader(job.name, Math.max(job.ms - 1000, 1000)))) return 'skipped';
+  const started = Date.now();
+  try {
+    const r = await job.fn();
+    if (r && typeof r === 'object' && Object.values(r as object).some((v) => typeof v === 'number' && v > 0)) log.info({ job: job.name, result: r }, 'job ran');
+    await beat(job.name, job.ms, true, Date.now() - started);
+    return 'ran';
+  } catch (err) {
+    log.error({ err, job: job.name }, 'job failed');
+    await beat(job.name, job.ms, false, Date.now() - started, (err as Error).message);
+    return 'failed';
+  }
+}
+
+/**
  * Runs the jobs in THIS process: by default inside the API (RUN_JOBS), or alone in a worker process (`npm run worker`, apps/api/src/worker.ts) so that deploying or restarting the
  * web server does not stop them and a dead worker is noticed. Each job guards against overlapping runs; several processes at once are safe: a leader job takes a lease for one
  * interval (so when the process that held it dies, another takes over at its next tick, never later than one interval), and every other job is made of row locks and idempotent writes.
@@ -62,20 +81,7 @@ export function startJobs(log: Log): () => void {
     const tick = async () => {
       if (running) return;
       running = true;
-      try {
-        if (job.leader && !(await tryLeader(job.name, Math.max(job.ms - 1000, 1000)))) return;
-        const started = Date.now();
-        try {
-          const r = await job.fn();
-          if (r && typeof r === 'object' && Object.values(r as object).some((v) => typeof v === 'number' && v > 0)) log.info({ job: job.name, result: r }, 'job ran');
-          await beat(job.name, job.ms, true, Date.now() - started);
-        } catch (err) {
-          log.error({ err, job: job.name }, 'job failed');
-          await beat(job.name, job.ms, false, Date.now() - started, (err as Error).message);
-        }
-      } finally {
-        running = false;
-      }
+      try { await runJobOnce(job, log); } finally { running = false; }
     };
     timers.push(setTimeout(() => void tick(), job.initialDelay).unref());
     timers.push(setInterval(() => void tick(), job.ms).unref());
