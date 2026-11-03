@@ -65,6 +65,7 @@ const HINTS: Record<number, string> = {
 };
 const explain = (e: unknown): string => {
   const msg = e instanceof Error ? e.message : String(e);
+  if (/^cannot reach it:/.test(msg)) return msg; // the webhook check words its own hint
   if (/fetch failed|network error|ENOTFOUND|ECONNREFUSED|ETIMEDOUT/i.test(msg)) return `${msg}\n→ cannot reach the server (for Meta checks: graph.facebook.com): check the internet connection, VPN, proxy or firewall`;
   const code = e instanceof WaError ? e.code : Number(/^(\d{2,6}):/.exec(msg)?.[1]);
   return code && HINTS[code] ? `${msg}\n→ ${HINTS[code]}` : msg;
@@ -263,7 +264,10 @@ if (!to) {
   await check(`your webhook ${root}`, async () => {
     let r: Response;
     try { r = await call(`${url}?hub.mode=subscribe&hub.verify_token=${encodeURIComponent(env.WHATSAPP_VERIFY_TOKEN ?? '')}&hub.challenge=meta-check-123`); }
-    catch (e) { throw new Error(`cannot reach it: ${(e as Error).message}`); }
+    catch (e) {
+      // Not the internet: this is YOUR API. Say what to start, instead of the generic "check your connection" that explain() adds for fetch errors.
+      throw new Error(`cannot reach it: ${(e as Error).message}\n→ ${local ? 'the API is not running on this address: start it (npm run dev, which also needs Postgres and Redis: docker compose up -d), then rerun' : 'the address is not answering: is the tunnel (cloudflared) still running, and is the API behind it up?'}`);
+    }
     const echoed = await r.text();
     if (r.status !== 200 || echoed !== 'meta-check-123') throw new Error(`verification handshake answered ${r.status} ${JSON.stringify(echoed.slice(0, 80))} instead of echoing the challenge: is WHATSAPP_VERIFY_TOKEN here the same value as on the API and in the Meta app dashboard?`);
     const bad = await call(`${url}?hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=x`);
