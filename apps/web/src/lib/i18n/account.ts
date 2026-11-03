@@ -124,7 +124,7 @@ export const en = {
   'w.intro': 'Connect the WhatsApp Business number your surveys will be sent from. You log in, enter your number and approve a few screens (Meta may also ask for a payment method: it bills WhatsApp messages to you directly). SurveyFlow sets up the rest.',
   'w.embedded': 'Connect with Facebook',
   'w.manual': 'Enter credentials manually',
-  'w.manualHelp': 'From Meta Business Manager → WhatsApp → API setup. Use a permanent (system user) access token.',
+  'w.manualHelp': 'From the API Setup page of the WhatsApp use case of your Meta app (developers.facebook.com). Use a permanent (system user) access token.',
   'w.tokenHint': 'Stored encrypted. It is never shown again.',
   'w.connect': 'Connect',
   'w.connected': 'WhatsApp connected.',
@@ -142,7 +142,7 @@ export const en = {
   'w.lang': 'Language',
   'w.refresh': 'Refresh status',
   'w.webhook': 'Webhook URL',
-  'w.webhookHelp': 'Set this as the callback URL of your Meta app (WhatsApp → Configuration) with your verify token, and subscribe to “messages”.',
+  'w.webhookHelp': 'In the webhook settings of the WhatsApp use case of your Meta app, set this as the callback URL with your verify token, and subscribe to “messages” (steps in docs/META_CHECK.md).',
 } as const;
 
 export const fr: Record<keyof typeof en, string> = {
@@ -267,7 +267,7 @@ export const fr: Record<keyof typeof en, string> = {
   'w.intro': 'Connectez le numéro WhatsApp Business depuis lequel vos sondages seront envoyés. Vous vous connectez, saisissez votre numéro et validez quelques écrans (Meta peut aussi demander un moyen de paiement : il vous facture directement les messages WhatsApp). SurveyFlow configure le reste.',
   'w.embedded': 'Se connecter avec Facebook',
   'w.manual': 'Saisir les identifiants à la main',
-  'w.manualHelp': 'Depuis Meta Business Manager → WhatsApp → Configuration de l’API. Utilisez un jeton d’accès permanent (utilisateur système).',
+  'w.manualHelp': 'Depuis la page API Setup du cas d’usage WhatsApp de votre application Meta (developers.facebook.com). Utilisez un jeton d’accès permanent (utilisateur système).',
   'w.tokenHint': 'Conservé chiffré. Il ne sera plus jamais affiché.',
   'w.connect': 'Connecter',
   'w.connected': 'WhatsApp connecté.',
@@ -285,5 +285,5 @@ export const fr: Record<keyof typeof en, string> = {
   'w.lang': 'Langue',
   'w.refresh': 'Actualiser le statut',
   'w.webhook': 'URL du webhook',
-  'w.webhookHelp': 'À renseigner comme URL de rappel de votre application Meta (WhatsApp → Configuration) avec votre jeton de vérification, puis abonnez-vous à « messages ».',
+  'w.webhookHelp': 'Dans les réglages webhook du cas d’usage WhatsApp de votre application Meta, renseignez ceci comme URL de rappel avec votre jeton de vérification, puis abonnez-vous à « messages » (étapes dans docs/META_CHECK.md).',
 };
