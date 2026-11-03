@@ -43,6 +43,8 @@ Open the use case: *Use cases* in the left menu → **Connect with customers thr
 
 That `curl` shows the Graph API version Meta uses today (**v25.0**); SurveyFlow's default (`META_GRAPH_VERSION`) is **v22.0**, which Meta still serves for now. If the script reports a version error, set `META_GRAPH_VERSION=v25.0` in `.env` (not changed in the code: it has not been tested against v25.0).
 
+**Webhook payload version (✔ seen, 2026-11-03).** The webhook fields in the app dashboard run at **v26.0**, a different setting from the Graph version above. A real inbound "HI" shown in Meta's webhook log at that version carried fields we do not read (`from_user_id`, `user_id`, `country_code`, `from_logical_id`, `internal_1p_only_data`). `apps/api/tests/webhook-meta-shape.test.ts` replays that payload through the real route: it is accepted, the extras are ignored, other subscribed fields (`calls`, `security`, `account_update`, …) and unknown message types answer 200. Still unverified: delivery of such an event to the callback while the app is unpublished (Meta says only dashboard test events arrive), and what Meta does if it one day stops sending `from` in favour of `user_id`; the handler needs `from`.
+
 **The access token on this page is temporary. Treat any screenshot or message that shows it as having leaked it**: press **Generate new token** (the old one stops working) and use the new one only in `.env`.
 
 Keep the **test phone number ID** and the **Messaging account ID** (Meta now says "Messaging account"; the previous version of this file called it *WhatsApp Business Account ID*: it is the same thing, the account that owns the number and the templates).
