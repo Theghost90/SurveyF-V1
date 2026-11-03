@@ -36,11 +36,14 @@ The app **Dashboard**, with the app name at the top left (a drop-down), and:
 
 ### 3. The test number and the first token ◇
 
-Open the use case: *Use cases* in the left menu → **Connect with customers through WhatsApp** → *Customize* ✔. The page is titled **Customize use case**, with a drop-down **Connect on WhatsApp** and this left menu ✔: *Overview · Basic setup (**Step 1. Try it out**, **Step 2. Production setup**, **Step 3. Business verification**, Next steps) · Become a Partner (Become Tech Provider) · Other tools (Tools, Permissions and features, Resources)*. The test number and the first token are in **Step 1. Try it out** ◇ (the page Meta's guide calls *API Setup*; its screen was not seen). There:
+Open the use case: *Use cases* in the left menu → **Connect with customers through WhatsApp** → *Customize* ✔. The page is titled **Customize use case**, with a drop-down **Connect on WhatsApp** and this left menu ✔: *Overview · Basic setup (**Step 1. Try it out**, **Step 2. Production setup**, **Step 3. Business verification**, Next steps) · Become a Partner (Become Tech Provider) · Other tools (Tools, Permissions and features, Resources)*. The test number and the first token are in **Step 1. Try it out** ✔ ("5 min · Send a message from your test number to understand how WhatsApp API works"). It has two sections, both showing *Completed* once done:
 
-- Meta generates **a test business phone number** for you (registered automatically; test numbers have relaxed limits and need no payment method for template messages);
-- *Generate access token* gives a **temporary** access token, fine for a first run (the previous version of this file said 24 hours; the guide's wording does not give a duration);
-- pick your own phone as the recipient ("To") and confirm the code. **? unchanged:** a test number can only message recipients you verified, up to 5.
+- **Claim a WhatsApp test number** ✔: shows the **test number** (a US +1 555 number), its **Phone Number ID** and the **Messaging account ID**, each with a copy button; below, the **Access token** field with a copy button and **Generate new token**. Meta notes that for a new app the test number takes about a minute to be registered before a message can be sent.
+- **Send a message from your test number** ✔: *Your test number* (From), **Recipient** (a drop-down: your own phone is chosen here, and Meta asks you to confirm it; **? unchanged:** up to 5 recipients), *Message* (one of Meta's sample templates, e.g. "Order Confirmation"), **Send message**, and a ready-made `curl` for the same call. Send this one message first: if it reaches your phone, the account, the token and the number are good before SurveyFlow is involved.
+
+That `curl` shows the Graph API version Meta uses today (**v25.0**); SurveyFlow's default (`META_GRAPH_VERSION`) is **v22.0**, which Meta still serves for now. If the script reports a version error, set `META_GRAPH_VERSION=v25.0` in `.env` (not changed in the code: it has not been tested against v25.0).
+
+**The access token on this page is temporary. Treat any screenshot or message that shows it as having leaked it**: press **Generate new token** (the old one stops working) and use the new one only in `.env`.
 
 Keep the **test phone number ID** and the **Messaging account ID** (Meta now says "Messaging account"; the previous version of this file called it *WhatsApp Business Account ID*: it is the same thing, the account that owns the number and the templates).
 
@@ -57,9 +60,9 @@ You created two system users: **one is enough**; use one and leave the other wit
 
 | Variable | Where it comes from |
 |---|---|
-| `WHATSAPP_ACCESS_TOKEN` | the token from step 3 |
-| `WHATSAPP_PHONE_NUMBER_ID` | the **API Setup** page of the use case ◇: the phone number ID of the test number |
-| `WHATSAPP_BUSINESS_ACCOUNT_ID` | the same page ◇: the **Messaging account ID** (formerly "WhatsApp Business Account ID") |
+| `WHATSAPP_ACCESS_TOKEN` | the token from step 3 (the temporary one from **Step 1. Try it out** for a first run, the system-user one afterwards) |
+| `WHATSAPP_PHONE_NUMBER_ID` | **Step 1. Try it out** ✔: **Phone Number ID** (copy button) |
+| `WHATSAPP_BUSINESS_ACCOUNT_ID` | the same section ✔: the **Messaging account ID** (formerly "WhatsApp Business Account ID") |
 | `META_APP_ID`, `META_APP_SECRET` | *App settings → Basic* ✔ (the menu item is on the dashboard's left menu; the secret is hidden until you press *Show* and may ask for your password ?) |
 | `WHATSAPP_VERIFY_TOKEN` | any string you choose (`openssl rand -hex 16`); the same value goes into the webhook configuration below |
 | `META_EMBEDDED_SIGNUP_CONFIG_ID` | **not needed to run the script**; only for the Embedded Signup popup. How to make it: the next section |
@@ -70,11 +73,12 @@ The script does not use it. The popup (Settings → WhatsApp → connect in Surv
 
 Steps, from Meta's Embedded Signup guide (the screens were **not seen**; send a screenshot if one differs):
 
-1. In the app's left menu: **Facebook Login for Business** ✔ → **Configurations** (? the sub-item's name) → create a configuration.
+0. **Two switches first** ✔ (*Facebook Login for Business → Settings*; the sub-menu is *Settings · Quickstart · Configurations · Templates*): **Login with the JavaScript SDK** is **off** by default and SurveyFlow's popup needs it **on** (it calls Meta's JavaScript login); and **Allowed Domains for the JavaScript SDK** must list the address of the **website** (not the API) that serves the popup, because Meta says "Login and signed-in functionality of the JavaScript SDK will only be available on these domains". *Enforce HTTPS* is on (✔, "strongly recommended"): use an `https://` address (a tunnel to the website port, `4222`), not `http://localhost`. ? Whether `localhost` is accepted in development was not tested. *Valid OAuth Redirect URIs* is not used by the popup.
+1. In the same sub-menu: **Configurations** ✔ → create a configuration.
 2. Either start from Meta's template named *"WhatsApp Embedded Signup Configuration With 60 Expiration Token"*, or build a custom one: choose the login variation **WhatsApp Embedded Signup**.
 3. Ask only for what is needed: the permissions **`whatsapp_business_management`** and **`whatsapp_business_messaging`**, and the WhatsApp account asset.
 4. **Token type.** SurveyFlow's page asks Meta for a **`code`** (`response_type: 'code'`, with the default response type overridden: `apps/web/src/components/settings/whatsapp-connect.tsx`), the pattern Meta documents for a business-integration system-user token. If the form offers a token type, pick the one that works with a code. Meta's guide, as found by a search, does not say which is the default: check the setting on the screen.
-5. Save. The configuration's **ID** is shown in the list; put it in `.env` as `META_EMBEDDED_SIGNUP_CONFIG_ID` and restart the API. The app also needs `META_APP_ID` (✔ *App settings → Basic*), and the web page must be served from an address Meta allows (*Facebook Login for Business → Settings*, ? the exact name and where the allowed domains go were not seen; it is https only).
+5. Save. The configuration's **ID** is shown in the list; put it in `.env` as `META_EMBEDDED_SIGNUP_CONFIG_ID` and restart the API. The app also needs `META_APP_ID` (✔ *App settings → Basic*), and the web page must be served from a domain you listed in step 0.
 
 ### 5. Make your API reachable, and set the webhook ✔/◇
 
@@ -82,7 +86,7 @@ Steps, from Meta's Embedded Signup guide (the screens were **not seen**; send a 
 2. In the use case's **Customize use case** page: **Step 2. Production setup** → the first section, **Configure Webhooks** ("About 3 minutes to complete") ✔. Enter:
    - **Callback URL**: `https://<that address>/api/webhook/whatsapp`
    - **Verify token**: your `WHATSAPP_VERIFY_TOKEN`, then press **Verify and save** ✔ (Meta sends a GET with the token and a challenge; the API answers it). Leave the toggle *Attach a client certificate to Webhook requests* **off** ✔ (SurveyFlow does not use client certificates). **Remove subscription** ✔ undoes it.
-   - The section below, **Register your WhatsApp phone number** ("About 1 minute") ✔, is for a production number; the test number does not need it.
+   - The sections below it in **Step 2. Production setup** ✔: **Register your WhatsApp phone number** (about 1 minute), **Add payment to send business-initiated messages** (about 1 minute) and **Send message** (about 2 minutes). They are for **your own production number**; the test number from Step 1 does not need them (Meta: test numbers need no payment method for template messages). A real business number is what Embedded Signup later registers for each customer.
 3. Subscribe to the fields (the list of fields to tick was **not seen**: it should appear once the webhook is verified; look under the same page or *Webhooks* in the app's tools) **`messages`**, **`message_template_status_update`** and **`template_category_update`** (the last one is how Meta tells us it moved a template to marketing: without it SurveyFlow only learns that when a template list is read again, WA-03). The script can also subscribe the app to the account (`--subscribe`, below), which does not replace entering the callback URL.
    (The webhook path stays public even when `INTERNAL_API_SECRET` is set: that is by design, it is protected by Meta's signature.)
 
