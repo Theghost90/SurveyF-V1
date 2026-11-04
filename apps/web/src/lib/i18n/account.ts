@@ -67,7 +67,7 @@ export const en = {
   'ob.finish': 'Go to dashboard',
   'ob.later': 'I will do this later',
   'ob.connectedTitle': 'WhatsApp is connected',
-  'ob.connectedText': 'Meta reviews our message templates in the background, usually within minutes and at most a day. You can build and preview surveys right away; sending opens when the invitation template is approved.',
+  'ob.connectedText': 'Meta reviews our message templates in the background. This can take a day or more. You can build and preview surveys right away; sending opens when the invitation template is approved.',
   'ob.pending': 'Connect WhatsApp to finish. Until then you can look around, but creating surveys, adding contacts and sending need your number.',
 
   // settings
@@ -138,7 +138,7 @@ export const en = {
   'w.disconnect': 'Disconnect',
   'w.disconnectConfirm': 'Disconnect this WhatsApp number? Surveys in progress will stop receiving answers.',
   'w.templates': 'Message templates',
-  'w.templatesHelp': 'The first message to a contact must be a template approved by Meta. Approval usually takes minutes to hours.',
+  'w.templatesHelp': 'The first message to a contact must be a template approved by Meta. Approval can take a day or more.',
   'w.lang': 'Language',
   'w.refresh': 'Refresh status',
   'w.webhook': 'Webhook URL',
@@ -212,7 +212,7 @@ export const fr: Record<keyof typeof en, string> = {
   'ob.finish': 'Aller au tableau de bord',
   'ob.later': 'Je le ferai plus tard',
   'ob.connectedTitle': 'WhatsApp est connecté',
-  'ob.connectedText': 'Meta examine nos modèles de messages en arrière-plan, en général en quelques minutes et au plus en une journée. Vous pouvez créer et prévisualiser des sondages tout de suite ; l’envoi s’ouvre quand le modèle d’invitation est approuvé.',
+  'ob.connectedText': 'Meta examine nos modèles de messages en arrière-plan. Cela peut prendre une journée ou plus. Vous pouvez créer et prévisualiser des sondages tout de suite ; l’envoi s’ouvre quand le modèle d’invitation est approuvé.',
   'ob.pending': 'Connectez WhatsApp pour terminer. D’ici là vous pouvez explorer, mais créer des sondages, ajouter des contacts et envoyer demandent votre numéro.',
 
   's.profile': 'Profil',
@@ -281,7 +281,7 @@ export const fr: Record<keyof typeof en, string> = {
   'w.disconnect': 'Déconnecter',
   'w.disconnectConfirm': 'Déconnecter ce numéro WhatsApp ? Les sondages en cours ne recevront plus de réponses.',
   'w.templates': 'Modèles de message',
-  'w.templatesHelp': 'Le premier message à un contact doit être un modèle approuvé par Meta. L’approbation prend en général de quelques minutes à quelques heures.',
+  'w.templatesHelp': 'Le premier message à un contact doit être un modèle approuvé par Meta. L’approbation peut prendre une journée ou plus.',
   'w.lang': 'Langue',
   'w.refresh': 'Actualiser le statut',
   'w.webhook': 'URL du webhook',
