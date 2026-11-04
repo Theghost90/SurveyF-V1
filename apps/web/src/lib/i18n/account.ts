@@ -64,7 +64,6 @@ export const en = {
   'ob.sub': 'Two quick steps, both needed: who you survey for, and your WhatsApp Business number. Everything else can wait.',
   'ob.s0': 'Your segment',
   'ob.s1': 'Connect WhatsApp',
-  'ob.s1Text': 'Surveys are sent from your own WhatsApp Business number. You log in with Facebook, enter your number, confirm the code Meta sends and, if asked, add a payment method for WhatsApp messages (Meta bills you directly). SurveyFlow does the rest.',
   'ob.finish': 'Go to dashboard',
   'ob.later': 'I will do this later',
   'ob.connectedTitle': 'WhatsApp is connected',
@@ -122,6 +121,7 @@ export const en = {
   // whatsapp connection
   'w.title': 'WhatsApp connection',
   'w.intro': 'Connect the WhatsApp Business number your surveys will be sent from. You log in, enter your number and approve a few screens (Meta may also ask for a payment method: it bills WhatsApp messages to you directly). SurveyFlow sets up the rest.',
+  'w.introManual': 'Connect the WhatsApp Business number your surveys will be sent from, using the identifiers from your Meta account (the three values are asked for below). Meta may also ask for a payment method: it bills WhatsApp messages to you directly. SurveyFlow sets up the rest.',
   'w.embedded': 'Connect with Facebook',
   'w.manual': 'Enter credentials manually',
   'w.manualHelp': 'From the API Setup page of the WhatsApp use case of your Meta app (developers.facebook.com). Use a permanent (system user) access token.',
@@ -209,7 +209,6 @@ export const fr: Record<keyof typeof en, string> = {
   'ob.sub': 'Deux étapes rapides, toutes deux nécessaires : pour qui vous réalisez des sondages, et votre numéro WhatsApp Business. Le reste peut attendre.',
   'ob.s0': 'Votre segment',
   'ob.s1': 'Connecter WhatsApp',
-  'ob.s1Text': 'Les sondages partent de votre propre numéro WhatsApp Business. Vous vous connectez avec Facebook, saisissez votre numéro et confirmez le code envoyé par Meta et, si on vous le demande, ajoutez un moyen de paiement pour les messages WhatsApp (Meta vous facture directement). SurveyFlow s’occupe du reste.',
   'ob.finish': 'Aller au tableau de bord',
   'ob.later': 'Je le ferai plus tard',
   'ob.connectedTitle': 'WhatsApp est connecté',
@@ -265,6 +264,7 @@ export const fr: Record<keyof typeof en, string> = {
 
   'w.title': 'Connexion WhatsApp',
   'w.intro': 'Connectez le numéro WhatsApp Business depuis lequel vos sondages seront envoyés. Vous vous connectez, saisissez votre numéro et validez quelques écrans (Meta peut aussi demander un moyen de paiement : il vous facture directement les messages WhatsApp). SurveyFlow configure le reste.',
+  'w.introManual': 'Connectez le numéro WhatsApp Business depuis lequel vos sondages seront envoyés, avec les identifiants de votre compte Meta (les trois valeurs sont demandées plus bas). Meta peut aussi demander un moyen de paiement : il vous facture directement les messages WhatsApp. SurveyFlow configure le reste.',
   'w.embedded': 'Se connecter avec Facebook',
   'w.manual': 'Saisir les identifiants à la main',
   'w.manualHelp': 'Depuis la page API Setup du cas d’usage WhatsApp de votre application Meta (developers.facebook.com). Utilisez un jeton d’accès permanent (utilisateur système).',

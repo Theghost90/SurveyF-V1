@@ -96,8 +96,7 @@ function Wizard() {
         )}
         {step === 2 && (
           <>
-            <h2 className="mb-1 text-2xl font-bold">{t('ob.s1')}</h2>
-            <p className="mb-5 text-muted-foreground">{t('ob.s1Text')}</p>
+            <h2 className="mb-5 text-2xl font-bold">{t('ob.s1')}</h2>
             <WhatsAppConnect compact onConnected={() => void mutate()} />
             {connected && (
               <p role="status" data-testid="ob-connected" className="mt-5 flex items-start gap-3 rounded-xl bg-mint/50 p-4 text-sm">

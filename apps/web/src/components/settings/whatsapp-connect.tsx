@@ -117,7 +117,7 @@ export function WhatsAppConnect({ compact = false, onConnected }: { compact?: bo
   if (!acct) {
     return (
       <div className="flex flex-col gap-4">
-        <p className="text-body">{t('w.intro')}</p>
+        <p className="text-body">{t(cfg.embeddedSignup ? 'w.intro' : 'w.introManual')}</p>
         <div className="flex flex-wrap gap-3">
           {cfg.embeddedSignup && <EmbeddedSignup cfg={{ ...cfg.embeddedSignup, graphVersion: cfg.graphVersion }} onDone={done} />}
           <Button size="lg" variant="outline" className="h-12" onClick={() => setManualOpen(true)}><PlugZap className="h-5 w-5" aria-hidden />{t('w.manual')}</Button>
