@@ -1,5 +1,5 @@
 import type { Contact, Prisma, SurveyRecipient, WhatsAppAccount } from '@prisma/client';
-import { START_WORDS, STOP_WORDS, fromWaId, parseJoinMessage, parseAnswerId, parseTemplatePayload, sys, type OutboundMessage, type SurveyLang } from '@surveyflow/shared';
+import { START_WORDS, STOP_WORDS, canonicalWaId, fromWaId, parseJoinMessage, parseAnswerId, parseTemplatePayload, sys, type OutboundMessage, type SurveyLang } from '@surveyflow/shared';
 import { phoneIndex, prisma } from '../../lib/prisma';
 import { redis, withLock } from '../../lib/redis';
 import { autoSyncCompleted } from '../exports/sheets';
@@ -58,8 +58,10 @@ export async function processWebhookPayload(body: unknown, log: Logger): Promise
       for (const st of (value.statuses ?? []) as Array<{ id: string; status: string; errors?: Array<{ title?: string; message?: string }> }>) {
         await applyDeliveryStatus(st.id, st.status, st.errors?.[0]?.title ?? st.errors?.[0]?.message);
       }
-      const names = new Map<string, string>(((value.contacts ?? []) as Array<{ wa_id?: string; profile?: { name?: string } }>).filter((c) => c.wa_id && c.profile?.name).map((c) => [c.wa_id!, c.profile!.name!]));
-      for (const msg of (value.messages ?? []) as WaInboundMessage[]) {
+      // Meta may spell a sender's number differently from the one imported (canonicalWaId): fix it once, here, before any lookup, session key or lock uses it.
+      const names = new Map<string, string>(((value.contacts ?? []) as Array<{ wa_id?: string; profile?: { name?: string } }>).filter((c) => c.wa_id && c.profile?.name).map((c) => [canonicalWaId(c.wa_id!), c.profile!.name!]));
+      for (const raw of (value.messages ?? []) as WaInboundMessage[]) {
+        const msg = raw.from ? { ...raw, from: canonicalWaId(raw.from) } : raw;
         await handleMessage(phoneNumberId, msg, log, names.get(msg.from));
       }
     }

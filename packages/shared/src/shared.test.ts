@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PLANS, buildQuestionMessage, buildThankYouMessage, costPerAnswer, formatFCFA, fromWaId, maskPhone, normalizePhone,
+  PLANS, buildQuestionMessage, canonicalWaId, buildThankYouMessage, costPerAnswer, formatFCFA, fromWaId, maskPhone, normalizePhone,
   parseAnswerId, parseTemplatePayload, planPriceIn, identityQuote, questionInputSchema, recommendPlan, responseOverageFCFA, templatePayload, toWaId, answerId,
   publishProblems, normalizeQuestion,
 } from './index';
@@ -19,6 +19,15 @@ describe('phone', () => {
   it('round-trips the WhatsApp id form', () => {
     expect(toWaId('+237677123456')).toBe('237677123456');
     expect(fromWaId('237677123456')).toBe('+237677123456');
+  });
+  it('canonicalWaId puts the 6 back on an old-format Cameroon number and leaves everything else alone', () => {
+    expect(canonicalWaId('23776277298')).toBe('237676277298'); // seen from a real phone: Meta's spelling of +237 676 277 298
+    expect(canonicalWaId('23777100000')).toBe('237677100000');
+    expect(canonicalWaId('237676277298')).toBe('237676277298'); // already the current form
+    expect(canonicalWaId('+237 676 277 298')).toBe('237676277298'); // digits only, no plus
+    expect(canonicalWaId('14155550100')).toBe('14155550100'); // another country: untouched
+    expect(canonicalWaId('23712345')).toBe('23712345'); // too short to be either form: untouched
+    expect(canonicalWaId('')).toBe('');
   });
   it('masks like the dashboard mockups', () => {
     expect(maskPhone('+237677123456')).toBe('+237 6XX XXX 456');

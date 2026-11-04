@@ -617,3 +617,8 @@ automated overage billing · proration on plan changes (an upgrade starts a new 
 the funnel uses accessible CSS bars rather than a Recharts `FunnelChart` (per-question charts use Recharts).
 Security (§3.7, `docs/SECURITY.md` §12): **the host's disk encryption** (DAT-02's host half) · **participants' own requests to the owner** (no channel yet) · Postgres row-level security · a staff console, roles and staff two-factor (ADM-01 to ADM-06) · masking of names and encryption of survey answers ·
 payout limits per account and per phone (PAY-13, counted in the backlog, not built) · a breach-notification procedure. The full list, with sizes, priorities and risks: [`BACKLOG.md`](BACKLOG.md).
+
+### Inbound numbers are corrected once, at the webhook entry (2026-11-04)
+
+Meta's spelling of a sender's number can differ from the one imported (Cameroon: 11 digits from Meta, 12 imported). The correction (`canonicalWaId`) is applied in `processWebhookPayload` to `messages[].from` and `contacts[].wa_id`, nowhere else, so contact lookup, chat sessions, the per-sender lock, JOIN links and the Analytics Bot's owner-phone match all see the same number. It is conservative (see `docs/META_CHECK.md`): a wrong guess would attach a message to the wrong person, so it acts only when the number is invalid as received and valid once corrected. Outbound sends are untouched.
+

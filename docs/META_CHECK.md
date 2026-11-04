@@ -147,3 +147,10 @@ production message builders respect the limits Meta documents (3 reply buttons, 
 ## First send run (4 November) — what a real phone showed
 
 `meta-check --to <number>` sent five checks to the owner's phone; four were accepted by Meta and **all four arrived** (WhatsApp Web screenshot, 01:33): the plain text; three reply buttons (*Good / Average / Bad*); a list with a **See options** button; a message with one link button (**Download receipt**). The fifth, the invitation template, was skipped because it was still *PENDING*, and the script said so in one clear line. Not yet looked at: the list's options once opened, what happens when a button is tapped (on the test number a tap reaches the Analytics Bot, see above), and the invitation template itself.
+
+## The same person, two spellings of one number (found 4 November, fixed)
+
+The owner dialled **237 676 277 298** (12 digits) and Meta's webhook reported the sender as **23776277298** (11 digits) in both `from` and `wa_id`: the old 8-digit Cameroon spelling, without the 6 added to mobile numbers. Sending works with the 12-digit form; inbound arrives in the 11-digit form. Before the fix an inbound message from such a number matched no imported contact and no linked owner phone, so it was dropped silently.
+
+`canonicalWaId` (`packages/shared/src/phone.ts`) now corrects it once, at the webhook entry, before any lookup, session or lock uses the number. It is narrow on purpose: it changes only an 11-digit `237` number that the phone library says is invalid and that becomes valid with a 6 after `237`. **Checked against one real number.** That other operators' old-format numbers behave the same is an assumption from the numbering plan, not something seen. If a participant ever reports "I answered and nothing happened", compare the number in Meta's webhook log with the imported one first.
+

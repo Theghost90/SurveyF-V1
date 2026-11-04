@@ -64,6 +64,24 @@ describe('Meta v26.0 real message shape', () => {
     expect((await chatOf(0)).at(-1).message.body).toContain('Question 1 of 3');
   });
 
+  it('matches a participant whom Meta reports under the old 8-digit Cameroon spelling (seen 2026-11-04: imported +237 676 277 298, inbound from 23776277298)', async () => {
+    const w = await buildWorld(app);
+    const legacy = waIdOf(0).replace(/^2376/, '237'); // 237677100000 -> 23777100000, the same person in Meta's old spelling
+    expect(legacy).toHaveLength(11);
+    const btn = templateBtn(legacy, `START:${w.surveyId}`);
+    const res = await postWebhook(app, realPayload(w.phoneNumberId, legacy, { id: btn.id, type: btn.type, button: btn.button }));
+    expect(res.statusCode).toBe(200);
+    expect((await prisma.surveyRecipient.findFirst({ where: { contactId: w.contactIds[0] } }))!.status).toBe('started');
+    expect((await chatOf(0)).at(-1).message.body).toContain('Question 1 of 3'); // the reply went to the imported number: chatOf reads that number's thread
+  });
+
+  it('still ignores a stranger spelled the same way (an 11-digit 237 number that is nobody\'s contact)', async () => {
+    const w = await buildWorld(app);
+    const res = await postWebhook(app, realPayload(w.phoneNumberId, '23799999999', { id: 'wamid.STR', type: 'text', text: { body: 'start' } }));
+    expect(res.statusCode).toBe(200);
+    expect(await prisma.surveyRecipient.count({ where: { status: 'started' } })).toBe(0);
+  });
+
   it('ignores fields it does not handle that Meta has switched on (calls, security, account_update, an unknown future one) and still answers 200', async () => {
     const w = await buildWorld(app);
     const others = ['calls', 'security', 'account_update', 'account_alerts', 'phone_number_quality_update', 'message_template_quality_update', 'some_field_from_the_future']
