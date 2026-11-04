@@ -297,7 +297,7 @@ setting, not code)** and one real confirmation e-mail received · Turnstile keys
 ## 16. What was verified, and what could not be
 
 **Verified in this environment** (real Postgres, Redis, headless Chromium):
-- **822 automated tests** (108 shared in 10 files, 618 API in 38 files, 39 website in 7 files, 57 script tests) and the backlog check, run together by `npm test`: sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed) and the password they ask for, purge, squatter replacement, aliases, password policy and hash upgrade,
+- **830 automated tests** (110 shared in 10 files, 624 API in 39 files, 39 website in 7 files, 57 script tests; last run 2026-11-04) and the backlog check, run together by `npm test`: sign-up and enumeration answers, constant response time, confirmation links (once, expired, foreign, hashed) and the password they ask for, purge, squatter replacement, aliases, password policy and hash upgrade,
   the three login counters and the CAPTCHA paths, sessions and refresh rotation (race, grace, reuse, revoke, expiry), JWT rotation, password reset/change, Google sign-in (stubbed JWKS: wrong audience/issuer/signature, unverified e-mail, linking, squatter), TOTP (RFC vectors, replay, recovery codes, disable),
   step-up (methods, window per session, limits), masking, reveal, export and bulk-delete controls, caps, the read caps, the Sheets re-confirmation, e-mails and audit rows, the rate limits per session and per address, key ring, rotation script (child process), blind index, parked payloads, production boot refusals, log hygiene,
   the append-only trigger, **every API route** against a second owner, the website proxy's rules, token renewal and cookie handling (14 tests), the post-sign-in redirect rule, the audit gate and the backlog checker.
@@ -467,3 +467,14 @@ Not covered: a run against the real Meta; a determined attacker with many number
 ## 25. The jobs process and its watchdog (OPS-05)
 
 The jobs can run in a process of their own. A job that is late is noticed by a watchdog **in the API process**, which does not depend on the jobs being up, and the operator is e-mailed once a day for the same late jobs (`OPERATOR_EMAIL`; without it the state is only logged). `/healthz` reports `jobs: ok | late | starting` and never answers 503 because of it. Not covered: a job that runs and decides wrongly; two real workers on a real host.
+
+## 26. Who sent an inbound WhatsApp message (found by the real-Meta run, 4 November 2026)
+
+The webhook already refuses unsigned or wrongly signed requests (`apps/api/src/routes/webhook-whatsapp.ts`). This section is about **which person** a signed message is from. Meta reported one owner's number in the old Cameroon spelling (11 digits) while the number imported and dialled had 12. Left alone, such a sender matched no imported contact and no linked owner phone and was ignored without any error; with the join link it would have created a contact under a number nobody dials.
+
+**Measure.** `canonicalWaId` (`packages/shared/src/phone.ts`) corrects the sender's number once, at the webhook entry, before any lookup, chat session, per-sender lock, JOIN or Analytics Bot match uses it. It is narrow on purpose, because a wrong guess would attach a message to the wrong person: it acts only on an 11-digit `237` number that the phone library says is invalid and that becomes valid with a 6 after `237`. Everything else is returned unchanged. Outbound sends are untouched.
+
+**Test.** `webhook-meta-shape.test.ts` replays the real message (every field Meta sent, including the ones the handler ignores): a legacy-spelled participant now starts the survey, a stranger with a similar number is still ignored, other subscribed fields and an unknown message type answer 200. The test fails when the correction is removed (checked by hand).
+
+**Not covered.** Checked on one real number only; that other old-format numbers behave the same is an assumption from the numbering plan. Meta's new `user_id` in the same payload is ignored; the handler still needs `from`, and would stop matching people if Meta ever dropped it.
+

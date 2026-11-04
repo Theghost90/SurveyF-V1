@@ -92,6 +92,8 @@ scripts/            share-demo.mjs (npm run share), e2e-*.mjs browser tests (ui,
                     backlog-check.mjs (npm run backlog:check), tests/ (their unit tests), ui-tour.mjs and shoot.mjs (screenshots)
 surveyflow_design.md   design specification: tokens, layout and navigation, components, responsive rules
 docs/DECISIONS.md   spec/design deviations, open questions, verification status
+docs/META_CHECK.md   the run against a real Meta test app: the steps in Meta's new interface, what each screen showed, what was and was not covered (WA-01)
+docs/META_PRICING.md what Meta charges per message from 1 October 2026, the rates for the markets listed, and what it means for a survey and for each plan
 docs/BACKLOG.md     the living backlog: every item, built or not, with MoSCoW class, size, risks, evidence and the decisions behind it (checked by `npm run backlog:check`)
 docs/SECURITY.md    sign-in and data protection: what is built, operations (keys, rotation, incidents), what is not covered, the verification log (§19)
 docs/audit-allowlist.json   dated exceptions to the `npm audit` gate (empty)

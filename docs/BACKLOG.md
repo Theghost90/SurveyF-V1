@@ -21,6 +21,7 @@ Newest first.
 <!-- backlog:table changelog -->
 | Date | Level | Change |
 | --- | --- | --- |
+| 2026-11-04 | major | Three new rows, all not built, on your word (D-13): WA-08 (warn owners about Meta's payment-method rule; accounts Meta marks exempt are not warned), WA-09 (detect and explain a stop in delivery), WA-10 (an estimate of what Meta billed, from its own status messages). They follow from Meta's pricing of 1 October 2026 (`docs/META_PRICING.md`), under which the first 1,000 service messages a month per number are free and delivery stops after that without a payment method. Classes Should, Should, Could are my proposal. |
 | 2026-11-04 | minor | New `docs/META_PRICING.md`, from Meta's pricing page and rate PDF (effective 1 October 2026) that you supplied: the rules, the rates for the markets SurveyFlow lists (Rest of Africa, which includes Cameroon, Nigeria, South Africa), worked costs per survey and per plan, and what is not known. Wrong statements corrected in code comments and `DECISIONS.md` (free-form messages are no longer free beyond 1,000 a month per number, and stop being delivered without a payment method once that is used). No behaviour changed. The product changes it suggests (a warning about the payment method, detecting a stop in delivery, reading Meta's billing data from the status webhooks) are proposals, not rows. |
 | 2026-11-04 | critical | WA-01 (Must) is closed on your word (D-12): it moves from "Your action" to "Built, check open", with what the test app run did not cover written in its Open check column and pointing at WA-02 and at a test with a participant who is not the owner. The Open check texts of WA-03 and WA-05 now say what the real Meta run showed. |
 | 2026-11-04 | minor | WA-01 ran to the end on the Meta test app, from your Windows machine: all 16 templates APPROVED (the English gift notice approved as UTILITY while we declare MARKETING, which is the cheaper direction and is watched by the category webhook); the five send kinds arrived on your phone (text, three reply buttons, list, link button, and the invitation template with Start survey / Not now); a full survey round trip completed. Not covered, and not hidden: a participant who is not the account owner, delivery to the callback for numbers with no role on the app while the app is unpublished, other WhatsApp clients, gifts, Embedded Signup and Tech Provider status (WA-02), and the second app subscribed to the account, which you chose to skip. The row stays "Your action" until you say to close it: closing a Must row needs a decision of yours on record (D-nn). |
@@ -48,23 +49,23 @@ Newest first.
 ## At a glance
 
 <!-- backlog:summary:start -->
-**77 rows: 37 built, 40 not built.** Of the built ones, 17 still have a check open against a real service or device.
+**80 rows: 37 built, 43 not built.** Of the built ones, 17 still have a check open against a real service or device.
 
 | | ✅ Built | ⬜ Not built | Total |
 |---|---|---|---|
 | Must | 16 | 18 | 34 |
-| Should | 12 | 7 | 19 |
-| Could | 9 | 7 | 16 |
+| Should | 12 | 9 | 21 |
+| Could | 9 | 8 | 17 |
 | Won't this release | 0 | 8 | 8 |
-| **All** | **37** | **40** | **77** |
+| **All** | **37** | **43** | **80** |
 
 Each ID in the grid carries its state: ✅ built · ⚠️ built, a check is open · ⬜ not built · 🧑 your action, no code · ⏸ deferred by you · 🔭 next version.
 
 | | Smaller | Small | Big | Bigger |
 |---|---|---|---|---|
 | **MUST** (34) | ⚠️ SEC-07, ⚠️ DAT-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01, 🧑 BIZ-02 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⚠️ WA-01, ⚠️ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⚠️ WA-03, ⚠️ PAY-02, ⚠️ PAY-07, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, 🧑 LEG-03, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
-| **SHOULD** (19) | ✅ SEC-10, ⚠️ SEC-11, ✅ SEC-14, ⬜ PAY-06 | ⚠️ SEC-13, ✅ WA-06, ⚠️ BIZ-03, 🧑 LEG-05, 🧑 OPS-04 | ✅ SEC-06b, ✅ SEC-09, ✅ SEC-12, ✅ SEC-17, ⚠️ WA-05, ⚠️ PAY-09, ⬜ ADM-03, ⬜ ADM-04, ⬜ LEG-02b, ⬜ PAY-08b | none |
-| **COULD** (16) | ✅ FUT-05, ✅ SEC-18, ✅ DSN-02 | ✅ SEC-19, ✅ SEC-20 | ⚠️ PAY-12, ⚠️ OPS-05, ⬜ WA-07, ⬜ DSN-01, ⬜ ADM-06 | ⚠️ BIZ-04, ✅ SEC-15, ⬜ BIZ-05, ⬜ BIZ-06, ⬜ ADM-05, ⬜ PAY-11 |
+| **SHOULD** (21) | ✅ SEC-10, ⚠️ SEC-11, ✅ SEC-14, ⬜ PAY-06, ⬜ WA-08 | ⚠️ SEC-13, ✅ WA-06, ⚠️ BIZ-03, 🧑 LEG-05, 🧑 OPS-04 | ✅ SEC-06b, ✅ SEC-09, ✅ SEC-12, ✅ SEC-17, ⚠️ WA-05, ⚠️ PAY-09, ⬜ ADM-03, ⬜ ADM-04, ⬜ WA-09, ⬜ LEG-02b, ⬜ PAY-08b | none |
+| **COULD** (17) | ✅ FUT-05, ✅ SEC-18, ✅ DSN-02 | ✅ SEC-19, ✅ SEC-20 | ⚠️ PAY-12, ⚠️ OPS-05, ⬜ WA-07, ⬜ WA-10, ⬜ DSN-01, ⬜ ADM-06 | ⚠️ BIZ-04, ✅ SEC-15, ⬜ BIZ-05, ⬜ BIZ-06, ⬜ ADM-05, ⬜ PAY-11 |
 | **WON'T THIS RELEASE** (8) | none | ⏸ DEF-01, ⏸ DEF-02 | 🔭 FUT-03 | ⏸ DEF-03, ⏸ DEF-04, 🔭 FUT-01, 🔭 FUT-02, 🔭 FUT-04 |
 <!-- backlog:summary:end -->
 
@@ -126,6 +127,9 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 | ADM-03 | Platform analytics, aggregates only; needs ADM-01 (D-08) | Should | Big | ⬜ Not built | Code | none |
 | ADM-04 | Maintenance and health console; needs ADM-01 (D-08) | Should | Big | ⬜ Not built | Code | none |
 | WA-07 | Daily summary e-mail and a "50% completed" alert (SEC-01 now exists) | Could | Big | ⬜ Not built | Code | none |
+| WA-08 | Know before it happens: warn owners about Meta's payment-method rule (service messages stop being delivered once the free 1,000 a month per number are used and the account has no payment method) at connection and as the month's count nears 800; do not warn an account Meta marks as exempt (`service_pricing_policy`, governments and non-profits). Proposed after Meta's 1 October 2026 pricing, see `docs/META_PRICING.md` (D-13) | Should | Smaller | ⬜ Not built | Code | none |
+| WA-09 | Know when it happens: detect that Meta is not delivering an owner's messages (repeated failures with the same cause, such as a missing payment method, an expired token or a sending limit), show a banner and e-mail the owner the likely cause and the fix, and stop queueing invitations that would only fail. Needs WA-08's counter; the exact errors Meta returns are not known and must be seen on a real account (D-13) | Should | Big | ⬜ Not built | Code, Meta | 📄 Meta |
+| WA-10 | Know what it cost: read the category and billable flag Meta puts in each delivery-status message and show the owner an estimate per survey (using the published rates in `docs/META_PRICING.md`), and whether Meta billed a category other than the one declared. An estimate, never the invoice (D-13) | Could | Big | ⬜ Not built | Code, Meta | 📄 Meta |
 | BIZ-05 | API access | Could | Bigger | ⬜ Not built | Code | ⚖ |
 | BIZ-06 | White-label | Could | Bigger | ⬜ Not built | Code | ⚖ |
 | DSN-01 | Dark theme and Storybook (the token export was split out as DSN-02 and is built; a dark theme means turning 81 hard-coded whites and hundreds of fixed colours into tokens and looking at every screen, and Storybook adds about 600 packages to the audit gate: neither was done half-way) | Could | Big | ⬜ Not built | Code | none |
@@ -245,6 +249,9 @@ For every row: what it fixes, the risks it brings (with a label), and how they a
 | PAY-11 | Manual refunds, no statement matching | PAY: automatic refunds can loop | Limits and an approval step |
 | WA-01, WA-02, WA-04 | Unverified Meta, no approval, unsubmitted templates | COST: Meta billing. OPS: rejections. SEC: tokens in tests | A test app first, an alert on rejection, tokens only in the environment |
 | WA-07 | No owner alerts by e-mail or WhatsApp | COST: billed to SurveyFlow. ABUSE: spam | Reuse the bot's caps and mute |
+| WA-08 | Messages stop silently once the free service messages are used and there is no payment method | COST: owners surprised by Meta's bill. UX: a false alarm when our count and Meta's differ. LEGAL: implying that Meta exempts an account | The warning says what to check and does not claim certainty; our count is labelled approximate; the exemption is read from Meta's own field and never promised on the pricing page |
+| WA-09 | Failed messages leave the owner and the participants with silence | UX: a wrong cause named. OPS: alert fatigue. SEC: error text from Meta shown to the owner | The cause is stated only for errors that were seen on a real account, anything else is a plain "not delivering"; one banner and one e-mail per cause per day; Meta's raw text is never shown, only our own wording |
+| WA-10 | The owner cannot explain Meta's bill | COST: an estimate taken for the invoice. DATA: a row per message. UX: false precision | The screen says estimate and names the rates and the date; rows hold a category, a flag and a time, never a number or a name; Meta's invoice stays the truth |
 | BIZ-01, BIZ-02, OPS-03 | Unpublished support, false "soon" claims, open pricing | LEGAL/UX: promising what does not exist | Publish only what you can honour |
 | BIZ-05 | No integrations | SEC: leaked keys and contact scraping | Scoped hashed keys, rate limits, an IP allowlist |
 | BIZ-06 | No branding | SEC: custom-domain takeover. LEGAL: Meta display-name rules | DNS verification, manual review |
@@ -288,6 +295,7 @@ Your decisions that rows cite. A row that is deferred, or that changed its MoSCo
 | D-10 | 2026-10-31 | DAT-01, DAT-02, PAY-02, WA-03, PAY-13, PAY-07, BIZ-04 and FUT-05 are to be built, each with the containment written in section D. This lifts D-05 for DAT-01 and DAT-02 and the hold of D-07 on PAY-13. | "Build DAT-01, DAT-02, PAY-02, WA-03, PAY-13, PAY-07, BIZ-04 and FUT-05. Make sure you consider the containment while building each" |
 | D-11 | 2026-11-02 | WA-06, BIZ-03, DSN-01, LEG-01, LEG-02, PAY-09, WA-05, PAY-12 and OPS-05 are to be built, with the containment in section D. Where an item cannot be completed by code (LEG-01, LEG-02 are counsel's; DSN-01's dark theme and Storybook were not done), the row says so. WA-05 waits for "your four answers", which were not in the conversation: the defaults used are (1) anyone with the link may join, the number being proven by WhatsApp itself; (2) the link ends after 30 days unless the owner sets another end, and has no maximum unless set; (3) people who join get no gift unless the owner switches it on; (4) no country limit unless the owner lists countries. | "Build the following: WA-06, BIZ-03, DSN-01, LEG-01, LEG-02, PAY-09, WA-05, PAY-12, OPS-05 and update everything and/or all the docs" |
 | D-12 | 2026-11-04 | WA-01 is closed: the check ran against the Meta test app and its result is recorded in `docs/META_CHECK.md`. It moves from "Your action" to "Built, check open" because what it did not cover is named in its Open check column and belongs to WA-02 (Embedded Signup, Tech Provider status) and to a test with a participant who is not the owner. | "Yes, close WA-01." |
+| D-13 | 2026-11-04 | WA-08, WA-09 and WA-10 are added as proposals, not built, after Meta's pricing of 1 October 2026 (`docs/META_PRICING.md`): WA-08 warns owners about the payment-method rule and does not warn accounts Meta marks exempt (the exemption check is folded into it, not a row of its own); WA-09 detects and explains a stop in delivery; WA-10 reads Meta's billing data from the status messages. Order: WA-08 and WA-09 first, WA-10 after. The classes (Should, Should, Could) are mine and yours to change. | "Yes add them." |
 
 ## F. Open questions for you
 
