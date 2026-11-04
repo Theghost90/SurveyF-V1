@@ -263,12 +263,13 @@ describe('deadline dates', () => {
 });
 
 describe('template categories', () => {
-  it('every reminder-type message is declared MARKETING (owner decision); invitations and gift notices stay UTILITY', async () => {
+  it('every reminder-type message and the gift notice are declared MARKETING (owner decisions; Meta re-categorised the gift notice itself); the UTILITY invitation stays UTILITY', async () => {
     const { TEMPLATE_DEFS, TEMPLATE_NAMES } = await import('./wa-messages');
     const reminderish = [TEMPLATE_NAMES.reminder, TEMPLATE_NAMES.nudge, TEMPLATE_NAMES.deadlineNote, TEMPLATE_NAMES.progressSaved, TEMPLATE_NAMES.progressSavedDeadline] as string[];
     const cats = (names: string[]) => TEMPLATE_DEFS.filter((d) => names.includes(d.name)).map((d) => d.category);
     expect(cats(reminderish)).toHaveLength(reminderish.length * 2); // en + fr
     expect(new Set(cats(reminderish))).toEqual(new Set(['MARKETING']));
-    expect(new Set(cats([TEMPLATE_NAMES.invitation, TEMPLATE_NAMES.giftNotice]))).toEqual(new Set(['UTILITY']));
+    expect(new Set(cats([TEMPLATE_NAMES.giftNotice]))).toEqual(new Set(['MARKETING']));
+    expect(new Set(cats([TEMPLATE_NAMES.invitation]))).toEqual(new Set(['UTILITY']));
   });
 });

@@ -238,12 +238,12 @@ export const TEMPLATE_DEFS: TemplateDef[] = [
     examples: ['Aïcha', 'Boulangerie Akwa'], buttons: ['Continuer'],
   },
   {
-    name: TEMPLATE_NAMES.giftNotice, language: 'en', category: 'UTILITY',
+    name: TEMPLATE_NAMES.giftNotice, language: 'en', category: 'MARKETING',
     body: 'Thank you {{1}}! Your gift for completing the survey ({{2}}) has been sent to this number.',
     examples: ['Aïcha', '500 FCFA airtime'], buttons: [], urlButtons: ['Download receipt'],
   },
   {
-    name: TEMPLATE_NAMES.giftNotice, language: 'fr', category: 'UTILITY',
+    name: TEMPLATE_NAMES.giftNotice, language: 'fr', category: 'MARKETING',
     body: 'Merci {{1}} ! Votre cadeau pour avoir répondu au sondage ({{2}}) a été envoyé sur ce numéro.',
     examples: ['Aïcha', '500 FCFA de crédit'], buttons: [], urlButtons: ['Télécharger le reçu'],
   },

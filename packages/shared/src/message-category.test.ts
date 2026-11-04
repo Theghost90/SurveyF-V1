@@ -74,9 +74,9 @@ describe('what Meta has done to the utility template (re-categorisation)', () =>
 
 describe('the wording of our own templates', () => {
   it('no UTILITY template that asks the person to do something contains promotional wording, in either language', () => {
-    // The gift notice is exempt, on purpose: it confirms that something already happened ("your gift has been sent"), which is what a utility message is for, and it
-    // cannot avoid the word. Meta may still decide otherwise about it (the open question of DECISIONS.md section 3, item 3).
-    for (const d of TEMPLATE_DEFS.filter((t) => t.category === 'UTILITY' && t.name !== TEMPLATE_NAMES.giftNotice)) {
+    // The gift notice used to be exempt (it confirms that something already happened) but Meta re-categorised it to MARKETING on 2026-11-03 ("includes marketing
+    // content"), and the owner decided to declare it MARKETING: it is no longer a UTILITY template, so this check no longer needs an exception for it.
+    for (const d of TEMPLATE_DEFS.filter((t) => t.category === 'UTILITY')) {
       expect(findPromoTerms(d.body), `${d.name}/${d.language}: ${d.body}`).toEqual([]);
       for (const b of [...d.buttons, ...(d.urlButtons ?? [])]) expect(findPromoTerms(b), `${d.name} button ${b}`).toEqual([]);
     }
