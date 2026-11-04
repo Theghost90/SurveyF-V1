@@ -95,7 +95,7 @@ export async function handleOwnerMessage(msg: WaInboundMessage, log: { info: (o:
     return;
   }
   const { user } = link;
-  await prisma.ownerPhone.update({ where: { id: link.id }, data: { lastInboundAt: new Date() } }); // opens the 24 h window in which alerts are free
+  await prisma.ownerPhone.update({ where: { id: link.id }, data: { lastInboundAt: new Date() } }); // opens the 24 h window in which alerts go as service messages (no template needed; charged after the first 1,000 a month on the platform number, docs/META_PRICING.md)
   const locale: BotLocale = user.locale === 'en' ? 'en' : 'fr';
 
   if (parsed?.command === 'unlink') {

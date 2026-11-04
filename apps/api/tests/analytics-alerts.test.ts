@@ -90,7 +90,7 @@ describe('RESULTS: one line per question, with the split', () => {
 });
 
 describe('push alerts', () => {
-  it('a real completion that reaches 100 sends the milestone, once, as a free reply inside the 24 h window', async () => {
+  it('a real completion that reaches 100 sends the milestone, once, as a plain reply inside the 24 h window', async () => {
     const w = await worldWithOwnerLinked('growth', 3);
     await addCompleted(w, 99);
     await setInbound(w.owner.userId, new Date()); // the owner wrote a minute ago

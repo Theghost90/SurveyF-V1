@@ -70,7 +70,7 @@ Each of these is covered by an automated test (see `apps/api/tests`).
     margin is only possible as a Solution Partner/BSP. Overage billing of messages is **not automated** (usage is counted and shown).
 13. **Cross-references**: the spec points to "Section 13" for payments; it is Section 9.
 14. **Thank-you and gift messages as templates** (§3.2) are unnecessary inside the 24 h window the participant just opened
-    (free-form is free and simpler). Templates are used only for the invitation, the reminder, and out-of-window gift notices.
+    (free-form needs no approval and is simpler; since 1 October 2026 it is a charged service message after the first 1,000 a month per number, see `docs/META_PRICING.md`). Templates are used only for the invitation, the reminder, and out-of-window gift notices.
     Templates are also **per-WABA** (the "library of pre-approved templates" can't be shared), so each connected account
     submits its own copies and tracks approval.
 

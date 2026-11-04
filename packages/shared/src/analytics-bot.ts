@@ -362,7 +362,7 @@ export function botResultsMessages(d: BotStatsData, locale: BotLocale, asOf: str
 export const ALERT_MILESTONES = [100, 500, 1000, 5000, 10000] as const;
 export type AlertKind = 'milestone' | 'slowdown';
 
-/** The text of an alert, as a message inside an open 24 h window (free) … */
+/** The text of an alert, as a message inside an open 24 h window (a service message: no template needed, but charged after the first 1,000 a month, docs/META_PRICING.md) … */
 export function botAlertMessage(kind: AlertKind, p: { title: string; n?: number; rate?: number; hours?: number }, locale: BotLocale): OutboundMessage {
   const s = S[locale];
   const body = kind === 'milestone' ? s.alertMilestone(p.n ?? 0, p.title, fmtRate(p.rate ?? 0, locale)) : s.alertSlow(p.hours ?? 48, p.title);

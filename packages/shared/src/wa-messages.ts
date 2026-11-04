@@ -10,7 +10,7 @@ export type OutboundMessage =
   | { kind: 'text'; body: string }
   | { kind: 'buttons'; body: string; buttons: Array<{ id: string; title: string }> }
   | { kind: 'list'; body: string; buttonLabel: string; rows: Array<{ id: string; title: string; description?: string }> }
-  /** A message with ONE button that opens a link (WhatsApp "interactive cta_url"): free inside the 24 h window, unlike a template. */
+  /** A message with ONE button that opens a link (WhatsApp "interactive cta_url"): sendable inside the 24 h window without a template (a service message, charged after the first 1,000 a month per number: docs/META_PRICING.md). */
   | { kind: 'link'; body: string; buttonLabel: string; url: string };
 
 export interface QuestionLike {

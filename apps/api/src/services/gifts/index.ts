@@ -201,7 +201,7 @@ export async function notifyGiftSent(gift: { id: string; surveyId: string; conta
     const lang = (gift.survey.language === 'en' ? 'en' : 'fr') as SurveyLang;
     const value = gift.giftValue ?? '';
     if (gift.survey.giftDeliveryMode === 'immediate' && gift.survey.account && !gift.notifyViaTemplate) {
-      // Inside the 24h window the participant just opened by answering: plain text is free.
+      // Inside the 24h window the participant just opened by answering: plain text is a service message (no template needed; free only within the first 1,000 a month per number, see docs/META_PRICING.md).
       // Same look as the template path below: a short message and a "Download receipt" button, not a raw URL in the text.
       await getGateway().sendMessage(credsFor(gift.survey.account), toWaId(gift.contact.phone), { kind: 'link', body: sys(lang).giftSent(value), buttonLabel: sys(lang).receiptButton, url: receiptUrl(gift.id) });
     } else {
