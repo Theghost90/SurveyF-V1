@@ -440,7 +440,7 @@ Asked for on 2026-10-31 (D-10). Reference: `packages/shared/src/message-category
 6. **The gift notice is declared MARKETING (changed 4 November 2026).** It was kept utility and exempt from the wording rule because it confirms a delivery, but Meta re-categorised the French version ("includes marketing content") and the owner chose to accept the marketing category rather than reword it. The wording rule now applies to every UTILITY template without exception. Cost consequence: a gift notice sent as a template (24 h window closed) is billed at the marketing rate; one sent as free text inside the window is not a template at all.
 7. **A job queued before this change has no category and is sent as marketing** (the safe direction), without an acknowledgement from the owner: the only jobs this can touch are invitations still waiting at the moment of the upgrade.
 
-**Not built / not verified:** anything against the real Meta (WA-01 is yours to run: whether the two wordings are approved in the categories they declare and whether either is re-categorised) · ticking `template_category_update` in the app's webhook settings (`docs/META_CHECK.md`) · prices.
+**Not built / not verified:** anything against the real Meta (WA-01 ran on 4 November on the Meta test app: both wordings were approved in the categories they declare, and Meta re-categorised the French gift notice to marketing; see `docs/META_CHECK.md`) · ticking `template_category_update` in the app's webhook settings (`docs/META_CHECK.md`) · prices.
 
 ### 3.12 PAY-13: payout limits (built 2026-10-31)
 
@@ -535,7 +535,7 @@ Why it needs care: a public door is how a number you did not import reaches your
 6. **Gifts (WA-06): people who join get none unless the owner switches it on (a fresh "confirm it is you"), then at most a ceiling the owner sets;** one gift per number per survey is a database key; PAY-13's daily caps apply on top.
 7. **The four answers you were to give were not in the conversation.** The defaults used are in D-11 (backlog). Change them if they are wrong: each is a setting on the card or a constant in `packages/shared/src/join.ts`.
 
-Not verified: a message typed from a `wa.me` link arriving as plain text in every WhatsApp client, and the whole flow against the real Meta (WA-01). The link needs the connected number's display number: an account connected without it gets no link (the card says so).
+Not verified: a message typed from a `wa.me` link arriving as plain text in every WhatsApp client, and, for people other than the owner, the whole flow against the real Meta (WA-01 ran it once on 4 November with the owner as the participant). The link needs the connected number's display number: an account connected without it gets no link (the card says so).
 
 ### 3.18 PAY-12 and PAY-09: the credit on an upgrade, and responses beyond the plan (built 2026-11-02, D-11)
 
