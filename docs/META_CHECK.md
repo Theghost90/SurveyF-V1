@@ -138,6 +138,10 @@ common codes, what to do about it.
 `--fake-graph` runs the script against a fake Graph API (it needs no credentials and contacts nothing real). It checks that the script and the
 production message builders respect the limits Meta documents (3 reply buttons, 20-character titles, 10 list rows, …). It proves nothing about Meta.
 
+## Survey round trip (✔ 4 November, one phone)
+
+With the test number connected as an owner's number (platform number id blank), the join link produced: consent message, START, Question 1 (rating list), Question 2 (multi-choice answered "1,3"), Question 3 (free text, answered SKIP), the thank-you, and on the analytics page 1 sent, 1 started, 100 % completion, the answers per question and the response row with a masked number (+237 6XX XXX 298, the 12-digit form: the number fix worked on a live message). Not covered: invitation templates, gifts, a participant who is not the owner, other WhatsApp clients.
+
 ## What the first real inbound message showed (4 November)
 
 - **The test number is treated as SurveyFlow's own number, so a "Hi" to it goes to the Analytics Bot, not to a survey.** `WHATSAPP_PHONE_NUMBER_ID` in `.env` is, by design, the platform number (`isPlatformNumber`, checked before any owner account is looked up). A participant message sent to that number is read as an owner talking to the bot. A survey round trip therefore needs a **second** number (an owner's connected account), which the Meta test setup gives only one of. Open: how to test it without a second number.

@@ -43,8 +43,8 @@ export function parseTemplatePayload(p: string): { action: TemplateAction; surve
 
 const en = {
     questionOf: (i: number, n: number) => `Question ${i} of ${n}`,
-    typeAnswer: 'Type your answer below.',
-    skipHint: 'Reply SKIP to skip this question.',
+    typeAnswer: 'Type your answer below: your own words help the most.',
+    skipHint: '(Prefer not to answer? Reply SKIP.)',
     multiHint: 'Reply with the numbers of your choices, separated by commas (e.g. 1,3).',
     seeOptions: 'See options',
     rating1: 'Very poor',
@@ -68,8 +68,8 @@ const en = {
 
 const fr: typeof en = {
     questionOf: (i: number, n: number) => `Question ${i} sur ${n}`,
-    typeAnswer: 'Écrivez votre réponse ci-dessous.',
-    skipHint: 'Répondez PASSER pour ignorer cette question.',
+    typeAnswer: 'Écrivez votre réponse ci-dessous : vos propres mots aident le plus.',
+    skipHint: '(Vous préférez ne pas répondre ? Répondez PASSER.)',
     multiHint: 'Répondez avec les numéros de vos choix, séparés par des virgules (ex. 1,3).',
     seeOptions: 'Voir les options',
     rating1: 'Très mauvais',

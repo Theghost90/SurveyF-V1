@@ -123,6 +123,22 @@ describe('WhatsApp message builders', () => {
       expect(m.body).toContain('SKIP');
     }
   });
+  it('asks for the answer first and keeps the skip option quiet, never claiming an optional question is required (owner wording decision, 2026-11-04)', () => {
+    for (const lang of ['en', 'fr'] as const) {
+      const text = buildQuestionMessage({ ...base, required: false, type: 'text' }, 0, 1, lang);
+      expect(text.kind).toBe('text');
+      if (text.kind !== 'text') continue;
+      const skipWord = lang === 'en' ? 'SKIP' : 'PASSER';
+      const ask = text.body.indexOf(lang === 'en' ? 'Type your answer' : 'Écrivez votre réponse');
+      const skipAt = text.body.indexOf(skipWord);
+      expect(ask).toBeGreaterThan(-1);
+      expect(skipAt).toBeGreaterThan(ask); // the invitation to answer comes before the way out
+      expect(text.body).toMatch(lang === 'en' ? /\(Prefer not to answer\? Reply SKIP\.\)/ : /\(Vous préférez ne pas répondre \? Répondez PASSER\.\)/); // one short parenthetical, not an instruction line
+      expect(text.body).not.toMatch(/required|obligatoire|must|needed|indispensable/i); // an optional question must not be presented as compulsory
+      const required = buildQuestionMessage({ ...base, required: true, type: 'text' }, 0, 1, lang);
+      if (required.kind === 'text') expect(required.body).not.toContain(skipWord); // a required question offers no way out at all
+    }
+  });
   it('round-trips answer / template ids', () => {
     expect(parseAnswerId(answerId('q1', 'o:weird'))).toEqual({ questionId: 'q1', optionId: 'o:weird' });
     expect(parseAnswerId('nonsense')).toBeNull();

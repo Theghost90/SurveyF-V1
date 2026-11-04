@@ -622,3 +622,9 @@ payout limits per account and per phone (PAY-13, counted in the backlog, not bui
 
 Meta's spelling of a sender's number can differ from the one imported (Cameroon: 11 digits from Meta, 12 imported). The correction (`canonicalWaId`) is applied in `processWebhookPayload` to `messages[].from` and `contacts[].wa_id`, nowhere else, so contact lookup, chat sessions, the per-sender lock, JOIN links and the Analytics Bot's owner-phone match all see the same number. It is conservative (see `docs/META_CHECK.md`): a wrong guess would attach a message to the wrong person, so it acts only when the number is invalid as received and valid once corrected. Outbound sends are untouched.
 
+### How a question asks for an answer and offers a skip (2026-11-04)
+
+Seen on a real phone, an optional question ended with a line of its own, "Reply SKIP to skip this question.", which reads as an instruction and makes skipping look as normal as answering. You asked for answering to be the default (about nine in ten) and skipping the exception (about one in ten). The wording now invites the answer first ("your own words help the most") and offers the way out afterwards as one short parenthetical ("(Prefer not to answer? Reply SKIP.)"), in English and French.
+
+Two limits, on purpose: (1) an **optional** question is never described as required or needed, because that would be untrue and would take away a choice the participant has; (2) a question that really must be answered is marked **required** in the builder, which already removes the skip option completely, and that, not the wording, is the lever that guarantees an answer. A copy change cannot promise a 90/10 split; the analytics page shows how many people skipped each question, so the real rate can be read after a few surveys.
+
