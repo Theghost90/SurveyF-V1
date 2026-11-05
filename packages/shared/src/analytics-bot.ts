@@ -110,6 +110,8 @@ export interface BotQuestion {
   /** answered + skipped: people who got past it */ passed: number; abandonedHere: number;
   /** RESULTS: people who ANSWERED it (percentages are of these), the most chosen option, the average of a rating, the count of comments. */
   answered?: number; top?: { label: string; count: number; pct: number } | null; average?: number | null;
+  /** the other options that have exactly as many answers as `top` (a tie), and the people who skipped the question */
+  tied?: Array<{ label: string; count: number; pct: number }>; skipped?: number;
 }
 export interface BotStatsData {
   title: string;
@@ -126,11 +128,16 @@ export interface AnalyticsLike {
 export const toBotStats = (a: AnalyticsLike): BotStatsData => ({
   title: a.survey.title,
   totals: { ...a.totals },
-  questions: a.perQuestion.map((q) => ({
-    number: q.number, text: q.text, type: q.type, required: q.required, optionCount: q.optionCount, passed: q.answered + q.skipped, abandonedHere: q.abandonedHere,
-    answered: q.answered, average: q.average ?? null,
-    top: [...(q.distribution ?? [])].sort((x, y) => y.count - x.count)[0] ?? null,
-  })),
+  questions: a.perQuestion.map((q) => {
+    const sorted = [...(q.distribution ?? [])].sort((x, y) => y.count - x.count);
+    const top = sorted[0] ?? null;
+    return {
+      number: q.number, text: q.text, type: q.type, required: q.required, optionCount: q.optionCount, passed: q.answered + q.skipped, abandonedHere: q.abandonedHere,
+      answered: q.answered, average: q.average ?? null, skipped: q.skipped,
+      top,
+      tied: top && top.count > 0 ? sorted.slice(1).filter((o) => o.count === top.count) : [],
+    };
+  }),
 });
 
 /**
@@ -187,7 +194,7 @@ const S = {
     showing: (a: number, b: number) => `showing ${a}–${b}`, nobodyHere: 'Nobody in this list.',
     stoppedAt: (q: number) => `stopped at Q${q}`, atNow: (q: number) => `at Q${q} now`,
     more: 'MORE for the next 10', openSaas: 'Full list with all numbers and CSV export:', openBtn: 'Open in SurveyFlow',
-    surveysTitle: 'Your surveys', pickHint: 'Send STATS 2 (or DROP 2…) to pick one. With no number I use survey 1, your most recent active survey.',
+    surveysTitle: 'Your surveys', pickHint: 'Send STATS 2 (or DROP 2…) to pick one. With no number I use survey 1, the first in this list (active surveys come first).',
     status: { active: 'active', paused: 'paused', closed: 'closed', draft: 'draft' } as Record<string, string>,
     helpTitle: 'SurveyFlow Analytics', helpBody: 'Ask for your numbers any time. Tap a command or type it, in English or French.', helpBtn: 'Commands',
     cmd: { stats: 'Summary', results: 'Answers per question', mute: 'Stop alerts', unmute: 'Turn alerts on', drop: 'Where people stop', nonresp: "Who hasn't replied", started: 'Started, not finished', completed: 'Who finished', surveys: 'Your surveys', more: 'Next 10 of the list', help: 'This list', unlink: 'Remove this phone' } as Record<string, string>,
@@ -204,7 +211,7 @@ const S = {
     noList: 'There is no list to continue. Ask for NONRESP, STARTED or COMPLETED first.',
     unknown: 'I did not understand that. Send HELP to see what I can do.',
     allMoved: 'The complete list, with every number and a CSV export, is in SurveyFlow:',
-    results: 'Results', resultsNote: 'Percentages are of the people who answered that question.', top: 'Top', average: 'Average', answersOf: (a: number) => `${a} answer${a === 1 ? '' : 's'}`, comments: (n: number) => `${n} comment${n === 1 ? '' : 's'}`, noAnswersYet: 'no answers yet',
+    results: 'Results', resultsNote: 'Percentages are of the people who answered that question.', top: 'Top', tied: 'Tied for top', skippedN: (k: number) => `${k} skipped`, average: 'Average', answersOf: (a: number) => `${a} answer${a === 1 ? '' : 's'}`, comments: (n: number) => `${n} comment${n === 1 ? '' : 's'}`, noAnswersYet: 'no answers yet',
     mutedOk: '🔕 Alerts are off for this phone. Send ALERTS ON to turn them back on. STATS and the other commands still work.', unmutedOk: '🔔 Alerts are on: I will message you at milestones (100, 500, 1,000 responses…) and when answers slow down. Send MUTE to stop them.',
     alertMilestone: (n: number, title: string, rate: string) => `🎉 *${n} responses reached*\n${title}\nCompletion rate so far: ${rate}%`, alertSlow: (h: number, title: string) => `⚠️ *Responses are slowing down*\nNo new answers for ${h} hours on “${title}”. Reply NONRESP to see who has not started.`,
     alertFoot: 'Reply STATS for the full summary. MUTE to stop alerts.',
@@ -223,7 +230,7 @@ const S = {
     showing: (a: number, b: number) => `affichage ${a}–${b}`, nobodyHere: 'Personne dans cette liste.',
     stoppedAt: (q: number) => `arrêté à la Q${q}`, atNow: (q: number) => `à la Q${q} en ce moment`,
     more: 'PLUS pour les 10 suivants', openSaas: 'Liste complète avec tous les numéros et export CSV :', openBtn: 'Ouvrir SurveyFlow',
-    surveysTitle: 'Vos sondages', pickHint: 'Envoyez STATS 2 (ou ABANDONS 2…) pour en choisir un. Sans numéro, j’utilise le sondage 1, votre sondage actif le plus récent.',
+    surveysTitle: 'Vos sondages', pickHint: 'Envoyez STATS 2 (ou ABANDONS 2…) pour en choisir un. Sans numéro, j’utilise le sondage 1, le premier de cette liste (les sondages actifs passent en premier).',
     status: { active: 'actif', paused: 'en pause', closed: 'clos', draft: 'brouillon' } as Record<string, string>,
     helpTitle: 'SurveyFlow Analytics', helpBody: 'Demandez vos chiffres à tout moment. Touchez une commande ou tapez-la, en français ou en anglais.', helpBtn: 'Commandes',
     cmd: { stats: 'Résumé', results: 'Réponses par question', mute: 'Arrêter les alertes', unmute: 'Activer les alertes', drop: 'Où les gens s’arrêtent', nonresp: 'Qui n’a pas répondu', started: 'Commencé, pas terminé', completed: 'Qui a terminé', surveys: 'Vos sondages', more: '10 suivants de la liste', help: 'Cette liste', unlink: 'Retirer ce téléphone' } as Record<string, string>,
@@ -240,7 +247,7 @@ const S = {
     noList: 'Il n’y a pas de liste à continuer. Demandez d’abord SANSREPONSE, COMMENCE ou TERMINES.',
     unknown: 'Je n’ai pas compris. Envoyez AIDE pour voir ce que je sais faire.',
     allMoved: 'La liste complète, avec tous les numéros et un export CSV, est dans SurveyFlow :',
-    results: 'Résultats', resultsNote: 'Les pourcentages sont calculés sur les personnes qui ont répondu à cette question.', top: 'Premier choix', average: 'Moyenne', answersOf: (a: number) => `${a} réponse${a === 1 ? '' : 's'}`, comments: (n: number) => `${n} commentaire${n === 1 ? '' : 's'}`, noAnswersYet: 'pas encore de réponse',
+    results: 'Résultats', resultsNote: 'Les pourcentages sont calculés sur les personnes qui ont répondu à cette question.', top: 'Premier choix', tied: 'Ex æquo en tête', skippedN: (k: number) => `${k} ignorée${k === 1 ? '' : 's'}`, average: 'Moyenne', answersOf: (a: number) => `${a} réponse${a === 1 ? '' : 's'}`, comments: (n: number) => `${n} commentaire${n === 1 ? '' : 's'}`, noAnswersYet: 'pas encore de réponse',
     mutedOk: '🔕 Les alertes sont coupées pour ce téléphone. Envoyez ALERTES OUI pour les remettre. STATS et les autres commandes fonctionnent toujours.', unmutedOk: '🔔 Alertes activées : je vous écris aux paliers (100, 500, 1 000 réponses…) et quand les réponses ralentissent. Envoyez SILENCE pour les arrêter.',
     alertMilestone: (n: number, title: string, rate: string) => `🎉 *${n} réponses atteintes*\n${title}\nTaux d’achèvement à ce jour : ${rate}%`, alertSlow: (h: number, title: string) => `⚠️ *Les réponses ralentissent*\nAucune nouvelle réponse depuis ${h} heures sur « ${title} ». Répondez SANSREPONSE pour voir qui n’a pas commencé.`,
     alertFoot: 'Répondez STATS pour le résumé complet. SILENCE pour arrêter les alertes.',
@@ -346,10 +353,18 @@ export function botResultsMessages(d: BotStatsData, locale: BotLocale, asOf: str
   for (const q of d.questions.slice(0, 15)) {
     const n = q.answered ?? q.passed;
     lines.push(`Q${q.number} ${shortQ(q.text, 34)} (${questionTypeLabel(q.type, locale)})`);
-    if (n === 0) lines.push(`→ ${s.noAnswersYet}`);
-    else if (q.type === 'text') lines.push(`→ ${s.comments(n)}`);
-    else if (q.type === 'rating') lines.push(`→ ${s.average} ${q.average === null || q.average === undefined ? '—' : fmtRate(q.average, locale)} (${s.answersOf(n)})`);
-    else lines.push(q.top ? `→ ${s.top}: ${shortQ(q.top.label, 28)} · ${Math.round(q.top.pct)}% (${q.top.count}/${n})` : `→ ${s.answersOf(n)}`);
+    const skip = q.skipped ? ` · ${s.skippedN(q.skipped)}` : '';
+    const opt = (o: { label: string; count: number; pct: number }) => `${shortQ(o.label, 28)} · ${Math.round(o.pct)}% (${o.count}/${n})`;
+    if (n === 0) lines.push(`→ ${s.noAnswersYet}${skip}`);
+    else if (q.type === 'text') lines.push(`→ ${s.comments(n)}${skip}`);
+    else if (q.type === 'rating') lines.push(`→ ${s.average} ${q.average === null || q.average === undefined ? '—' : fmtRate(q.average, locale)} (${s.answersOf(n)})${skip}`);
+    else if (!q.top) lines.push(`→ ${s.answersOf(n)}${skip}`);
+    else if (!q.tied?.length) lines.push(`→ ${s.top}: ${opt(q.top)}${skip}`);
+    else {
+      // a tie is shown as a tie: naming one of two equal options as "the top" would hide the other (up to three are named)
+      const group = [q.top, ...q.tied];
+      lines.push(`→ ${s.tied}: ${group.slice(0, 3).map(opt).join(', ')}${group.length > 3 ? ` +${group.length - 3}` : ''}${skip}`);
+    }
     lines.push('');
   }
   lines.push(`_${s.resultsNote}_`);
