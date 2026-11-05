@@ -169,3 +169,10 @@ All 16 templates went from *In review* to **APPROVED** between 3 November (submi
 ## `owner_alert` approved (✔ 5 November)
 
 The two `owner_alert` templates (French and English), which the connect step submitted on 4 November for the Analytics Bot's alerts outside the 24-hour window, show in WhatsApp Manager as **Utility**, status **\"Active - Quality pe…\"** (the column was cut off in the screenshot), 0 sent. They were approved in about a day and kept the category we declare (utility). The owner reports that all the templates submitted on 3 November are approved as well. What \"Quality pe…\" means was not checked: it is probably Meta's quality rating not yet being available, but nothing seen so far proves it. The `owner_alert` templates have **never been sent**: that needs the platform number and an owner who has linked their phone, so it stays on the list of what WA-01 did not cover.
+
+## A button tap and a platform notice on a real phone (✔ 5 November)
+
+- **A template quick-reply tap reaches the webhook.** The owner tapped **Start survey** on the sample invitation sent by `meta-check` (4 and 5 November). The platform answered "Ce téléphone n'est pas lié à un compte SurveyFlow…". That is the expected answer, not a failure: the sample's buttons carry `START:meta-check`, which names no real survey, and the chat was with the test number, which is the platform number, so the tap was read as an unlinked owner. What it proves: the tap arrives and is handled. What it does not prove: the real invitation flow (a survey sent from an owner's own number to an imported contact), which still needs a second number.
+- **A platform notice was delivered.** "SurveyFlow: payment received. Your growth plan is active." (4 November, 22:38), sent from the platform number after a subscription paid with the mock payment provider, arrived on the owner's phone (inside the 24-hour window the owner had opened).
+- **Analytics on WhatsApp is off until `WHATSAPP_PLATFORM_PHONE` is set.** In live mode the page shows "not available on this deployment yet" while that variable is blank (the digits of SurveyFlow's number, for the test number `15551708350`).
+
