@@ -14,6 +14,7 @@ import { track } from '../funnel';
 import { audit } from '../audit';
 import { sendMail } from '../mail';
 import { handleJoin } from './join';
+import { processCoexistence } from '../whatsapp/coexistence';
 
 /** Subset of Meta's webhook message object that we read. */
 export interface WaInboundMessage {
@@ -39,6 +40,7 @@ interface Logger {
  * Throws if a message could not be processed so the route can answer 500 and Meta retries it.
  */
 export async function processWebhookPayload(body: unknown, log: Logger): Promise<void> {
+  await processCoexistence(body, log); // WA-12/13: contacts, history, echoes and disconnections of numbers that are also in a WhatsApp Business app
   const entries = (body as { entry?: Array<{ id?: string; changes?: Array<{ field?: string; value?: any }> }> })?.entry ?? [];
   for (const entry of entries) {
     for (const change of entry.changes ?? []) {

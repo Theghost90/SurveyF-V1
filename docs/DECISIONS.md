@@ -16,7 +16,7 @@ build environment · ❌ not built in V1.
 | "First proposal" | — | Hero **A** ("Ask → Hear → Know → Act") and Pricing **A** ("How many voices?") | Those two. |
 | Hero CTA "Watch a survey in 60 seconds" | — | No video asset exists | Replaced with "See how it works" (anchor). |
 | "Builder Bot & Analytics Bot", "Quick numbers on WhatsApp", "47 new answers on your WhatsApp" | Builder is a **web dashboard**; the only bot command is `START` | Marketed as features | **Removed from the copy** when this was written, because neither existed. **Update (2026-10-17): the Analytics Bot was built afterwards** (§3.5) and is now sold on Starter, Growth and Business (Explore sees it in the simulator). **The Builder Bot is still not built** and stays out of the copy. |
-| "Keep your WhatsApp Business number (Coexistence)" | Embedded Signup | Marketed | Reworded to "your own WhatsApp Business number". Coexistence needs a specific Meta configuration that I could not verify. |
+| "Keep your WhatsApp Business number (Coexistence)" | Embedded Signup | Marketed | **Dropped on purpose on first reading, rebuilt on 2026-11-05 (D-19).** The first version reworded it to "your own WhatsApp Business number" because the configuration could not be verified, and built nothing: the launch sent no version and no opt-in, so Meta served v4 with coexistence off and a number that lives in the WhatsApp Business app was refused. It is now built (v5, always opted in), tested with simulated numbers and not yet with a real one: see "Embedded Signup v5 and coexistence" at the end of this file. |
 | `[TO CONFIRM]` placeholders ("Gift budget billed separately", Excel/PDF on Starter) | Starter has exports; gifts are Growth+ | Placeholders | Followed the spec. Who pays for gifts is now decided — the survey owner, via a prepaid wallet (§3.1). |
 | Pricing slider ticks | — | Labels 100 / 500 / 3,000 / 15,000 evenly spaced under a **linear** slider, so the "3,000" label sits at 66% while the thumb reaches 3,000 at 19% | **Fixed**: piecewise-linear slider, tier boundaries at even thirds, so ticks and thumb agree. |
 
@@ -297,8 +297,9 @@ build; the dashboard card and "do this later" soften it, but a long Meta verific
 **Is connecting WhatsApp silent?** Not entirely, and it cannot be. With Embedded Signup the customer logs in to Facebook, picks or creates their WhatsApp Business
 account, enters the number and confirms the code Meta sends to it, and approves the permissions; **they must also add a payment method to their WhatsApp
 account** (Meta bills them directly). SurveyFlow then does the rest unattended: token exchange, webhook subscription, and the submission of the message
-templates (now in the background in live mode; approval is asynchronous). Number registration (`/register` with a PIN) is *not* implemented and Embedded Signup
-may need it: only a real run shows. None of this has been exercised against real Meta.
+templates (now in the background in live mode; approval is asynchronous). **Updated 2026-11-05 (D-19):** a number that never had WhatsApp is now registered for the Cloud
+API with a random six-digit PIN (Meta's own post-flow step for standard onboarding; the PIN is kept encrypted); a number that is also in a WhatsApp Business app is
+never registered (Meta: it already is) and starts the contacts and history sync instead. None of this has been exercised against real Meta: only simulated numbers.
 
 **Analytics Bot** (Starter, Growth, Business; Explore sees it in the builder preview and the simulator with example numbers). It speaks from SurveyFlow's own
 number. The owner proves the phone with a one-time code (`LINK <code>`, 15 minutes, single use, up to 3 phones, `UNLINK`): the phone in the profile is never
@@ -587,7 +588,7 @@ its network policy blocks these hosts. Treat each as "needs a sandbox pass":
 
 | Area | Risk |
 |---|---|
-| Meta Cloud API client, Embedded Signup flow, template submission/approval, status webhooks | Payload shapes follow Meta's public docs; never sent to Meta. **Runnable check: `scripts/meta-check.mts` (`docs/META_CHECK.md`) — not yet run by the owner against a real Meta app** (the build environment cannot reach Meta). Tech Provider status (business verification + app review) and the Embedded Signup popup cannot be scripted. |
+| Meta Cloud API client, Embedded Signup flow, template submission/approval, status webhooks | Payload shapes follow Meta's public docs; never sent to Meta. Embedded Signup v5, coexistence, `/register` and the sync (D-19) follow Meta's pages of 5 November and have run against simulated numbers only. **Runnable check: `scripts/meta-check.mts` (`docs/META_CHECK.md`) — not yet run by the owner against a real Meta app** (the build environment cannot reach Meta). Tech Provider status (business verification + app review) and the Embedded Signup popup cannot be scripted. |
 | Flutterwave v3 | Endpoints confirmed by documentation search; not called. |
 | Notch Pay, CinetPay | Init/verify endpoints confirmed by documentation search; **webhook signature schemes are unconfirmed** (safe default: bad signature ⇒ rejected; the status poll still activates paid subscriptions). |
 | **Campay, PayUnit** | **Lowest confidence**: paths/fields written from memory (PayUnit's endpoint paths and Campay's airtime endpoint especially). Do not enable without sandbox verification. Campay's collect is a *push*: the "maybe sent" rules (`docs/PAYMENTS.md` C3) assume its timeouts behave like any HTTP timeout, which only a sandbox can confirm. |
@@ -640,3 +641,48 @@ Starter includes PDF and Excel. The Starter PDF is light (no rich data, no desig
 
 **An intermittent test, cause unknown (2026-11-05).** `apps/api/tests/proration-overage.test.ts`, "an annual plan is invoiced month by month…", failed once in one full run and passed alone (four times), after its neighbouring file (six times) and in the next full run. The failure message was not captured. The earlier intermittent failure of `reconciliation.test.ts` was found and fixed (the tests' reset did not clear the stored exchange rates). If this one appears again, keep the failing output before re-running: the test works with dates relative to the clock (a period that began 100 days ago), which is the first place to look.
 
+### Embedded Signup v5 and coexistence (D-19, 2026-11-05)
+
+**What was found.** Embedded Signup v2 and v3 end on 15 October 2026 and a launch with no `version` is served as **v4, where coexistence is off unless the launch opts in**
+(`featureType: 'whatsapp_business_app_onboarding'`). SurveyFlow's launch sent no version and no opt-in, so an owner who lives in the WhatsApp Business app (the
+customers this product is for) would have been refused as "not eligible". v5 (20 October 2026) has that onboarding on by default and reports `is_on_biz_app`. The earlier
+reading of this file (line 19) had dropped the feature; it is rebuilt. Meta's own prerequisites are unchanged and are not met yet: Tech Provider status (WA-02), advanced
+access to `whatsapp_business_management` and `whatsapp_business_messaging`, a Facebook Login for Business configuration, and a payment method on the customer's Messaging account.
+
+**Your decisions** (quoted in `docs/BACKLOG.md`, D-19): build Embedded Signup with and without coexistence for the two stories (Mireille: a number in a WhatsApp Business app;
+Armand: a number that never had WhatsApp); always opt in; ask the question before the Connect button and record the real result after Finish; test first without real numbers, then with.
+
+**What was built, and the choices inside it.**
+
+1. **v5 named explicitly** (`signupLaunchOptions`, `packages/shared/src/embedded-signup.ts`). v4 with the opt-in would also work; v5 was chosen because it needs no flag and puts `is_on_biz_app` in the session
+   event. The popup listener also understands the v3/v4 shapes (the coexistence event of those versions carries only the Messaging account: the server then asks Meta for the number)
+   and checks the origin the way Meta's guide does (`facebook.com` only).
+2. **Always opted in, so Meta routes.** A number that is in no app takes the standard flow; a number in the Business app takes coexistence. SurveyFlow makes no routing decision.
+3. **The question before the Connect button** (three answers: never on WhatsApp · in my WhatsApp Business app and I keep using it · in the ordinary WhatsApp app). It explains
+   (what changes in the app, listed before anything is connected) and warns; it never routes. A wrong answer cannot break the connection.
+4. **Meta decides, not the browser.** After Finish the server asks Meta for `is_on_biz_app`; the browser's value is used only when Meta does not answer; when neither does, nothing is changed
+   (`mode_unknown`) because a wrong guess would either register a coexistence number (Meta forbids it) or leave a new one unregistered. If the answer given and the answer found differ,
+   Settings says so in plain words (`situationCheck`).
+5. **Armand (standard onboarding).** The number is registered for the Cloud API with a random six-digit PIN, kept encrypted and never returned. A registration that fails keeps the connection
+   (the one-time code is spent) and shows a retry button; sending is blocked until it succeeds.
+6. **Mireille (coexistence).** No registration. The contacts sync and the history sync are requested at once (Meta allows each once, within 24 hours, otherwise the number must be offboarded and
+   the owner must start again; a refused request shows "Ask again"). Contacts arrive as names and numbers **without consent**: a number in an address book is not an agreement to receive surveys
+   (Law 2024/017 and WhatsApp's policy), so none can be invited until the owner confirms once, for the batch, that they agreed (a timestamp is the proof); a person who sent STOP is never overridden.
+   A contact the owner removes on the phone is not deleted here (it may have answers). Ceiling: 20,000 contacts per number.
+7. **What is not read.** The history and the messages the owner writes in the app are **counted, never read or stored**: SurveyFlow has no inbox and the survey does not need them (data minimisation).
+   Declining to share the history is a normal outcome ("declined"), not an error.
+8. **Disconnection.** When Meta cuts the link (for example 14 days without opening the app), the number is marked disconnected, sending and publishing are refused (`whatsapp_not_connected`), the owner is
+   e-mailed once with the cause in SurveyFlow's own words (never Meta's code) and Settings shows a banner with a reconnect flow. Reconnecting puts the same number back **in place**: the surveys that point at it are kept.
+9. **The simulated numbers.** In demo mode the Connect step offers "Simulate a new number (Armand)" and "Simulate a number in the WhatsApp Business app (Mireille)", and a coexistence number has a panel that
+   plays what Meta would send (contacts, history, the owner writing in the app, 14 days of inactivity, reconnected) through the real webhook code. Both stories can be run end to end with no Meta.
+10. **WA-14, the share kit.** The easiest way to hand a survey out from the owner's own number: on the join link (WA-05), "Share on WhatsApp" opens WhatsApp's own picker with the message and link filled in, and
+    "Copy the message" gives the same text to paste in a chat or a Status. The message holds a title and a link, never a participant's data. The analytics stay where they are: the Analytics Bot already answers in WhatsApp.
+
+**Not done, on purpose or for lack of facts.** Whether the real flow completes as documented, whether `/register` is also needed after the coexistence flow of v3/v4 (Meta says skip it), how Meta words the
+"history declined" webhook (the code reads error code `2593109` from Meta's page and has never seen one), and whether Cameroon numbers are eligible (no country restriction was found in Meta's pages, which is not a
+confirmation). SurveyFlow does not import the people the owner chatted with from the history (only the address book): a possible later choice. The per-customer onboarding ceiling (10 new customers per rolling 7 days until
+verification) is Meta's and is not enforced here.
+
+**Open question: owners who can only pay by Mobile Money.** For a Tech Provider, Meta bills the customer's own Messaging account, which needs a card or another method Meta accepts in their country (not verified for Cameroon).
+The only route Meta documents for SurveyFlow to carry that cost is to become a **Solution Partner**, which needs Meta's approval and a line of credit shared with each customer; SurveyFlow could then bill them in Mobile Money.
+That is a business commitment (credit risk, Meta's programme), not a coding task, so it is recorded as a question in `docs/BACKLOG.md` section F and nothing is built for it.

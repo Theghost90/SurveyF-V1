@@ -72,7 +72,8 @@ await step('set up: an owner on a paid plan with a simulated number, three conta
   await confirmAndSignIn(page, base, { email: ownerEmail });
   await page.getByRole('radio', { name: /Businesses/ }).click();
   await page.getByRole('heading', { name: 'Connect WhatsApp' }).waitFor({ timeout: 10000 });
-  await page.getByRole('button', { name: /use a simulated number/i }).click();
+  await page.getByTestId('situation-new').click(); // the question before the Connect button (D-19)
+  await page.getByTestId('sim-new').click();
   await page.getByTestId('ob-connected').waitFor({ timeout: 15000 });
   await page.getByRole('button', { name: /go to dashboard/i }).click();
   await page.waitForURL(/\/dashboard/, { timeout: 15000 });

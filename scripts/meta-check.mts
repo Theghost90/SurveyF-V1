@@ -109,7 +109,7 @@ if (FAKE) {
     const p = url.pathname.replace(/^\/v[\d.]+\//, '');
     const method = init?.method ?? 'GET';
     if (p === 'debug_token') return json({ data: { app_id: '123', type: 'SYSTEM_USER', is_valid: true, expires_at: 0, scopes: ['whatsapp_business_messaging', 'whatsapp_business_management'] } });
-    if (p === PHONE_ID) return json({ display_phone_number: '+1 555 000 0000', verified_name: 'Fake Biz', quality_rating: 'GREEN', code_verification_status: 'VERIFIED', platform_type: 'CLOUD_API' });
+    if (p === PHONE_ID) return json({ display_phone_number: '+1 555 000 0000', verified_name: 'Fake Biz', quality_rating: 'GREEN', code_verification_status: 'VERIFIED', platform_type: 'CLOUD_API', is_on_biz_app: false });
     if (p === WABA_ID) return json({ name: 'Fake WABA', account_review_status: 'APPROVED', business_verification_status: 'verified' });
     if (p === `${WABA_ID}/subscribed_apps`) return json(method === 'POST' ? { success: true } : { data: [{ whatsapp_business_api_data: { id: '123' } }] });
     if (p === `${WABA_ID}/message_templates` && method === 'GET') {
@@ -171,6 +171,14 @@ await check('phone number', async () => {
   if (x.quality_rating === 'RED' || x.quality_rating === 'YELLOW') return ['WARN', `${bits}\nquality is ${x.quality_rating}: sending volume may be limited`];
   if (x.code_verification_status && x.code_verification_status !== 'VERIFIED') return ['WARN', `${bits}\nthe number's verification status is ${x.code_verification_status}`];
   return ['PASS', bits];
+});
+
+await check('coexistence field (is_on_biz_app)', async () => {
+  // WA-11: after Embedded Signup the server asks Meta, not the browser, whether a number is also in a WhatsApp Business app. This is the production call; run it first, so a Graph
+  // version that does not return the field shows up here and not in a customer's connection ("Meta did not say whether this number is also in the WhatsApp Business app").
+  const a = await gw.getAppStatus(creds);
+  if (a.isOnBizApp === null) return ['WARN', `Meta did not return is_on_biz_app on Graph ${env.META_GRAPH_VERSION}\nEmbedded Signup would refuse to connect (nothing is changed). Try META_GRAPH_VERSION=v27.0`];
+  return ['PASS', `is_on_biz_app = ${a.isOnBizApp}${a.platformType ? `, platform ${a.platformType}` : ''}`];
 });
 
 await check('business account', async () => {

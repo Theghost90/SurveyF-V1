@@ -117,6 +117,7 @@ Templates wait for Meta's review (minutes to a day): run it again later. The inv
 |---|---|
 | access token | valid, right app, both WhatsApp scopes, not about to expire |
 | phone number / business account | the production `getPhoneInfo` works; number on the Cloud API; quality rating; business verification state |
+| coexistence field (`is_on_biz_app`) | the production `getAppStatus` gets an answer from Meta on your Graph version: Embedded Signup relies on it and refuses to connect without it (`WARN` says to try `META_GRAPH_VERSION=v27.0`) |
 | webhook subscription | Meta will deliver this account's events to your app (`--subscribe` fixes it) |
 | message templates | all 16 templates exist, their review state, and **whether Meta re-categorised any** (the open question of `DECISIONS.md` §3 item 3) |
 | send: text / buttons / list / link button / template | the exact payloads the product sends are accepted by Meta (the link button is the new in-window receipt message) |
@@ -125,10 +126,104 @@ Templates wait for Meta's review (minutes to a day): run it again later. The inv
 `WARN` means it works but you should look (pending template, local webhook address, low quality rating). `FAIL` carries Meta's message and, for the
 common codes, what to do about it.
 
+## Embedded Signup and coexistence: test plan (written 5 November, D-19)
+
+What was built (WA-11 to WA-14) has run with **simulated numbers** only. This plan has two rounds: Round 1 needs no Meta and no real number; Round 2 uses real numbers and is the only thing that proves the real flow. Do Round 1 first: if it is not green, Round 2 is a waste of a Meta account.
+
+Commands are for **PowerShell on Windows**, in the folder where you cloned SurveyF-V1. `◇` = taken from Meta's pages of 5 November and **not seen on a screen**: if a screen differs, send a screenshot.
+
+### Round 0, every time you pull
+
+1. `git pull origin claude/happy-cray-zqvzf1`
+2. `npm install` (nothing new is needed; it is harmless).
+3. `npm run db:push`: adds 14 columns to the WhatsApp account table. **Nothing is removed**; `db:push` is the way the README says your development database is kept (if yours was built with `migrate deploy`, run `npx prisma migrate deploy --config apps/api/prisma.config.ts` instead).
+4. Stop the API and the website if they run (Ctrl+C in their windows), then start them again as described below. **The API must be restarted**: the old one does not know the new routes.
+
+### Round 1: no real numbers (about 30 minutes)
+
+**1a. The automatic checks**
+
+1. `npm run typecheck` must end without an error line.
+2. Docker Desktop running (`docker compose up -d`), then `npm test`. It must end with the backlog check line `Backlog check: PASS (84 rows, 43 built, 41 not built …)`. New: `packages/shared/src/embedded-signup.test.ts` (14 tests) and `apps/api/tests/coexistence.test.ts` (20 tests).
+
+**1b. Start SurveyFlow in demo mode.** Open a **new** PowerShell window (so that these settings do not stay in the window you use for real Meta), then:
+
+```powershell
+$env:WHATSAPP_MODE='mock'; $env:PSP_MOCK='true'; $env:GIFT_PROVIDER='mock'; $env:EMAIL_PROVIDER='mock'
+npm run dev
+```
+
+Wait until both lines say they are ready (the website on `http://localhost:4222`, the API on `http://localhost:4223`).
+
+**1c. The real-browser run (optional, needs Chrome installed):** in a second window `node scripts/e2e-coexistence.mjs $env:TEMP\e2e-coexistence`. It must print `all 10 steps passed` and leaves screenshots in that folder. (If it cannot find Chrome, skip it and do 1d.)
+
+**1d. By hand, Armand (a number that never had WhatsApp)**
+
+1. Open `http://localhost:4222/register`, sign up with a made-up business, a made-up e-mail such as `armand-test@example.com`, a password of 10+ characters. The "check your e-mail" page shows the message in demo mode: press its button, confirm with your password, sign in.
+2. Onboarding step 1: pick **Businesses**. Step 2 "Connect WhatsApp": **the question "Where is this phone number today?" shows three answers and the two green "Simulate…" buttons are greyed out** until you choose one.
+3. Choose **"It has never been on WhatsApp"**. The yellow "What changes in your WhatsApp Business app" box must **not** appear. Press **"Simulate a new number (Armand)"**.
+4. The green "connected" line appears. Press **Go to dashboard**, then open **Settings → WhatsApp**. Under the number you must read **"Used through SurveyFlow only"**, and there must be **no** "Importing from your WhatsApp Business app" box and **no** grey "Simulate what WhatsApp sends…" panel.
+
+**1e. By hand, Mireille (a number in a WhatsApp Business app).** Sign out, register a second made-up owner (`mireille-test@example.com`), pick **Businesses**.
+
+1. Choose **"It is in my WhatsApp Business app, and I keep using the app"**. The yellow box lists five changes (linked devices, broadcast lists, 20 per second, 14 days, version 2.24.17). Press **"Simulate a number in the WhatsApp Business app (Mireille)"**.
+2. A box "Importing from your WhatsApp Business app" says "Waiting for WhatsApp to send your contacts" and "Keep the app open on your phone for a few minutes".
+3. Go to the dashboard, open **Settings → WhatsApp**. The number reads **"Also in your WhatsApp Business app"**. At the bottom, press the grey buttons in this order:
+   - **Contacts arrive**: a box "4 contacts came from your WhatsApp Business app … none can be sent a survey until you confirm" appears. Try the blue button: it is greyed out. Tick "I confirm that these people agreed…", press **Confirm 4 contacts**: a green "4 contacts confirmed" appears and the box goes away. (Before confirming, a survey sent "to all" finds nobody: that is the check that an address book is not consent.)
+   - **History arrives**: the import box says "Import finished: 4 contacts."
+   - **Owner writes in the app**: "App last used: <time>" appears under the number.
+   - **Inactive for 14 days**: a red banner "Your WhatsApp number was disconnected" says the app "has not been opened for about 14 days" and that sending is paused. Open **Surveys** and try to publish a draft: it is refused. The wording must not contain `PRIMARY_INACTIVITY`.
+   - In the banner choose again the second answer and press the green Mireille button: the banner disappears, the **same** number is back, the import box is "Waiting…" again. (**Reconnected** is the button for when Meta says on its own that the link is back.)
+4. Open a published survey, switch on its **join link** (the card "Link to share"): **"Share on WhatsApp"** opens `https://wa.me/?text=…` in a new tab with the message and the link inside; **"Copy the message"** copies the same text.
+
+**Round 1 is green when** every "must" above happened. Anything else: send me the step number and a screenshot.
+
+### Round 2: real numbers
+
+**What you need before you start**
+
+- The Meta test app of WA-01, in development mode, **you** logged in as its admin. Without WA-02 (Tech Provider) **only people with a role on the app** can complete the popup (*App roles → Roles*). It may also refuse the **coexistence** flow before you are a Tech Provider: that would be a finding, not a failure of the build.
+- **For Armand: a phone number that has never had WhatsApp** (a new SIM). A number registered to a WhatsApp account is refused by Meta (what happened to +237 677 27 34 95 on 5 November) unless you delete that WhatsApp account first.
+- **For Mireille: a phone with the WhatsApp Business app, version 2.24.17 or later, on a number that is not the shop's real number.** Connecting links that app to the Cloud API: limits above apply to it (linked devices unlinked once, broadcast lists read-only). If you want to reuse +237 677 27 34 95, installing WhatsApp Business on that SIM and registering the number moves its WhatsApp account into the Business app (WhatsApp offers to move the chats): you would lose its use in the ordinary WhatsApp app. Do not do it with a number you need.
+- A mobile phone with you for the SMS code (Armand) and the QR code (Mireille).
+
+**Set up, once (about 45 minutes)** ◇
+
+1. **Meta dashboard → your app → Facebook Login for Business → Settings**: *Login with the JavaScript SDK* **on**; *Allowed Domains for the JavaScript SDK* = the **https address of the website** (see step 4). (Same as step 0 of 4b above.)
+2. **Facebook Login for Business → Configurations → Create configuration.** v5 needs a **new** configuration (Meta: "to upgrade … create a new Facebook Login for Business Configuration, and select your desired products"). Login variation **WhatsApp Embedded Signup**; products: **Cloud API**; permissions `whatsapp_business_management` and `whatsapp_business_messaging`. Save and copy the **configuration ID**.
+3. **WhatsApp → Configuration** (webhooks): in addition to `messages`, `message_template_status_update` and `template_category_update`, subscribe to **`account_update`**, **`history`**, **`smb_app_state_sync`** and **`smb_message_echoes`**. The callback URL stays `https://<your API tunnel>/api/webhook/whatsapp`.
+4. **Two tunnels now, not one**: the API (as before) **and the website**: in a second PowerShell window `cloudflared tunnel --url http://localhost:4222`; note the `https://….trycloudflare.com` address it prints. Quick-tunnel addresses change every time cloudflared restarts: update the Allowed Domains (step 1) and the callback URL each time.
+5. In the root `.env` (never paste its values in a chat): `WHATSAPP_MODE=live`, `META_APP_ID=<App settings → Basic → App ID>`, `META_EMBEDDED_SIGNUP_CONFIG_ID=<the ID from step 2>`, `META_APP_SECRET` (already there), `PUBLIC_API_URL=<API tunnel>`, `WEB_ORIGIN=<website tunnel>`, `NEXTAUTH_URL=<website tunnel>`, `PUBLIC_WEB_URL=<website tunnel>`. Leave `META_GRAPH_VERSION` as it is; **if the connection ends with the message "Meta did not say whether this number is also in the WhatsApp Business app", set `META_GRAPH_VERSION=v27.0` (the version Meta's current pages use) and try again**: that field may not exist on the older version.
+6. Start in **live** mode in a **fresh** PowerShell window (so that no demo setting from Round 1 is left): `npm run dev`. Open the **website tunnel address** (not localhost: the Facebook login only works on the listed domain).
+
+**2A. Armand with a real new number**
+
+1. Register or sign in as an owner (verified e-mail). Open **Settings → WhatsApp** (the owner must have no connected number: disconnect the test number first).
+2. Answer the question **"It has never been on WhatsApp"**, press **Connect with Facebook**.
+3. In the popup: log in, accept the permissions, enter the new number, enter the code Meta sends by SMS or call, pick or create the business portfolio, confirm, **Finish**. ◇
+4. Expected in SurveyFlow: "WhatsApp connected." The number reads **"Used through SurveyFlow only"**. **No** red "not yet registered" line (that line means `/register` failed: press **Try again** and tell me).
+5. Add a payment method to the new Messaging account in Meta's billing (otherwise sending stops after the free allowance, see `docs/META_PRICING.md`).
+6. Create a survey, publish, switch on the join link, send the "Share on WhatsApp" message to a phone that is **on the app's allowed-recipients list** (a test app can only message those), tap the link, answer. Check the answer arrives in the dashboard.
+
+**2B. Mireille with a real number in a WhatsApp Business app**
+
+1. Disconnect the previous number first (SurveyFlow allows one per owner).
+2. Answer **"It is in my WhatsApp Business app, and I keep using the app"**: the five limits are shown. Press **Connect with Facebook**.
+3. In the popup: log in, accept, **type the number of the Business app**. Meta should then show the business profile of that app and ask for a **QR code scan from inside the Business app** (and sends a WhatsApp message with a link to it). Scan it, choose the time zone, accept the terms, **Finish**. ◇ **Keep the Business app open on the phone.**
+4. Expected: "WhatsApp connected", **"Also in your WhatsApp Business app"**, then the import box moves from "Waiting…" to "Contacts received: N" within minutes, and to "Import finished" (or "You chose not to share your chat history", also fine). Open the app on the phone: it shows the number is connected to the business platform.
+5. **Contacts**: they appear in the "4 contacts came from…" box (with your real N). Confirm them only if the people agreed.
+6. **Both directions**: send a message from the Business app to a phone: it works as before. Then run a survey from SurveyFlow to that phone: it arrives from the same number. Reply: the answer reaches the dashboard.
+7. Write a message in the Business app, then reload Settings: **"App last used"** must show a time (the echo webhook arrived).
+8. **Disconnect from the phone**: Business app → Settings → Account → Business Platform → **Disconnect Account**. Within a minute SurveyFlow must show the red banner and send the e-mail (only with a real mail provider; in demo e-mail it is in the mock mailbox). Reconnect from the banner.
+
+**2C. What to send me back** (no secrets): for each step above the word **worked** or **did not**, with a screenshot of any Meta screen that differed from what is written here, the text of any red message, the **API window's last 50 lines** after each failed step (they hold no token), and the screenshot of **Settings → WhatsApp** after 2A.4 and after 2B.4. From them I fill in the Open check columns of WA-11 to WA-14.
+
+**What this does not prove even when green:** the volume limits (10 new customers per rolling 7 days, 20 messages per second for a coexistence number), Cameroon numbers other than yours, Tech Provider review (WA-02), and what happens 14 days later.
+
 ## What no script can do (still open after a green run)
 
 - **Tech Provider status**: business verification and app review (advanced access to `whatsapp_business_messaging` and `whatsapp_business_management`; ✔ seen 4 November on *Customize use case → Other tools → Permissions and features*: both are on the app with status **Ready for testing** (the first level, which works for people with a role on the app and for the test number), not yet approved for other businesses' data; the same page also lists `public_profile` (Ready for testing, granted to every app) and four not added: `business_management`, `email`, `manage_app_solution`, `whatsapp_business_manage_events`). It takes days to weeks and is a decision of Meta's, not a test. The new dashboard has a **Become a Tech Provider** card for it (✔ seen: "to submit to App Review and request access to user data and data from other businesses"); what it asks was not looked at.
-- **The Embedded Signup popup** in a browser, by a person who has a role on your Meta app (*App roles → Roles* and *Test users* are in the left menu ✔; a test app cannot onboard strangers).
+- **The Embedded Signup popup** (now v5, with coexistence; test plan above, Round 2) in a browser, by a person who has a role on your Meta app (*App roles → Roles* and *Test users* are in the left menu ✔; a test app cannot onboard strangers).
 - **A real inbound round trip**: tap "Start survey" on your phone and watch the survey begin in the dashboard (this exercises the signed webhook with a real Meta payload). **Delivery to the callback was seen unpublished for the app admin's own number (4 November)**, but the survey round trip itself has not been run: on a single test number it cannot be, see the next point. Whether people with no role on the app are delivered unpublished is untested.
 - Sending limits, throughput and quality-rating behaviour under real volume; Meta changing a template's category after approval.
 - **The Analytics Bot over real WhatsApp**: linking a phone (`LINK <code>` typed on the owner's own phone, answered from SurveyFlow's own number) and the `owner_alert` template (submitted to SurveyFlow's platform WhatsApp account, not to your customers'; it is not one of the 16 templates above and this script does not check it). Until Meta approves it, only in-window alerts go out (`DECISIONS.md` §3.5).

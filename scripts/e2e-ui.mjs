@@ -85,7 +85,8 @@ await step('onboarding 1/2: the customer segment is required and gates everythin
 });
 
 await step('onboarding 2/2: connect the simulated WhatsApp number, then go to the dashboard', async () => {
-  await page.getByRole('button', { name: /use a simulated number/i }).click();
+  await page.getByTestId('situation-new').click(); // the question before the Connect button (D-19)
+  await page.getByTestId('sim-new').click();
   await page.getByTestId('ob-connected').waitFor({ timeout: 15000 });
   await page.getByRole('button', { name: /go to dashboard/i }).click();
   await page.waitForURL(/\/dashboard/, { timeout: 15000 }); // (the plan query was dropped by the test's own detour through /dashboard)

@@ -19,6 +19,7 @@ export type AuditAction =
   | 'export' | 'export_blocked' | 'bulk_delete' | 'contact_reveal' | 'prize_draw_winner_shown'
   | 'bulk_read' | 'bulk_read_blocked' | 'sheets_autosync_confirmed' | 'sheets_autosync_paused'
   | 'account_export' | 'account_delete_requested' | 'account_delete_cancelled' | 'account_delete_postponed' | 'account_deleted'
+  | 'whatsapp_connected' | 'whatsapp_reconnected' | 'whatsapp_disconnected' | 'app_contacts_confirmed'
   | 'survey_sent' | 'template_recategorised' | 'payout_held' | 'reconciliation_alert'
   | 'staff_gift_resolved' | 'staff_payment_resolved' | 'staff_number_revealed' | 'support_action'
   | 'join_link_on' | 'join_link_off' | 'join_link_rotated' | 'join_link_changed' | 'overage_opt_in' | 'overage_opt_out' | 'overage_invoice' | 'team_invited' | 'team_invite_revoked' | 'team_member_joined' | 'team_role_changed' | 'team_member_removed' | 'team_member_left' | 'member_request' | 'member_denied';

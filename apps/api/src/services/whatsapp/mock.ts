@@ -56,4 +56,26 @@ export class MockGateway implements WhatsAppGateway {
   async getPhoneInfo(creds: WaCreds) {
     return { displayPhone: creds.phoneNumberId.startsWith('mock-') ? '+237 600 00 00 00 (simulated)' : '', verifiedName: 'Simulated number' };
   }
+
+  /** Simulated numbers whose id starts with `mock-app-` stand for a number that is in a WhatsApp Business app (Mireille); the others are new numbers (Armand). */
+  async getAppStatus(creds: WaCreds) {
+    if (!creds.phoneNumberId.startsWith('mock-')) return { isOnBizApp: null, platformType: null };
+    return { isOnBizApp: creds.phoneNumberId.startsWith('mock-app-'), platformType: 'CLOUD_API' };
+  }
+
+  async listPhoneNumbers() {
+    return [];
+  }
+
+  async registerPhone(creds: WaCreds, pin: string) {
+    mockCalls.push({ at: new Date().toISOString(), op: 'register', phoneNumberId: creds.phoneNumberId, detail: `pin:${pin.length}` });
+  }
+
+  async requestAppDataSync(creds: WaCreds, syncType: 'smb_app_state_sync' | 'history') {
+    mockCalls.push({ at: new Date().toISOString(), op: `sync:${syncType}`, phoneNumberId: creds.phoneNumberId });
+    return { requestId: `mock-req-${nanoid(6)}` };
+  }
 }
+
+/** What the mock was asked to do that has no chat to show (register, sync): the tests read it, the real Meta would have done it. */
+export const mockCalls: Array<{ at: string; op: string; phoneNumberId: string; detail?: string }> = [];

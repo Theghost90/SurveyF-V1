@@ -40,7 +40,7 @@ npx tsx --env-file=.env scripts/explore-cap-report.mts   # (BIZ-03) what the fir
 
 In demo mode (`WHATSAPP_MODE=mock`, `PSP_MOCK=true`, `GIFT_PROVIDER=mock`) nothing leaves your machine:
 
-* **Settings → WhatsApp → "Use a simulated number"** connects a fake number; the **Simulator** page (`/simulator`) plays the
+* **Settings → WhatsApp** first asks "Where is this phone number today?" (three answers), then **"Simulate a new number (Armand)"** or **"Simulate a number in the WhatsApp Business app (Mireille)"** connects a fake number of that kind (a coexistence number also gets a panel that plays what WhatsApp would send: contacts, history, the owner writing in the app, 14 days of inactivity, reconnected); the **Simulator** page (`/simulator`) plays the
   *participant's phone* against the real, signature-checked webhook code path — tap buttons, answer, skip 25 h to trigger
   abandonment.
 * **Sign-up asks for a confirmed e-mail address.** In demo mode nothing is sent: the "check your e-mail" page shows the message with a button (the mock mailbox: **any visitor of a shared demo can read any test mailbox, so never use a real address**).
@@ -56,7 +56,7 @@ For a production-like preview: `npm run build && npm start` (the API reads the r
 
 ## Going live (checklist)
 
-1. Postgres + Redis; `npx prisma migrate deploy --config apps/api/prisma.config.ts` (Prisma 7 reads its settings from that file; `apps/api/prisma/migrations`, sixteen: `init`, `gift_wallet`, `reminders_geo_segment`, `multicurrency_wallet`, `payments_notices`, `payments_reconcile`, `explore_activate`, `analytics_bot`, `analytics_alerts`, `security_hardening`, `read_caps_sheets_reconfirm`, `account_data_rights`, `message_category`, `payout_limits`, `reconciliation`, `team_members`; applied from scratch and diffed against the schema — no drift, checked 2026-10-28 on Prisma 7 with `prisma migrate diff`). Node 22.12 or newer on the host.
+1. Postgres + Redis; `npx prisma migrate deploy --config apps/api/prisma.config.ts` (Prisma 7 reads its settings from that file; `apps/api/prisma/migrations`, twenty: `init`, `gift_wallet`, `reminders_geo_segment`, `multicurrency_wallet`, `payments_notices`, `payments_reconcile`, `explore_activate`, `analytics_bot`, `analytics_alerts`, `security_hardening`, `read_caps_sheets_reconfirm`, `account_data_rights`, `message_category`, `payout_limits`, `reconciliation`, `team_members`, `join_links`, `cap_signals`, `proration_overage`, `embedded_signup_coexistence`; applied from scratch and diffed against the schema — no drift, checked 2026-10-28 on Prisma 7 with `prisma migrate diff`). Node 22.12 or newer on the host.
 2. Set **production** env: `NODE_ENV=production`, `JWT_SECRET`, `ENCRYPTION_KEYS` (`k1:` + `openssl rand -base64 32`), `BLIND_INDEX_KEY` (`openssl rand -base64 32`), `NEXTAUTH_SECRET`, `NEXTAUTH_URL` and `PUBLIC_WEB_URL` (both https),
    `EMAIL_PROVIDER` (`smtp`, `resend` or `brevo`) with its key and a verified `EMAIL_FROM`, `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY` (or `CAPTCHA_DISABLED=true`), and on the website `CLIENT_IP_HEADER` (e.g. `cf-connecting-ip`) or `TRUSTED_PROXY_HOPS`,
    `WHATSAPP_MODE=live`, `META_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, PSP keys, `GIFT_PROVIDER=campay`. **The API refuses to start**
@@ -67,7 +67,7 @@ For a production-like preview: `npm run build && npm start` (the API reads the r
    webhook, the PSP webhooks and receipt links; `PUBLIC_API_URL` must be the API's public **https** address (checked at startup); the site must sit behind a platform that sets a country header (Vercel, Cloudflare,
    CloudFront) or visitors are treated as Cameroon / FCFA; non-FCFA prices need the live rate source reachable (`FX_API_URL`, see `.env.example`); `PSP_FEES` / `CAMERPAY_PLAN` refine the provider ranking
    (documented fees are built in: `docs/DECISIONS.md` §3.3).
-3. Meta: point the app's webhook at `https://<api>/api/webhook/whatsapp`, subscribe to `messages`, `message_template_status_update` and `template_category_update`, configure Embedded Signup. **Run `scripts/meta-check.mts` first** (it runs the production gateway against your Meta test app and says what passes, what Meta rejects and what no script can cover): `docs/META_CHECK.md`.
+3. Meta: point the app's webhook at `https://<api>/api/webhook/whatsapp`, subscribe to `messages`, `message_template_status_update` and `template_category_update`, configure Embedded Signup (**v5**, always opted in to coexistence: also subscribe `account_update`, `history`, `smb_app_state_sync` and `smb_message_echoes`; the plan with simulated and then real numbers is `docs/META_CHECK.md`, "Embedded Signup and coexistence: test plan"). **Run `scripts/meta-check.mts` first** (it runs the production gateway against your Meta test app and says what passes, what Meta rejects and what no script can cover): `docs/META_CHECK.md`.
 4. Each PSP: sandbox pass first (see the table in `docs/DECISIONS.md` §4) — Campay and PayUnit especially. Register `https://<api>/api/payments/webhook/<psp>` in each provider's dashboard and set its webhook secret (the API warns at boot when one is missing and **refuses to start in production with no provider at all**). Keep the jobs process running (`RUN_JOBS=true`): the payment reconciliation job is what finds a payment whose webhook never came. Payments that need a person: `scripts/payments-review.mts` (`docs/PAYMENTS.md`).
 5. Replace the draft `/privacy` and `/terms` with counsel-approved text; set `NEXT_PUBLIC_SALES_WHATSAPP` for the agencies CTA.
 6. Deploy templates (untested here — no Docker daemon): `apps/api/Dockerfile`, `deploy/fly.api.toml`, `deploy/railway.json`, `apps/web/vercel.json`.
@@ -107,7 +107,7 @@ docs/META_CHECK.md  running the WhatsApp integration against a real Meta test ap
 ## Tests
 
 ```bash
-npm test                          # shared (108) + API (618) + website (39) tests, then the script tests (57) and the backlog check. Needs the local Postgres/Redis (`docker compose up -d`); the API tests use their own `surveyflow_test` database, which `npm test` creates and migrates by itself first (`npm run test:db`, `scripts/test-db.mjs`)
+npm test                          # shared (129) + API (645) + website (39) tests, then the script tests (57) and the backlog check. Needs the local Postgres/Redis (`docker compose up -d`); the API tests use their own `surveyflow_test` database, which `npm test` creates and migrates by itself first (`npm run test:db`, `scripts/test-db.mjs`)
 npm run typecheck                 # the three workspaces
 npm run audit:gate                # npm audit --omit=dev: fails on a high or critical advisory that is not written in docs/audit-allowlist.json with a reason and an end date
 npm run release:check             # typecheck + the website's lint + npm test + the audit gate: before every release
@@ -136,4 +136,4 @@ when it contradicts itself or the repository (a built row whose evidence is miss
 `POST surveys/:id/gifts/{retry,release}` · `GET wallet` · `POST wallet/topup` ·
 `GET surveys/:id/export/{pdf,excel}` · `POST|DELETE surveys/:id/sync/google-sheets` · `GET contacts` · `POST contacts[/import|/bulk-delete|/bulk-tag]` ·
 `GET|POST|PATCH|DELETE analytics-bot…` (link a phone, list, mute) · `GET surveys/:id/not-started[.csv]` · `GET|POST webhook/whatsapp` · `GET receipts/:token` (public PDF, delivered gifts only) · `GET pricing` (prices in the visitor's currency) · `POST payments/initiate` · `GET payments[/:id]` · `GET|POST payments/webhook/:psp` ·
-`GET subscription` · `PUT subscription/upgrade` · `POST subscription/{cancel,reactivate}` · `GET|POST whatsapp/{accounts…,embedded-signup,config}` · `GET integrations/google…`
+`GET subscription` · `PUT subscription/upgrade` · `POST subscription/{cancel,reactivate}` · `GET|POST whatsapp/{accounts…,embedded-signup,config,app-contacts/confirm,accounts/:id/{register,sync}}` (the `mock` and `mock-event` routes exist in demo mode only) · `GET integrations/google…`

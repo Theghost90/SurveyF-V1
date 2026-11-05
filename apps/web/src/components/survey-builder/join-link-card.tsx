@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
-import { Copy, Link2, RefreshCw } from 'lucide-react';
+import { Copy, Link2, MessageCircle, RefreshCw } from 'lucide-react';
+import { shareDeepLink, shareMessage } from '@surveyflow/shared';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +13,7 @@ import { dateShort } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/client';
 
 interface Join {
-  enabled: boolean; code: string | null; expiresAt: string | null; max: number | null; countries: string[]; gifts: boolean; giftMax: number | null;
+  title: string; lang: string; enabled: boolean; code: string | null; expiresAt: string | null; max: number | null; countries: string[]; gifts: boolean; giftMax: number | null;
   joined: number; completed: number; giftsGiven: number; link: string | null; qr: string | null; live: boolean;
 }
 
@@ -80,6 +81,17 @@ export function JoinLinkCard({ surveyId, hasGift }: { surveyId: string; hasGift:
                     <Input id="join-link" readOnly value={data.link} data-testid="join-link" onFocus={(e) => e.currentTarget.select()} />
                     <Button type="button" variant="outline" onClick={async () => { await navigator.clipboard?.writeText(data.link!).catch(() => undefined); setCopied(true); setTimeout(() => setCopied(false), 1500); }}><Copy className="h-4 w-4" aria-hidden />{copied ? t('jn.copied') : t('jn.copy')}</Button>
                   </div>
+                  {(() => {
+                    // WA-14: the easiest way to hand the survey out, from the owner's phone: WhatsApp's own picker with the message filled in, or the same text to paste.
+                    const msg = shareMessage(data.lang === 'en' ? 'en' : 'fr', data.title, data.link!);
+                    return (
+                      <div className="flex flex-wrap gap-2" data-testid="share-kit">
+                        <a href={shareDeepLink(msg)} target="_blank" rel="noopener noreferrer" data-testid="share-wa" className="inline-flex h-10 items-center gap-2 rounded-xl bg-leaf px-4 text-sm font-semibold text-white hover:opacity-90"><MessageCircle className="h-4 w-4" aria-hidden />{t('jn.share')}</a>
+                        <Button type="button" variant="outline" data-testid="share-copy" onClick={async () => { await navigator.clipboard?.writeText(msg).catch(() => undefined); toast.success(t('jn.copied')); }}><Copy className="h-4 w-4" aria-hidden />{t('jn.copyMsg')}</Button>
+                      </div>
+                    );
+                  })()}
+                  <p className="text-xs text-muted-foreground">{t('jn.shareHint')}</p>
                   <p className="text-sm text-muted-foreground">{data.expiresAt ? t('jn.expires', { date: dateShort(data.expiresAt, locale) }) : t('jn.never')} · {t('jn.stats', { joined: data.joined, completed: data.completed })}</p>
                 </div>
               </div>

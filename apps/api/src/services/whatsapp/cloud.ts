@@ -126,6 +126,30 @@ export class CloudApiGateway implements WhatsAppGateway {
     });
     return { displayPhone: r.display_phone_number ?? '', verifiedName: r.verified_name };
   }
+
+  async getAppStatus(creds: WaCreds) {
+    try {
+      const r = await this.call<{ is_on_biz_app?: boolean; platform_type?: string }>(creds.phoneNumberId, creds.accessToken, { query: { fields: 'is_on_biz_app,platform_type' } });
+      return { isOnBizApp: typeof r.is_on_biz_app === 'boolean' ? r.is_on_biz_app : null, platformType: r.platform_type ?? null };
+    } catch (err) {
+      if (err instanceof WaError && err.accountFault) throw err;
+      return { isOnBizApp: null, platformType: null }; // not said: the caller refuses to guess
+    }
+  }
+
+  async listPhoneNumbers(creds: WaCreds) {
+    const r = await this.call<{ data?: Array<{ id: string; display_phone_number?: string }> }>(`${creds.wabaId}/phone_numbers`, creds.accessToken, { query: { fields: 'id,display_phone_number', limit: '20' } });
+    return (r.data ?? []).map((p) => ({ id: p.id, displayPhone: p.display_phone_number ?? '' }));
+  }
+
+  async registerPhone(creds: WaCreds, pin: string) {
+    await this.call(`${creds.phoneNumberId}/register`, creds.accessToken, { method: 'POST', body: { messaging_product: 'whatsapp', pin } });
+  }
+
+  async requestAppDataSync(creds: WaCreds, syncType: 'smb_app_state_sync' | 'history') {
+    const r = await this.call<{ request_id?: string }>(`${creds.phoneNumberId}/smb_app_data`, creds.accessToken, { method: 'POST', body: { messaging_product: 'whatsapp', sync_type: syncType } });
+    return { requestId: r.request_id ?? null };
+  }
 }
 
 /** Exchanges the Embedded Signup code for a business token (server-side; needs the app secret). */

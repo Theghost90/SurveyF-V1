@@ -1,3 +1,4 @@
+import { disconnectExplanation } from '@surveyflow/shared';
 import { env } from '../../config/env';
 
 /**
@@ -10,7 +11,7 @@ export type MailKind =
   | 'verify_email' | 'register_existing' | 'reset_password' | 'password_changed' | 'new_device' | 'failed_logins'
   | 'export_alert' | 'bulk_delete_alert' | 'bulk_read_alert' | 'sheets_sync_paused' | 'two_factor_changed' | 'sessions_revoked' | 'link_google' | 'step_up_code'
   | 'deletion_requested' | 'deletion_cancelled' | 'account_deleted' | 'template_recategorised' | 'payouts_held' | 'reconciliation_alert'
-  | 'team_invite' | 'team_joined' | 'team_removed' | 'overage_warning' | 'overage_invoice' | 'jobs_late';
+  | 'team_invite' | 'team_joined' | 'team_removed' | 'overage_warning' | 'overage_invoice' | 'jobs_late' | 'whatsapp_disconnected';
 
 export interface MailParams {
   url?: string;
@@ -96,6 +97,13 @@ function build(kind: MailKind, lang: Lang, p: MailParams): Body {
       return fr
         ? { subject: 'Beaucoup de participants consultés sur votre compte', lines: [hi, `Les noms et réponses de plus de ${p.count} participants ont été affichés en 24 heures depuis votre compte (dernier accès le ${p.when}, depuis ${p.place}).`, 'C’est bien vous ? On vous demandera de confirmer que c’est vous pour continuer : aucune autre action n’est nécessaire.', notYou] }
         : { subject: 'A lot of participants were viewed on your account', lines: [hi, `The names and answers of more than ${p.count} participants were shown within 24 hours from your account (latest on ${p.when}, from ${p.place}).`, 'Was it you? You will be asked to confirm it is you to carry on: nothing else to do.', notYou] };
+    case 'whatsapp_disconnected': {
+      // WA-13: Meta cut the link with the owner's number. Our own wording per reason, never Meta's text; no number, no name of a participant.
+      const x = disconnectExplanation(p.what, p.from, lang);
+      return fr
+        ? { subject: 'Votre numéro WhatsApp n’est plus connecté à SurveyFlow', lines: [hi, `${x.why}`, x.fix, 'Tant que le numéro est déconnecté, aucun sondage ne part et aucune invitation n’est envoyée : elles seraient refusées.'], button: { label: 'Reconnecter mon numéro', url: p.url ?? `${env.webBaseUrl}/settings?tab=whatsapp` } }
+        : { subject: 'Your WhatsApp number is no longer connected to SurveyFlow', lines: [hi, `${x.why}`, x.fix, 'While the number is disconnected no survey goes out and no invitation is sent: they would be refused.'], button: { label: 'Reconnect my number', url: p.url ?? `${env.webBaseUrl}/settings?tab=whatsapp` } };
+    }
     case 'sheets_sync_paused':
       return fr
         ? { subject: 'La synchronisation Google Sheets est en pause', lines: [hi, `La synchronisation automatique vers Google Sheets de « ${p.what} » est en pause : elle doit être confirmée de nouveau tous les ${p.count} jours. Les nouvelles réponses attendent, rien n’est perdu.`, `Pour reprendre : ouvrez l’export du sondage et confirmez : ${p.url ?? settingsUrl()}`], foot: 'Si vous ne reconnaissez pas cette synchronisation, déconnectez Google dans Paramètres, Intégrations.' }

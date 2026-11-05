@@ -56,4 +56,16 @@ describe('the e-mails about participant data (SEC-20) and the confirmation step 
     expect(renderMail('verify_email', 'en', { url: 'https://app.example/verify-email?token=t' }).text).toMatch(/password you chose/);
     expect(renderMail('verify_email', 'fr', { url: 'https://app.example/verify-email?token=t' }).text).toMatch(/mot de passe choisi/);
   });
+
+  it('the disconnected-number e-mail names the cause in our words, never Meta’s code, in both languages', () => {
+    for (const lang of ['en', 'fr'] as const) {
+      for (const reason of ['PRIMARY_INACTIVITY', 'COMPANION_INACTIVITY', 'USER_RE_REGISTERED', 'CHANGE_NUMBER', 'BUSINESS_DOWNGRADE', 'ACCOUNT_DISCONNECTED', 'OFFBOARDED', 'SOMETHING_NEW']) {
+        const m = renderMail('whatsapp_disconnected', lang, { name: 'Mireille', what: reason, from: 'SYSTEM', url: 'https://app.example/settings?tab=whatsapp' });
+        expect(m.text, reason).not.toContain(reason);
+        expect(m.text).toContain('https://app.example/settings?tab=whatsapp');
+        expect(m.subject.length).toBeGreaterThan(10);
+      }
+      expect(renderMail('whatsapp_disconnected', lang, { what: 'PRIMARY_INACTIVITY' }).text).toMatch(/14/);
+    }
+  });
 });

@@ -114,7 +114,7 @@ function SettingsTabs() {
           <TabsTrigger value="security">{t('s.security')}</TabsTrigger><TabsTrigger value="team">{t('tm.tab')}</TabsTrigger><TabsTrigger value="data">{t('dt.tab')}</TabsTrigger>
         </TabsList>
         <TabsContent value="profile"><Profile /></TabsContent>
-        <TabsContent value="whatsapp"><Card><CardHeader><CardTitle>{t('w.title')}</CardTitle></CardHeader><CardContent><WhatsAppConnect /></CardContent></Card></TabsContent>
+        <TabsContent value="whatsapp"><Card><CardHeader><CardTitle>{t('wc.title')}</CardTitle></CardHeader><CardContent><WhatsAppConnect /></CardContent></Card></TabsContent>
         <TabsContent value="analytics"><AnalyticsBotCard /></TabsContent>
         <TabsContent value="integrations"><Integrations /></TabsContent>
         <TabsContent value="security"><SecurityTab /></TabsContent>

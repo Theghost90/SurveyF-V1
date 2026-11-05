@@ -51,6 +51,14 @@ export interface WhatsAppGateway {
   listTemplates(creds: WaCreds): Promise<RemoteTemplate[]>;
   subscribeApp(creds: WaCreds): Promise<void>;
   getPhoneInfo(creds: WaCreds): Promise<{ displayPhone: string; verifiedName?: string }>;
+  /** WA-11: is this number in the owner's WhatsApp Business app as well (`is_on_biz_app`)? Nulls when Meta did not say: the caller must not guess. */
+  getAppStatus(creds: WaCreds): Promise<{ isOnBizApp: boolean | null; platformType: string | null }>;
+  /** WA-11: the numbers of a Messaging account (used when the browser event carried no phone number id, as in the v3/v4 coexistence event). */
+  listPhoneNumbers(creds: WaCreds): Promise<Array<{ id: string; displayPhone: string }>>;
+  /** WA-11: standard (cloud) onboarding only. Never for a coexistence number: Meta says the number is already registered. */
+  registerPhone(creds: WaCreds, pin: string): Promise<void>;
+  /** WA-12: asks Meta to send the owner's contacts (`smb_app_state_sync`) or chat history (`history`) as webhooks. Meta allows each once per onboarding. */
+  requestAppDataSync(creds: WaCreds, syncType: 'smb_app_state_sync' | 'history'): Promise<{ requestId: string | null }>;
 }
 
 let instance: WhatsAppGateway | null = null;

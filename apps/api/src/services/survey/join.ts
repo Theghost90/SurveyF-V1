@@ -37,7 +37,7 @@ export async function getJoin(userId: string, surveyId: string) {
   const giftsGiven = joinedIds.length ? await prisma.giftDelivery.count({ where: { surveyId, contactId: { in: joinedIds } } }) : 0;
   const link = s.joinCode && account?.displayPhone ? joinLink(account.displayPhone, s.joinCode) : null;
   return {
-    enabled: s.joinEnabled, code: s.joinCode, expiresAt: s.joinExpiresAt, max: s.joinMax, countries: s.joinCountries, gifts: s.joinGifts, giftMax: s.joinGiftMax,
+    title: s.title, lang: s.language, enabled: s.joinEnabled, code: s.joinCode, expiresAt: s.joinExpiresAt, max: s.joinMax, countries: s.joinCountries, gifts: s.joinGifts, giftMax: s.joinGiftMax,
     joined, completed, giftsGiven,
     link,
     qr: link ? await QRCode.toDataURL(link, { margin: 1, width: 280, errorCorrectionLevel: 'M' }) : null,

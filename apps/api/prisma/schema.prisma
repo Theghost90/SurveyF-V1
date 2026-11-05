@@ -129,8 +129,8 @@ model User {
   // ADDED (DAT-01, law 2024/017 s.38-43): the owner asked for the account to be erased. Nothing is deleted until deletionScheduledFor (30 days later); signing in and
   // cancelling is possible until then. While it is set the account only reads: surveys are paused and every change except cancelling and downloading is refused.
   // ADDED (PAY-09): the owner agreed to be invoiced for responses beyond the plan. Off until they say so.
-  overageOptIn   Boolean   @default(false)
-  overageOptInAt DateTime?
+  overageOptIn         Boolean   @default(false)
+  overageOptInAt       DateTime?
   deletionRequestedAt  DateTime?
   deletionScheduledFor DateTime?
 
@@ -166,6 +166,23 @@ model WhatsAppAccount {
   accessToken   String // AES-256-GCM ciphertext (see lib/crypto.ts) — never plaintext
   status        String   @default("active") // active | error | disconnected
   createdAt     DateTime @default(now())
+
+  // WA-11..WA-13 (D-19): how the number is connected. `cloud` = Cloud API only (a number that never had WhatsApp, or one the owner moved);
+  // `coexistence` = the number is in the owner's WhatsApp Business app AND the Cloud API. Read from Meta (`is_on_biz_app`) after Finish, never from the browser.
+  mode              String    @default("cloud") // cloud | coexistence
+  declaredSituation String? // what the owner said before the Connect button: new | business_app | personal_app (explains and warns, never routes)
+  signupVersion     String? // the Embedded Signup version the launch used (v5), null for numbers connected by hand
+  registeredAt      DateTime? // standard (cloud) onboarding only: when /register succeeded; coexistence skips it (the number is already registered)
+  registerPin       String? // AES-256-GCM ciphertext of the six-digit PIN used at /register (cloud mode)
+  syncState         String    @default("none") // coexistence only: none | pending | partial | done | declined | failed
+  syncStartedAt     DateTime?
+  contactsReceived  Int       @default(0)
+  historyProgress   Int? // Meta's own 0..100
+  historyThreads    Int       @default(0) // chat threads Meta reported: counted, no message is read or kept
+  lastAppActivityAt DateTime? // last smb_message_echoes: the owner is still using the WhatsApp Business app
+  disconnectReason  String? // Meta's PARTNER_REMOVED reason (e.g. PRIMARY_INACTIVITY)
+  disconnectedBy    String? // USER | SYSTEM
+  disconnectedAt    DateTime?
 
   user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   templates MessageTemplate[]
@@ -462,23 +479,23 @@ model PaymentTransaction {
   createdAt      DateTime          @default(now())
 
   // ADDED
-  userId        String
-  reference     String    @unique // our internal id sent to the PSP
-  purpose       String    @default("subscription") // subscription | gift_topup
-  plan          Plan? // null for gift top-ups
-  interval      String    @default("monthly")
-  method        String // mobile_money | card | bank_transfer
-  phone         String?
-  checkoutUrl   String?
-  paidAt        DateTime?
-  failReason    String?
+  userId              String
+  reference           String    @unique // our internal id sent to the PSP
+  purpose             String    @default("subscription") // subscription | gift_topup
+  plan                Plan? // null for gift top-ups
+  interval            String    @default("monthly")
+  method              String // mobile_money | card | bank_transfer
+  phone               String?
+  checkoutUrl         String?
+  paidAt              DateTime?
+  failReason          String?
   // ADDED (multi-currency): the plan / top-up value in CFA francs at initiation, and the live rate used (null for CFA payments).
-  amountXAF     Int?
-  fxRate        Float?
+  amountXAF           Int?
+  fxRate              Float?
   // ADDED (reconciliation): when the provider was last asked about this payment, and every provider we tried to start it at
   // ([{psp, at, ok, ambiguous?, error?}]) — the trail an operator needs when "did the customer pay?" is the question.
-  lastCheckedAt DateTime?
-  attempts      Json?
+  lastCheckedAt       DateTime?
+  attempts            Json?
   // ADDED (PAY-12): the credit for the unused days of the plan this payment replaces, in CFA francs, and what it was taken from. The amount above is already net of it.
   // If the subscription is no longer that one when the payment lands, the credit would be spent twice: the payment goes to review instead of being applied.
   creditFCFA          Int       @default(0)
@@ -871,19 +888,19 @@ model CapSignal {
 // owner paying it themselves: Mobile Money has no card on file to debit, so an invoice is a request with a pay button, not a withdrawal. `period` is the start of the subscription
 // period it covers, so a period can never be invoiced twice.
 model OverageInvoice {
-  id          String    @id @default(cuid())
-  userId      String
-  period      String // ISO date of the period start
-  plan        String
-  allowance   Int
-  responses   Int
-  units       Int // blocks of 100 beyond the allowance
-  amountFCFA  Int
-  status      String    @default("open") // open | paid | void
-  dueAt       DateTime
-  paidAt      DateTime?
-  noticeAt    DateTime? // the invoice e-mail went out
-  createdAt   DateTime  @default(now())
+  id         String    @id @default(cuid())
+  userId     String
+  period     String // ISO date of the period start
+  plan       String
+  allowance  Int
+  responses  Int
+  units      Int // blocks of 100 beyond the allowance
+  amountFCFA Int
+  status     String    @default("open") // open | paid | void
+  dueAt      DateTime
+  paidAt     DateTime?
+  noticeAt   DateTime? // the invoice e-mail went out
+  createdAt  DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

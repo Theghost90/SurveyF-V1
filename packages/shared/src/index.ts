@@ -14,3 +14,4 @@ export * from './web-guard';
 export * from './join';
 export * from './proration';
 export * from './billing-slices';
+export * from './embedded-signup';
