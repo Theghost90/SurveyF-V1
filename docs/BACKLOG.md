@@ -21,6 +21,7 @@ Newest first.
 <!-- backlog:table changelog -->
 | Date | Level | Change |
 | --- | --- | --- |
+| 2026-11-05 | critical | On your word (D-17), four Must rows leave Must because the first public version has no gifts or wallet (D-14): PAY-01, PAY-04 and PAY-08a become Deferred (Won't this release); PAY-05 becomes Should, because the same rate source converts the displayed prices for visitors abroad. Must is now 29 rows, 12 of them not built. |
 | 2026-11-05 | critical | On your word: LEG-03 (Must) becomes Deferred and leaves Must, because the first public version has no gift and no prepaid-wallet features (D-14); a new section H lists every row they touch; BIZ-02 (Must) is decided and moves from "Your action" to "Built, check open" (D-15: light PDF for Starter, designed PDF for Growth and Business, not built); the admin backend follows the customer features (D-16). `docs/PUBLIC_PROFILE.md` follows: discount codes, prize draws, receipts and the join-link gift ceiling are off in `public` too. |
 | 2026-11-04 | major | Three new rows, all not built, on your word (D-13): WA-08 (warn owners about Meta's payment-method rule; accounts Meta marks exempt are not warned), WA-09 (detect and explain a stop in delivery), WA-10 (an estimate of what Meta billed, from its own status messages). They follow from Meta's pricing of 1 October 2026 (`docs/META_PRICING.md`), under which the first 1,000 service messages a month per number are free and delivery stops after that without a payment method. Classes Should, Should, Could are my proposal. |
 | 2026-11-04 | minor | New `docs/META_PRICING.md`, from Meta's pricing page and rate PDF (effective 1 October 2026) that you supplied: the rules, the rates for the markets SurveyFlow lists (Rest of Africa, which includes Cameroon, Nigeria, South Africa), worked costs per survey and per plan, and what is not known. Wrong statements corrected in code comments and `DECISIONS.md` (free-form messages are no longer free beyond 1,000 a month per number, and stop being delivered without a payment method once that is used). No behaviour changed. The product changes it suggests (a warning about the payment method, detecting a stop in delivery, reading Meta's billing data from the status webhooks) are proposals, not rows. |
@@ -54,20 +55,20 @@ Newest first.
 
 | | ✅ Built | ⬜ Not built | Total |
 |---|---|---|---|
-| Must | 17 | 16 | 33 |
-| Should | 12 | 9 | 21 |
+| Must | 17 | 12 | 29 |
+| Should | 12 | 10 | 22 |
 | Could | 9 | 8 | 17 |
-| Won't this release | 0 | 9 | 9 |
+| Won't this release | 0 | 12 | 12 |
 | **All** | **38** | **42** | **80** |
 
 Each ID in the grid carries its state: ✅ built · ⚠️ built, a check is open · ⬜ not built · 🧑 your action, no code · ⏸ deferred by you · 🔭 next version.
 
 | | Smaller | Small | Big | Bigger |
 |---|---|---|---|---|
-| **MUST** (33) | ⚠️ SEC-07, ⚠️ DAT-02, ⚠️ BIZ-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⚠️ WA-01, ⚠️ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⚠️ WA-03, ⚠️ PAY-02, ⚠️ PAY-07, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
-| **SHOULD** (21) | ✅ SEC-10, ⚠️ SEC-11, ✅ SEC-14, ⬜ PAY-06, ⬜ WA-08 | ⚠️ SEC-13, ✅ WA-06, ⚠️ BIZ-03, 🧑 LEG-05, 🧑 OPS-04 | ✅ SEC-06b, ✅ SEC-09, ✅ SEC-12, ✅ SEC-17, ⚠️ WA-05, ⚠️ PAY-09, ⬜ ADM-03, ⬜ ADM-04, ⬜ WA-09, ⬜ LEG-02b, ⬜ PAY-08b | none |
+| **MUST** (29) | ⚠️ SEC-07, ⚠️ DAT-02, ⚠️ BIZ-02, 🧑 OPS-03, 🧑 BIZ-01 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⚠️ WA-01, ⚠️ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⚠️ WA-03, ⚠️ PAY-02, ⚠️ PAY-07, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, ⬜ PAY-03, 🧑 WA-02 |
+| **SHOULD** (22) | ✅ SEC-10, ⚠️ SEC-11, ✅ SEC-14, ⬜ PAY-06, ⬜ WA-08, ⬜ PAY-05 | ⚠️ SEC-13, ✅ WA-06, ⚠️ BIZ-03, 🧑 LEG-05, 🧑 OPS-04 | ✅ SEC-06b, ✅ SEC-09, ✅ SEC-12, ✅ SEC-17, ⚠️ WA-05, ⚠️ PAY-09, ⬜ ADM-03, ⬜ ADM-04, ⬜ WA-09, ⬜ LEG-02b, ⬜ PAY-08b | none |
 | **COULD** (17) | ✅ FUT-05, ✅ SEC-18, ✅ DSN-02 | ✅ SEC-19, ✅ SEC-20 | ⚠️ PAY-12, ⚠️ OPS-05, ⬜ WA-07, ⬜ WA-10, ⬜ DSN-01, ⬜ ADM-06 | ⚠️ BIZ-04, ✅ SEC-15, ⬜ BIZ-05, ⬜ BIZ-06, ⬜ ADM-05, ⬜ PAY-11 |
-| **WON'T THIS RELEASE** (9) | none | ⏸ DEF-01, ⏸ DEF-02 | 🔭 FUT-03 | ⏸ DEF-03, ⏸ DEF-04, ⏸ LEG-03, 🔭 FUT-01, 🔭 FUT-02, 🔭 FUT-04 |
+| **WON'T THIS RELEASE** (12) | ⏸ PAY-01 | ⏸ DEF-01, ⏸ DEF-02, ⏸ PAY-08a | 🔭 FUT-03 | ⏸ DEF-03, ⏸ DEF-04, ⏸ LEG-03, ⏸ PAY-04, 🔭 FUT-01, 🔭 FUT-02, 🔭 FUT-04 |
 <!-- backlog:summary:end -->
 
 ## A. Built
@@ -148,11 +149,8 @@ Counsel, a payment provider, Meta, the host, Google, or an action or decision of
 | LEG-01 | Privacy Policy and Terms from counsel (the facts sheet `docs/LEGAL_FACTS_SHEET.md` was updated 2026-11-02, and the draft pages `/privacy` and `/terms` now describe what the product does, still marked unreviewed: counsel's text replaces them) | Must | Bigger | 🧑 Your action | Counsel, You | ⚖ |
 | LEG-02 | Consent responsibility text (retention moved to LEG-02b, D-02): a draft with the questions only counsel can answer is in `docs/legal/DRAFT_Consent_Responsibility.md` | Must | Small | 🧑 Your action | Counsel | ⚖ |
 | LEG-04 | Data-processing agreement, cross-border clauses (D-02, was Should) | Must | Small | 🧑 Your action | Counsel | ⚖ |
-| PAY-01 | Real gift fee from the actual tariffs, card versus Mobile Money | Must | Smaller | ⬜ Not built | Provider | 📄 Campay |
 | PAY-03 | Sandbox pass for every collection provider, webhook signing included | Must | Bigger | ⬜ Not built | Provider | 📄 each provider |
-| PAY-04 | Verify the Campay gift payout path (airtime and Mobile Money) | Must | Bigger | ⬜ Not built | Provider | 📄 Campay |
-| PAY-05 | Confirm the live exchange-rate source and its terms | Must | Smaller | ⬜ Not built | Provider | 📄 rate source |
-| PAY-08a | Refund policy for unspent wallet balance (terms, no code) | Must | Small | 🧑 Your action | Counsel | ⚖ |
+| PAY-05 | Confirm the live exchange-rate source and its terms (Should since D-17: the payout and wallet use is out of the first public version, the display of prices in other currencies stays) | Should | Smaller | ⬜ Not built | Provider | 📄 rate source |
 | WA-02 | Meta Tech Provider approval | Must | Bigger | 🧑 Your action | Meta, You | 📄 ⚖ |
 | WA-04 | Submit the templates (owner_alert included), number registration (PIN); after WA-02 | Must | Small | 🧑 Your action | Meta, You | 📄 Meta |
 | OPS-01 | Production deploy test and a staging site | Must | Big | ⬜ Not built | Host, You | 📄 host |
@@ -177,6 +175,9 @@ Deferred by you (⏸) or left for the next version (🔭).
 | DEF-03 | Selling outside Cameroon (D-04) | Won't | Bigger | ⏸ Deferred by you | ⚖ 📄 |
 | DEF-04 | Gift payout rail for Nigeria, Kenya and Ghana (D-04) | Won't | Bigger | ⏸ Deferred by you | 📄 |
 | LEG-03 | Is the prepaid wallet regulated as e-money? Not asked for the first public version, which has no gift and no wallet features (D-14); counsel's answer is needed before they return | Won't | Bigger | ⏸ Deferred by you | ⚖ 📄 |
+| PAY-01 | Real gift fee from the actual tariffs, card versus Mobile Money. Not needed for the first public version, which has no gifts (D-14, D-17) | Won't | Smaller | ⏸ Deferred by you | 📄 Campay |
+| PAY-04 | Verify the Campay gift payout path (airtime and Mobile Money). Not needed for the first public version, which has no gifts or payouts (D-14, D-17) | Won't | Bigger | ⏸ Deferred by you | 📄 Campay |
+| PAY-08a | Refund policy for unspent wallet balance (terms, no code). Not needed for the first public version, which has no wallet (D-14, D-17) | Won't | Small | ⏸ Deferred by you | ⚖ |
 | FUT-01 | Builder Bot | Won't | Bigger | 🔭 Next version | none |
 | FUT-02 | WhatsApp Flows | Won't | Bigger | 🔭 Next version | none |
 | FUT-03 | Per-segment features | Won't | Big | 🔭 Next version | none |
@@ -300,6 +301,7 @@ Your decisions that rows cite. A row that is deferred, or that changed its MoSCo
 | D-14 | 2026-11-05 | The first public version has no gift and no prepaid-wallet features (gift automation, discount codes, prize draws, receipts, wallet top-up and balance, payouts, and the rows of section H). They are built and tested in `full`, and return only after counsel and the licence question are settled. LEG-03 therefore moves from "Your action" to Deferred, Won't this release. | "for the launch all the features related to gift and prepaid wallet features won't be part of the first version" |
 | D-15 | 2026-11-05 | BIZ-02: Starter includes PDF and Excel; the Starter PDF is light, without rich data or design; Growth and Business get a high-quality designed PDF and more. | "Starter includes PDF (but the quality of the PDF content must be light, with no rich data or design. quality of the PDF content in growth and Business tiers deserve high quality design and more) and Excel" |
 | D-16 | 2026-11-05 | The admin backend (ADM-01 to ADM-06) is built after all the features for SurveyFlow's customers are built and tested. It stays required for a public launch (D-03, D-08). | "We'll build all the ADM features once we'll done with all the features for the surveyflow customers and tested it." |
+| D-17 | 2026-11-05 | PAY-01, PAY-04 and PAY-08a leave Must and become Deferred (Won't this release): they exist only for gifts, payouts and the wallet, which the first public version does not have (D-14). PAY-05 leaves Must and becomes Should: its payout and wallet use is out, but the same rate source converts the displayed prices for visitors abroad. They stay in section H and in the `full` profile. | "move those four out of Must and tell me where you put them" |
 
 ## F. Open questions for you
 

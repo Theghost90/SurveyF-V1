@@ -636,3 +636,4 @@ Holding owners' money for them (the wallet) may need an e-money licence and payi
 
 Starter includes PDF and Excel. The Starter PDF is light (no rich data, no designed layout); Growth and Business get a high-quality designed PDF and more. Today every paid plan gets the same single PDF; the two levels are not built and need your word to become a backlog row.
 
+**Follow-up (D-17, 2026-11-05):** because of this, PAY-01, PAY-04 and PAY-08a are deferred and PAY-05 is a Should; the Must items that still gate the first public version are the legal texts (LEG-01, LEG-02, LEG-04), Meta (WA-02, WA-04), the providers' sandbox pass (PAY-03), the host and its backups (OPS-01, OPS-02), the support address (OPS-03), the plan-card claims (BIZ-01) and the admin backend (ADM-01, ADM-02).
