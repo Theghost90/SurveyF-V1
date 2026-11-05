@@ -176,3 +176,9 @@ The two `owner_alert` templates (French and English), which the connect step sub
 - **A platform notice was delivered.** "SurveyFlow: payment received. Your growth plan is active." (4 November, 22:38), sent from the platform number after a subscription paid with the mock payment provider, arrived on the owner's phone (inside the 24-hour window the owner had opened).
 - **Analytics on WhatsApp is off until `WHATSAPP_PLATFORM_PHONE` is set.** In live mode the page shows "not available on this deployment yet" while that variable is blank (the digits of SurveyFlow's number, for the test number `15551708350`).
 
+## The Analytics Bot on the real platform number (✔ 5 November, partly)
+
+With `WHATSAPP_PLATFORM_PHONE=15551708350` set, Settings → Analytics on WhatsApp showed a link code (`LINK KB69G4HP`, once, 15 minutes). Sent from the owner's own phone to the test number it was answered at once: "This phone is now linked to Business Name 1. Send STATS for your numbers, or HELP for all commands." `Help` returned the **SurveyFlow Analytics** list message, and its **Commands** list opened on the phone with: STATS, RESULTS, DROP, NONRESP, STARTED, COMPLETED, SURVEYS, MUTE, ALERTS ON, UNLINK. The owner's plan was Growth (paid with the mock provider).
+
+**Not yet run on the real number:** the commands themselves (STATS and the others), MUTE and UNLINK, and **`owner_alert` outside the 24-hour window**. The latter cannot be reached by use at this scale: the smallest milestone alert is 100 completed responses, and the slowdown alert needs at least 10 completed responses and 48 hours without a new one.
+
