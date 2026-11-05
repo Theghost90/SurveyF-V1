@@ -127,7 +127,7 @@ export function SubscriptionPage({ initialPlan, initialInterval }: { initialPlan
               {(data.upgradeCredit?.[key]?.[interval] ?? 0) > 0 && <p className="-mt-2 rounded-lg bg-mint/50 px-3 py-2 text-sm font-medium text-ink" data-testid="plan-credit">{t('pr.credit', { amount: money(data.upgradeCredit[key][interval], price.currency, locale) })}</p>}
               <Button size="lg" variant={featured ? 'brand' : 'default'} disabled={lower} onClick={() => setCheckout(key)}>{current ? t('bill.renew') : lower ? t('bill.lower') : t('bill.select')}</Button>
               <ul className="flex flex-col gap-2 text-sm">
-                {planFeatures(key, t, locale).map((f) => <li key={f.text} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-leaf" strokeWidth={2.6} aria-hidden /><span>{f.text}{f.soon && <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">{t('pricing.soon')}</span>}</span></li>)}
+                {planFeatures(key, t, locale).map((f) => <li key={f.text} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-leaf" strokeWidth={2.6} aria-hidden /><span>{f.text}</span></li>)}
               </ul>
             </Card>
           );

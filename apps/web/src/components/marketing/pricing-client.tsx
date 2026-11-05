@@ -33,7 +33,7 @@ function responsesToPos(r: number): number {
 export function planFeatures(plan: PaidPlanKey, t: TFn, locale: 'en' | 'fr') {
   const p = PLANS[plan];
   const n = (v: number) => formatFCFA(v, locale);
-  const list: Array<{ text: string; soon?: boolean }> = [
+  const list: Array<{ text: string }> = [
     { text: p.limits.activeSurveys === null ? t('feat.surveysUnlimited') : t('feat.surveys', { n: p.limits.activeSurveys }) },
     { text: t('feat.responses', { n: n(p.limits.responsesPerMonth) }) },
     { text: t('feat.messages', { n: n(p.limits.messagesPerMonth) }) },
@@ -43,8 +43,6 @@ export function planFeatures(plan: PaidPlanKey, t: TFn, locale: 'en' | 'fr') {
   if (p.features.googleSheets) list.push({ text: t('feat.sheets') });
   if (p.features.prioritySupport) list.push({ text: t('feat.support') });
   if (p.limits.teamMembers > 1) list.push({ text: t('feat.team', { n: p.limits.teamMembers }) });
-  if (p.features.apiAccess) list.push({ text: t('feat.api'), soon: true });
-  if (p.features.whiteLabel) list.push({ text: t('feat.whitelabel'), soon: true });
   return list;
 }
 
@@ -141,7 +139,7 @@ export function PricingClient({ pricing, initial = 1200 }: { pricing: PricingDat
                   {planFeatures(key, t, locale).map((f) => (
                     <li key={f.text} className="flex items-start gap-2.5">
                       <Check className="mt-0.5 h-[18px] w-[18px] shrink-0 text-brand" strokeWidth={2.6} aria-hidden />
-                      <span>{f.text}{f.soon && <span className={cn('ml-2 rounded-full px-2 py-0.5 text-[11px] font-bold', active ? 'bg-ink-3 text-brand-3' : 'bg-muted text-muted-foreground')}>{t('pricing.soon')}</span>}</span>
+                      <span>{f.text}</span>
                     </li>
                   ))}
                 </ul>

@@ -39,9 +39,7 @@ export interface PlanFeatures {
   googleSheets: boolean;
   /** airtime / mobile money / discount code / prize draw automation */
   giftAutomation: boolean;
-  apiAccess: boolean;
   prioritySupport: boolean;
-  whiteLabel: boolean;
   /** Analytics on WhatsApp: the owner asks the SurveyFlow number for STATS, DROP, NONRESP… Paid plans only (Explore sees it in the simulator). */
   analyticsBot: boolean;
 }
@@ -63,30 +61,27 @@ export const PLANS: Record<PlanKey, PlanDef> = {
     priceFCFA: 0,
     limits: { activeSurveys: 1, responsesPerMonth: 5, messagesPerMonth: 25, teamMembers: 1, recipients: 5 },
     // No gift automation: airtime/MoMo gifts are real money, and a free tier that can pay out is a farming vector.
-    features: { exports: true, googleSheets: false, giftAutomation: false, apiAccess: false, prioritySupport: false, whiteLabel: false, analyticsBot: false },
+    features: { exports: true, googleSheets: false, giftAutomation: false, prioritySupport: false, analyticsBot: false },
   },
   starter: {
     key: 'starter',
     priceFCFA: 14_500,
     limits: { activeSurveys: 3, responsesPerMonth: 500, messagesPerMonth: 1_000, teamMembers: 1, recipients: null },
-    features: { exports: true, googleSheets: false, giftAutomation: false, apiAccess: false, prioritySupport: false, whiteLabel: false, analyticsBot: true },
+    features: { exports: true, googleSheets: false, giftAutomation: false, prioritySupport: false, analyticsBot: true },
   },
   growth: {
     key: 'growth',
     priceFCFA: 39_000,
     limits: { activeSurveys: 15, responsesPerMonth: 3_000, messagesPerMonth: 7_000, teamMembers: 3, recipients: null },
-    features: { exports: true, googleSheets: true, giftAutomation: true, apiAccess: false, prioritySupport: true, whiteLabel: false, analyticsBot: true },
+    features: { exports: true, googleSheets: true, giftAutomation: true, prioritySupport: true, analyticsBot: true },
   },
   business: {
     key: 'business',
     priceFCFA: 95_000,
     limits: { activeSurveys: null, responsesPerMonth: 15_000, messagesPerMonth: 30_000, teamMembers: 10, recipients: null },
-    features: { exports: true, googleSheets: true, giftAutomation: true, apiAccess: true, prioritySupport: true, whiteLabel: true, analyticsBot: true },
+    features: { exports: true, googleSheets: true, giftAutomation: true, prioritySupport: true, analyticsBot: true },
   },
 };
-
-/** Entitlements that are sold on the plan table but not built in V1. Shown as "Coming soon". */
-export const COMING_SOON: Array<keyof PlanFeatures | 'teamMembers'> = ['apiAccess', 'whiteLabel']; // team members are built (BIZ-04): the seats of a plan include the owner
 
 export const PAST_DUE_GRACE_DAYS = 3;
 /** Annual billing = 11 × monthly ("1 month free"). */

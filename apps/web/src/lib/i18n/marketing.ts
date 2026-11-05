@@ -115,7 +115,6 @@ export const en = {
   'pricing.monthly': 'Monthly',
   'pricing.annual': 'Annual · 1 month free',
   'pricing.billing': 'Billing',
-  'pricing.soon': 'soon',
   'pricing.overage': 'Beyond your monthly responses: {amount} per extra 100. WhatsApp messages are the invitations and reminders you send.',
   'pricing.includes': 'Every plan includes',
   'pricing.inc1': 'Your own WhatsApp Business number',
@@ -141,8 +140,6 @@ export const en = {
   'feat.gifts': 'Gift automation (airtime, MoMo, codes, draws)',
   'feat.noGifts': 'Thank-you message after completion',
   'feat.support': 'Priority support',
-  'feat.api': 'API access',
-  'feat.whitelabel': 'White-label (your branding)',
   'feat.everything': 'Everything in {plan}',
 } as const;
 
@@ -263,7 +260,6 @@ export const fr: Record<keyof typeof en, string> = {
   'pricing.monthly': 'Mensuel',
   'pricing.annual': 'Annuel · 1 mois offert',
   'pricing.billing': 'Facturation',
-  'pricing.soon': 'bientôt',
   'pricing.overage': 'Au-delà de vos réponses mensuelles : {amount} par tranche de 100. Les messages WhatsApp sont les invitations et relances que vous envoyez.',
   'pricing.includes': 'Inclus dans chaque forfait',
   'pricing.inc1': 'Votre propre numéro WhatsApp Business',
@@ -289,7 +285,5 @@ export const fr: Record<keyof typeof en, string> = {
   'feat.gifts': 'Cadeaux automatiques (crédit, MoMo, codes, tirage)',
   'feat.noGifts': 'Message de remerciement en fin de sondage',
   'feat.support': 'Support prioritaire',
-  'feat.api': 'Accès API',
-  'feat.whitelabel': 'Marque blanche (votre identité)',
   'feat.everything': 'Tout ce qu’il y a dans {plan}',
 };

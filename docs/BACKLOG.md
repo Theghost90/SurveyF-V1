@@ -21,6 +21,7 @@ Newest first.
 <!-- backlog:table changelog -->
 | Date | Level | Change |
 | --- | --- | --- |
+| 2026-11-05 | critical | On your word (D-18): the "soon" claims for API access and white-label are removed from the pricing page, the billing page, the copy and the plans table; BIZ-01 (Must) is done and moves to Built; BIZ-05 and BIZ-06 move from Could to Next version (Won't this release, second release). |
 | 2026-11-05 | critical | On your word (D-17), four Must rows leave Must because the first public version has no gifts or wallet (D-14): PAY-01, PAY-04 and PAY-08a become Deferred (Won't this release); PAY-05 becomes Should, because the same rate source converts the displayed prices for visitors abroad. Must is now 29 rows, 12 of them not built. |
 | 2026-11-05 | critical | On your word: LEG-03 (Must) becomes Deferred and leaves Must, because the first public version has no gift and no prepaid-wallet features (D-14); a new section H lists every row they touch; BIZ-02 (Must) is decided and moves from "Your action" to "Built, check open" (D-15: light PDF for Starter, designed PDF for Growth and Business, not built); the admin backend follows the customer features (D-16). `docs/PUBLIC_PROFILE.md` follows: discount codes, prize draws, receipts and the join-link gift ceiling are off in `public` too. |
 | 2026-11-04 | major | Three new rows, all not built, on your word (D-13): WA-08 (warn owners about Meta's payment-method rule; accounts Meta marks exempt are not warned), WA-09 (detect and explain a stop in delivery), WA-10 (an estimate of what Meta billed, from its own status messages). They follow from Meta's pricing of 1 October 2026 (`docs/META_PRICING.md`), under which the first 1,000 service messages a month per number are free and delivery stops after that without a payment method. Classes Should, Should, Could are my proposal. |
@@ -51,24 +52,24 @@ Newest first.
 ## At a glance
 
 <!-- backlog:summary:start -->
-**80 rows: 38 built, 42 not built.** Of the built ones, 18 still have a check open against a real service or device.
+**80 rows: 39 built, 41 not built.** Of the built ones, 18 still have a check open against a real service or device.
 
 | | ✅ Built | ⬜ Not built | Total |
 |---|---|---|---|
-| Must | 17 | 12 | 29 |
+| Must | 18 | 11 | 29 |
 | Should | 12 | 10 | 22 |
-| Could | 9 | 8 | 17 |
-| Won't this release | 0 | 12 | 12 |
-| **All** | **38** | **42** | **80** |
+| Could | 9 | 6 | 15 |
+| Won't this release | 0 | 14 | 14 |
+| **All** | **39** | **41** | **80** |
 
 Each ID in the grid carries its state: ✅ built · ⚠️ built, a check is open · ⬜ not built · 🧑 your action, no code · ⏸ deferred by you · 🔭 next version.
 
 | | Smaller | Small | Big | Bigger |
 |---|---|---|---|---|
-| **MUST** (29) | ⚠️ SEC-07, ⚠️ DAT-02, ⚠️ BIZ-02, 🧑 OPS-03, 🧑 BIZ-01 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⚠️ WA-01, ⚠️ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⚠️ WA-03, ⚠️ PAY-02, ⚠️ PAY-07, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, ⬜ PAY-03, 🧑 WA-02 |
+| **MUST** (29) | ⚠️ SEC-07, ⚠️ DAT-02, ⚠️ BIZ-02, ✅ BIZ-01, 🧑 OPS-03 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⚠️ WA-01, ⚠️ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⚠️ WA-03, ⚠️ PAY-02, ⚠️ PAY-07, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, ⬜ PAY-03, 🧑 WA-02 |
 | **SHOULD** (22) | ✅ SEC-10, ⚠️ SEC-11, ✅ SEC-14, ⬜ PAY-06, ⬜ WA-08, ⬜ PAY-05 | ⚠️ SEC-13, ✅ WA-06, ⚠️ BIZ-03, 🧑 LEG-05, 🧑 OPS-04 | ✅ SEC-06b, ✅ SEC-09, ✅ SEC-12, ✅ SEC-17, ⚠️ WA-05, ⚠️ PAY-09, ⬜ ADM-03, ⬜ ADM-04, ⬜ WA-09, ⬜ LEG-02b, ⬜ PAY-08b | none |
-| **COULD** (17) | ✅ FUT-05, ✅ SEC-18, ✅ DSN-02 | ✅ SEC-19, ✅ SEC-20 | ⚠️ PAY-12, ⚠️ OPS-05, ⬜ WA-07, ⬜ WA-10, ⬜ DSN-01, ⬜ ADM-06 | ⚠️ BIZ-04, ✅ SEC-15, ⬜ BIZ-05, ⬜ BIZ-06, ⬜ ADM-05, ⬜ PAY-11 |
-| **WON'T THIS RELEASE** (12) | ⏸ PAY-01 | ⏸ DEF-01, ⏸ DEF-02, ⏸ PAY-08a | 🔭 FUT-03 | ⏸ DEF-03, ⏸ DEF-04, ⏸ LEG-03, ⏸ PAY-04, 🔭 FUT-01, 🔭 FUT-02, 🔭 FUT-04 |
+| **COULD** (15) | ✅ FUT-05, ✅ SEC-18, ✅ DSN-02 | ✅ SEC-19, ✅ SEC-20 | ⚠️ PAY-12, ⚠️ OPS-05, ⬜ WA-07, ⬜ WA-10, ⬜ DSN-01, ⬜ ADM-06 | ⚠️ BIZ-04, ✅ SEC-15, ⬜ ADM-05, ⬜ PAY-11 |
+| **WON'T THIS RELEASE** (14) | ⏸ PAY-01 | ⏸ DEF-01, ⏸ DEF-02, ⏸ PAY-08a | 🔭 FUT-03 | ⏸ DEF-03, ⏸ DEF-04, ⏸ LEG-03, ⏸ PAY-04, 🔭 FUT-01, 🔭 FUT-02, 🔭 FUT-04, 🔭 BIZ-05, 🔭 BIZ-06 |
 <!-- backlog:summary:end -->
 
 ## A. Built
@@ -101,6 +102,7 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 | SEC-12 | Forced owner filter and a test of every route (finding 12) | Should | Big | ✅ Built | `apps/api/tests/security-isolation.test.ts` | Limit: Postgres row-level security is not built; the guard is the owner filter plus the all-routes test | none |
 | BIZ-04 | Team members (built 2026-10-31 on your instruction, D-10): viewer and editor, no admin role, seats from the plan | Could | Bigger | ⚠️ Built, check open | `apps/api/tests/team.test.ts`, `apps/api/src/services/team/access.ts`, `apps/web/tests/proxy-workspace.test.ts`, `apps/api/prisma/migrations/20261031040000_team_members`, `scripts/e2e-new.mjs` | The Team tab, the accept page and member mode were driven in a real browser on 2026-10-31 (`scripts/e2e-new.mjs`), the workspace switcher in the account menu was not clicked. The invitation e-mail has not gone through a real provider (SEC-01). An editor sees participants' names and can send: the trail is evidence, not a barrier | ⚖ |
 | BIZ-02 | Starter includes PDF and Excel (decided 2026-11-05, D-15): a light PDF for Starter, a high-quality designed PDF and more for Growth and Business | Must | Smaller | ⚠️ Built, check open | `packages/shared/src/plans.ts` | The plans table already gives PDF and Excel to every paid plan, with one PDF design. NOT built: the light Starter PDF and the richer designed PDF of Growth and Business (D-15); proposed as a new row, waiting for your word | none |
+| BIZ-01 | The two "soon" claims on the Business card, API access and white-label, are removed from the plan cards, the billing page and the plans table (decided 2026-11-05, D-18) | Must | Smaller | ✅ Built | `packages/shared/src/plans.ts`, `apps/web/src/components/marketing/pricing-client.tsx`, `apps/web/src/lib/i18n/marketing.ts` | — | ⚖ claims |
 | FUT-05 | The analytics funnel as a Recharts funnel chart (built 2026-10-31 on your instruction, D-10, which moves it from Won't to Could) | Could | Smaller | ✅ Built | `apps/web/tests/funnel.test.ts`, `apps/web/src/components/analytics/funnel-view.tsx`, `scripts/e2e-ui.mjs` | Limit: a Recharts funnel narrows each slice towards the next step's value, so the shape of a slice is not its count (the count is written in the slice, and the plain bars are one click away) | none |
 | SEC-13 | Security headers and a nonce-based CSP (finding 15) | Should | Small | ⚠️ Built, check open | `apps/api/tests/security-ops.test.ts`, `apps/web/src/lib/csp.ts`, `scripts/e2e-security.mjs` | Seen behind a local TLS proxy (HSTS, a fresh nonce per page, `__Host-` cookies, zero CSP violations in the browser run); the Turnstile widget under the CSP and a real CDN are not: `preflight --only headers --url <your site>`, `npm run share` is a real Cloudflare edge | none |
 | SEC-14 | Search terms and credentials out of the logs (finding 14) | Should | Smaller | ✅ Built | `apps/api/tests/security-ops.test.ts` | — | none |
@@ -133,8 +135,6 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 | WA-08 | Know before it happens: warn owners about Meta's payment-method rule (service messages stop being delivered once the free 1,000 a month per number are used and the account has no payment method) at connection and as the month's count nears 800; do not warn an account Meta marks as exempt (`service_pricing_policy`, governments and non-profits). Proposed after Meta's 1 October 2026 pricing, see `docs/META_PRICING.md` (D-13) | Should | Smaller | ⬜ Not built | Code | none |
 | WA-09 | Know when it happens: detect that Meta is not delivering an owner's messages (repeated failures with the same cause, such as a missing payment method, an expired token or a sending limit), show a banner and e-mail the owner the likely cause and the fix, and stop queueing invitations that would only fail. Needs WA-08's counter; the exact errors Meta returns are not known and must be seen on a real account (D-13) | Should | Big | ⬜ Not built | Code, Meta | 📄 Meta |
 | WA-10 | Know what it cost: read the category and billable flag Meta puts in each delivery-status message and show the owner an estimate per survey (using the published rates in `docs/META_PRICING.md`), and whether Meta billed a category other than the one declared. An estimate, never the invoice (D-13) | Could | Big | ⬜ Not built | Code, Meta | 📄 Meta |
-| BIZ-05 | API access | Could | Bigger | ⬜ Not built | Code | ⚖ |
-| BIZ-06 | White-label | Could | Bigger | ⬜ Not built | Code | ⚖ |
 | DSN-01 | Dark theme and Storybook (the token export was split out as DSN-02 and is built; a dark theme means turning 81 hard-coded whites and hundreds of fixed colours into tokens and looking at every screen, and Storybook adds about 600 packages to the audit gate: neither was done half-way) | Could | Big | ⬜ Not built | Code | none |
 | ADM-05 | Support impersonation ("view as customer"); needs ADM-01 and ADM-02 (D-08) | Could | Bigger | ⬜ Not built | Code | ⚖ |
 | ADM-06 | Content and config management; needs ADM-01 (D-08) | Could | Big | ⬜ Not built | Code | ⚖ |
@@ -156,7 +156,6 @@ Counsel, a payment provider, Meta, the host, Google, or an action or decision of
 | OPS-01 | Production deploy test and a staging site | Must | Big | ⬜ Not built | Host, You | 📄 host |
 | OPS-02 | Backups with a restore test, monitoring, error tracking | Must | Big | ⬜ Not built | Host, Code | 📄 host |
 | OPS-03 | Published support contact address only, no uptime or incident promise (D-02) | Must | Smaller | 🧑 Your action | You | ⚖ light |
-| BIZ-01 | Decide the "soon" claims on the plan cards | Must | Smaller | 🧑 Your action | You | ⚖ claims |
 | LEG-02b | Enforced retention deletion (split from LEG-02, D-02). Partly done: sessions, links, audit rows and unconfirmed accounts are purged. Must if counsel says the law requires it at launch | Should | Big | ⬜ Not built | Code, Counsel | ⚖ |
 | LEG-05 | Google OAuth verification, `drive.file` scope (Must if Sheets ships) | Should | Small | 🧑 Your action | Google, You | 📄 Google |
 | PAY-08b | Mechanism to refund or withdraw unspent balance | Should | Big | ⬜ Not built | Code, Counsel | ⚖ 📄 |
@@ -182,6 +181,8 @@ Deferred by you (⏸) or left for the next version (🔭).
 | FUT-02 | WhatsApp Flows | Won't | Bigger | 🔭 Next version | none |
 | FUT-03 | Per-segment features | Won't | Big | 🔭 Next version | none |
 | FUT-04 | Survey branching, loyalty points, charity donations, voucher APIs | Won't | Bigger | 🔭 Next version | none |
+| BIZ-05 | API access: second release, removed from the plan cards (D-18). When built, its flag and card line return | Won't | Bigger | 🔭 Next version | ⚖ |
+| BIZ-06 | White-label: second release, removed from the plan cards (D-18). When built, its flag and card line return | Won't | Bigger | 🔭 Next version | ⚖ |
 
 ## D. Risks and containment
 
@@ -302,6 +303,7 @@ Your decisions that rows cite. A row that is deferred, or that changed its MoSCo
 | D-15 | 2026-11-05 | BIZ-02: Starter includes PDF and Excel; the Starter PDF is light, without rich data or design; Growth and Business get a high-quality designed PDF and more. | "Starter includes PDF (but the quality of the PDF content must be light, with no rich data or design. quality of the PDF content in growth and Business tiers deserve high quality design and more) and Excel" |
 | D-16 | 2026-11-05 | The admin backend (ADM-01 to ADM-06) is built after all the features for SurveyFlow's customers are built and tested. It stays required for a public launch (D-03, D-08). | "We'll build all the ADM features once we'll done with all the features for the surveyflow customers and tested it." |
 | D-17 | 2026-11-05 | PAY-01, PAY-04 and PAY-08a leave Must and become Deferred (Won't this release): they exist only for gifts, payouts and the wallet, which the first public version does not have (D-14). PAY-05 leaves Must and becomes Should: its payout and wallet use is out, but the same rate source converts the displayed prices for visitors abroad. They stay in section H and in the `full` profile. | "move those four out of Must and tell me where you put them" |
+| D-18 | 2026-11-05 | The two "soon" claims on the Business card, API access and white-label, are removed from the plan cards, the billing page and the plans table; BIZ-05 and BIZ-06 move to Next version (second release). BIZ-01 is done by removing them. | "remove them and tell me where to put them as I will want to build them in the second release" |
 
 ## F. Open questions for you
 

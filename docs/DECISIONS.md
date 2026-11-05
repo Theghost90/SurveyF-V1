@@ -611,7 +611,7 @@ its network policy blocks these hosts. Treat each as "needs a sandbox pass":
 
 ## 5. Not built in V1 (❌)
 
-API access and white-label (sold on the plan table, shown as **"soon"**; team members are built, §3.15) · Builder Bot (the Analytics Bot **is** built, §3.5) ·
+API access and white-label (removed from the plan table and the cards on 2026-11-05, D-18, planned for the second release as BIZ-05 and BIZ-06; team members are built, §3.15) · Builder Bot (the Analytics Bot **is** built, §3.5) ·
 daily summary e-mail and "50% completed" WhatsApp alert (shown disabled) · WhatsApp Flows · per-segment features (§3.3) · a wallet holding more than one currency (the wallet is fixed to one currency by the first top-up, §3.3) ·
 automated overage billing · proration on plan changes (an upgrade starts a new period; downgrade = cancel and re-subscribe) ·
 the funnel uses accessible CSS bars rather than a Recharts `FunnelChart` (per-question charts use Recharts).

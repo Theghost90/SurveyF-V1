@@ -30,7 +30,7 @@ Where did you hesitate or get lost? What was unclear, slow, ugly, or broken? Wha
 
 ## Good to know
 
-- Not built yet (shown as "soon" or disabled): team members, API access, white label, daily summary e-mail and "50 %" alerts. Deleting your account and downloading all your data are not built yet either.
+- Not built yet: the daily summary e-mail and the "50 %" alert. API access and white-label are not sold and not shown (second release). Team members, deleting your account and downloading your data are built.
 - The WhatsApp side is played by the Simulator only; the real WhatsApp connection has not been tested yet.
 - The test data may be erased at any time. The address stops working when the host switches the test off.
 - Please do **not** enter real personal data, real customers' numbers, a real e-mail address or password you use elsewhere, or real payment details.
