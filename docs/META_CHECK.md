@@ -201,3 +201,10 @@ Remarks found while reading the screens (1, 3 and 4 fixed on 5 November, see bel
 
 **Fixed on 5 November (owner's word):** (1) `RESULTS` now names tied options as a tie (\"Tied for top: Speakers · 100 % (1/1), Food · 100 % (1/1)\", up to three and a count of the rest; French \"Ex æquo en tête\"); (3) a question's skips are shown (\"→ no answers yet · 1 skipped\"; French \"ignorée\"); (4) the survey list says \"survey 1, the first in this list (active surveys come first)\" instead of calling it the most recent active one. Tested in `packages/shared/src/analytics-bot.test.ts`.
 
+## A participant whose number is not registered in Meta (5 November, 21:05 local)
+
+A third person, on a French number (`+33 7 80 82 31 28`, WhatsApp name \"J'\", country FR), neither a role on the app nor on the test number's allowed list, sent `JOIN <code>` to the test number. Two things were seen:
+
+- **`meta-check --to 33780823128` failed on all five sends with Meta error 131030** (\"Recipient phone number not in allowed list\"), the invitation template included. A Meta **test number can message only the people added and verified in the app dashboard** (up to five). Templates do not get round it. The checks that do not send (token, number, account, subscription, templates 16 of 16 APPROVED, webhook) passed as before. This is how the test number behaves, not a defect: it cannot invite strangers, so a real number is needed for that.
+- **The inbound message reached Meta's webhook log** (field `messages`, 21:05:57, `wa_id` 33780823128, a `user_id` of the form `FR.…`, `country_code` FR, `account_context_type` `non_paid_messaging`) and the participant's phone showed two ticks. **No reply came back to the participant.** Whether the event also reached the SurveyFlow API (a `POST /api/webhook/whatsapp` in the API terminal) was not shown. Why no reply is expected in either case: the test number is the platform number (`WHATSAPP_PHONE_NUMBER_ID`), so a `JOIN` sent to it is read as an unlinked owner and answered by the Analytics Bot, and any reply to a number that is not on the allowed list fails with 131030.
+
