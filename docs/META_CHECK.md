@@ -182,3 +182,20 @@ With `WHATSAPP_PLATFORM_PHONE=15551708350` set, Settings → Analytics on WhatsA
 
 **Not yet run on the real number:** the commands themselves (STATS and the others), MUTE and UNLINK, and **`owner_alert` outside the 24-hour window**. The latter cannot be reached by use at this scale: the smallest milestone alert is 100 completed responses, and the slowdown alert needs at least 10 completed responses and 48 hours without a new one.
 
+### The bot's commands on the real number (✔ 5 November, 20:25 to 20:30)
+
+Run from the owner's linked phone against the test number, on the "Event feedback" survey (1 completed response, which the dashboard shows too):
+
+| Command | What came back | Matches the dashboard |
+|---|---|---|
+| `HELP` | the list message with the **Commands** button | n/a |
+| `SURVEYS` | "1. Event feedback · closed · 1/1" and the hint to send `STATS 2` | yes |
+| `STATS 2` | "There is no survey 2. Send SURVEYS to see your list." | the error path is right |
+| `STATS 1` | invitations sent 1, started 1, completed 1, in progress 0, abandoned 0, no reply 0, declined 0, completion rate 100 % | yes |
+| `RESULTS` | Q1 average 5 (1 answer); Q2 "Top: Speakers · 100 % (1/1)"; Q3 "no answers yet"; a button **Open in SurveyFlow** | see the two remarks below |
+| `COMPLETED` | "1. Djousse Candice · +237 6XX XXX 298" (number masked, 12-digit form) | yes |
+
+Not yet run on the real number: `DROP`, `NONRESP`, `STARTED`, `MUTE`, `ALERTS ON`, `UNLINK`, and the **Open in SurveyFlow** button.
+
+Remarks found while reading the screens (not fixed): (1) **`RESULTS` shows only one "Top" choice when options tie.** The code takes the first of the options sorted by count (`packages/shared/src/analytics-bot.ts`), so the owner's two ticked options (Speakers and Food, one answer each) are shown as "Top: Speakers · 100 %" and Food is not mentioned. (2) **"Open in SurveyFlow" points at `PUBLIC_WEB_URL`, or `http://localhost:4222` when it is not set,** which a phone cannot open; it will work on the staging site (OPS-01). (3) The dashboard counts "1 skipped" for Q3 and the bot says "no answers yet": the skip is not shown. (4) `SURVEYS` says "I use survey 1, your most recent active survey" while survey 1 is closed.
+
