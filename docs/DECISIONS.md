@@ -628,3 +628,11 @@ Seen on a real phone, an optional question ended with a line of its own, "Reply 
 
 Two limits, on purpose: (1) an **optional** question is never described as required or needed, because that would be untrue and would take away a choice the participant has; (2) a question that really must be answered is marked **required** in the builder, which already removes the skip option completely, and that, not the wording, is the lever that guarantees an answer. A copy change cannot promise a 90/10 split; the analytics page shows how many people skipped each question, so the real rate can be read after a few surveys.
 
+### The first public version has no gifts and no prepaid wallet (D-14, 2026-11-05)
+
+Holding owners' money for them (the wallet) may need an e-money licence and paying participants out of it a payment licence or a licensed partner (LEG-03). You decided that the first public version contains none of it: no gift automation (airtime, Mobile Money, discount codes, prize draws), no receipts of gifts, no wallet top-up, balance or payouts. All of it stays in the code and is built and tested in the `full` profile, where the pilot and staging run. The list of rows it touches is section H of `docs/BACKLOG.md`; the switch list is `docs/PUBLIC_PROFILE.md`, which still waits for your "yes" to one codebase with two profiles, so nothing is switched off by code yet. Consequences: the reward-model question of that list is answered, counsel's opinion on the allowance model is not needed for the first version, and more surveys can qualify as utility because there is no reward attached.
+
+### Starter's exports and the PDF (D-15, 2026-11-05)
+
+Starter includes PDF and Excel. The Starter PDF is light (no rich data, no designed layout); Growth and Business get a high-quality designed PDF and more. Today every paid plan gets the same single PDF; the two levels are not built and need your word to become a backlog row.
+

@@ -21,6 +21,7 @@ Newest first.
 <!-- backlog:table changelog -->
 | Date | Level | Change |
 | --- | --- | --- |
+| 2026-11-05 | critical | On your word: LEG-03 (Must) becomes Deferred and leaves Must, because the first public version has no gift and no prepaid-wallet features (D-14); a new section H lists every row they touch; BIZ-02 (Must) is decided and moves from "Your action" to "Built, check open" (D-15: light PDF for Starter, designed PDF for Growth and Business, not built); the admin backend follows the customer features (D-16). `docs/PUBLIC_PROFILE.md` follows: discount codes, prize draws, receipts and the join-link gift ceiling are off in `public` too. |
 | 2026-11-04 | major | Three new rows, all not built, on your word (D-13): WA-08 (warn owners about Meta's payment-method rule; accounts Meta marks exempt are not warned), WA-09 (detect and explain a stop in delivery), WA-10 (an estimate of what Meta billed, from its own status messages). They follow from Meta's pricing of 1 October 2026 (`docs/META_PRICING.md`), under which the first 1,000 service messages a month per number are free and delivery stops after that without a payment method. Classes Should, Should, Could are my proposal. |
 | 2026-11-04 | minor | New `docs/META_PRICING.md`, from Meta's pricing page and rate PDF (effective 1 October 2026) that you supplied: the rules, the rates for the markets SurveyFlow lists (Rest of Africa, which includes Cameroon, Nigeria, South Africa), worked costs per survey and per plan, and what is not known. Wrong statements corrected in code comments and `DECISIONS.md` (free-form messages are no longer free beyond 1,000 a month per number, and stop being delivered without a payment method once that is used). No behaviour changed. The product changes it suggests (a warning about the payment method, detecting a stop in delivery, reading Meta's billing data from the status webhooks) are proposals, not rows. |
 | 2026-11-04 | critical | WA-01 (Must) is closed on your word (D-12): it moves from "Your action" to "Built, check open", with what the test app run did not cover written in its Open check column and pointing at WA-02 and at a test with a participant who is not the owner. The Open check texts of WA-03 and WA-05 now say what the real Meta run showed. |
@@ -49,24 +50,24 @@ Newest first.
 ## At a glance
 
 <!-- backlog:summary:start -->
-**80 rows: 37 built, 43 not built.** Of the built ones, 17 still have a check open against a real service or device.
+**80 rows: 38 built, 42 not built.** Of the built ones, 18 still have a check open against a real service or device.
 
 | | ✅ Built | ⬜ Not built | Total |
 |---|---|---|---|
-| Must | 16 | 18 | 34 |
+| Must | 17 | 16 | 33 |
 | Should | 12 | 9 | 21 |
 | Could | 9 | 8 | 17 |
-| Won't this release | 0 | 8 | 8 |
-| **All** | **37** | **43** | **80** |
+| Won't this release | 0 | 9 | 9 |
+| **All** | **38** | **42** | **80** |
 
 Each ID in the grid carries its state: ✅ built · ⚠️ built, a check is open · ⬜ not built · 🧑 your action, no code · ⏸ deferred by you · 🔭 next version.
 
 | | Smaller | Small | Big | Bigger |
 |---|---|---|---|---|
-| **MUST** (34) | ⚠️ SEC-07, ⚠️ DAT-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01, 🧑 BIZ-02 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⚠️ WA-01, ⚠️ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⚠️ WA-03, ⚠️ PAY-02, ⚠️ PAY-07, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, 🧑 LEG-03, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
+| **MUST** (33) | ⚠️ SEC-07, ⚠️ DAT-02, ⚠️ BIZ-02, ⬜ PAY-01, ⬜ PAY-05, 🧑 OPS-03, 🧑 BIZ-01 | ✅ SEC-02, ✅ SEC-03, ⚠️ SEC-04, ✅ SEC-05, ✅ SEC-06, ✅ SEC-08, ✅ SEC-16, ⚠️ WA-01, ⚠️ PAY-13, 🧑 LEG-02, 🧑 LEG-04, 🧑 PAY-08a, 🧑 WA-04 | ⚠️ SEC-01, ✅ DAT-01, ⚠️ WA-03, ⚠️ PAY-02, ⚠️ PAY-07, ⬜ ADM-01, ⬜ ADM-02, ⬜ OPS-01, ⬜ OPS-02 | 🧑 LEG-01, ⬜ PAY-03, ⬜ PAY-04, 🧑 WA-02 |
 | **SHOULD** (21) | ✅ SEC-10, ⚠️ SEC-11, ✅ SEC-14, ⬜ PAY-06, ⬜ WA-08 | ⚠️ SEC-13, ✅ WA-06, ⚠️ BIZ-03, 🧑 LEG-05, 🧑 OPS-04 | ✅ SEC-06b, ✅ SEC-09, ✅ SEC-12, ✅ SEC-17, ⚠️ WA-05, ⚠️ PAY-09, ⬜ ADM-03, ⬜ ADM-04, ⬜ WA-09, ⬜ LEG-02b, ⬜ PAY-08b | none |
 | **COULD** (17) | ✅ FUT-05, ✅ SEC-18, ✅ DSN-02 | ✅ SEC-19, ✅ SEC-20 | ⚠️ PAY-12, ⚠️ OPS-05, ⬜ WA-07, ⬜ WA-10, ⬜ DSN-01, ⬜ ADM-06 | ⚠️ BIZ-04, ✅ SEC-15, ⬜ BIZ-05, ⬜ BIZ-06, ⬜ ADM-05, ⬜ PAY-11 |
-| **WON'T THIS RELEASE** (8) | none | ⏸ DEF-01, ⏸ DEF-02 | 🔭 FUT-03 | ⏸ DEF-03, ⏸ DEF-04, 🔭 FUT-01, 🔭 FUT-02, 🔭 FUT-04 |
+| **WON'T THIS RELEASE** (9) | none | ⏸ DEF-01, ⏸ DEF-02 | 🔭 FUT-03 | ⏸ DEF-03, ⏸ DEF-04, ⏸ LEG-03, 🔭 FUT-01, 🔭 FUT-02, 🔭 FUT-04 |
 <!-- backlog:summary:end -->
 
 ## A. Built
@@ -98,6 +99,7 @@ Built means the code is in the repository and its tests pass. **⚠️ rows also
 | SEC-11 | argon2id passwords, no 72-byte truncation (findings 10 and 15) | Should | Smaller | ⚠️ Built, check open | `apps/api/tests/security-crypto.test.ts`, `apps/api/src/lib/password.ts` | Interoperates with the reference C implementation in both directions on Linux (`preflight --only argon2`); on the owner's Windows PC (win32-x64, Node 24.21.0, 2026-10-31) it hashes in 26 ms and verifies, wrong and non-ASCII passwords included. Still open: macOS (the lock carries its binaries, integrity matches), and the comparison with the reference implementation on Windows (Python's argon2-cffi was not installed there) | none |
 | SEC-12 | Forced owner filter and a test of every route (finding 12) | Should | Big | ✅ Built | `apps/api/tests/security-isolation.test.ts` | Limit: Postgres row-level security is not built; the guard is the owner filter plus the all-routes test | none |
 | BIZ-04 | Team members (built 2026-10-31 on your instruction, D-10): viewer and editor, no admin role, seats from the plan | Could | Bigger | ⚠️ Built, check open | `apps/api/tests/team.test.ts`, `apps/api/src/services/team/access.ts`, `apps/web/tests/proxy-workspace.test.ts`, `apps/api/prisma/migrations/20261031040000_team_members`, `scripts/e2e-new.mjs` | The Team tab, the accept page and member mode were driven in a real browser on 2026-10-31 (`scripts/e2e-new.mjs`), the workspace switcher in the account menu was not clicked. The invitation e-mail has not gone through a real provider (SEC-01). An editor sees participants' names and can send: the trail is evidence, not a barrier | ⚖ |
+| BIZ-02 | Starter includes PDF and Excel (decided 2026-11-05, D-15): a light PDF for Starter, a high-quality designed PDF and more for Growth and Business | Must | Smaller | ⚠️ Built, check open | `packages/shared/src/plans.ts` | The plans table already gives PDF and Excel to every paid plan, with one PDF design. NOT built: the light Starter PDF and the richer designed PDF of Growth and Business (D-15); proposed as a new row, waiting for your word | none |
 | FUT-05 | The analytics funnel as a Recharts funnel chart (built 2026-10-31 on your instruction, D-10, which moves it from Won't to Could) | Could | Smaller | ✅ Built | `apps/web/tests/funnel.test.ts`, `apps/web/src/components/analytics/funnel-view.tsx`, `scripts/e2e-ui.mjs` | Limit: a Recharts funnel narrows each slice towards the next step's value, so the shape of a slice is not its count (the count is written in the slice, and the plain bars are one click away) | none |
 | SEC-13 | Security headers and a nonce-based CSP (finding 15) | Should | Small | ⚠️ Built, check open | `apps/api/tests/security-ops.test.ts`, `apps/web/src/lib/csp.ts`, `scripts/e2e-security.mjs` | Seen behind a local TLS proxy (HSTS, a fresh nonce per page, `__Host-` cookies, zero CSP violations in the browser run); the Turnstile widget under the CSP and a real CDN are not: `preflight --only headers --url <your site>`, `npm run share` is a real Cloudflare edge | none |
 | SEC-14 | Search terms and credentials out of the logs (finding 14) | Should | Smaller | ✅ Built | `apps/api/tests/security-ops.test.ts` | — | none |
@@ -145,7 +147,6 @@ Counsel, a payment provider, Meta, the host, Google, or an action or decision of
 | --- | --- | --- | --- | --- | --- | --- |
 | LEG-01 | Privacy Policy and Terms from counsel (the facts sheet `docs/LEGAL_FACTS_SHEET.md` was updated 2026-11-02, and the draft pages `/privacy` and `/terms` now describe what the product does, still marked unreviewed: counsel's text replaces them) | Must | Bigger | 🧑 Your action | Counsel, You | ⚖ |
 | LEG-02 | Consent responsibility text (retention moved to LEG-02b, D-02): a draft with the questions only counsel can answer is in `docs/legal/DRAFT_Consent_Responsibility.md` | Must | Small | 🧑 Your action | Counsel | ⚖ |
-| LEG-03 | Is the prepaid wallet regulated as e-money? | Must | Bigger | 🧑 Your action | Counsel | ⚖ 📄 |
 | LEG-04 | Data-processing agreement, cross-border clauses (D-02, was Should) | Must | Small | 🧑 Your action | Counsel | ⚖ |
 | PAY-01 | Real gift fee from the actual tariffs, card versus Mobile Money | Must | Smaller | ⬜ Not built | Provider | 📄 Campay |
 | PAY-03 | Sandbox pass for every collection provider, webhook signing included | Must | Bigger | ⬜ Not built | Provider | 📄 each provider |
@@ -158,7 +159,6 @@ Counsel, a payment provider, Meta, the host, Google, or an action or decision of
 | OPS-02 | Backups with a restore test, monitoring, error tracking | Must | Big | ⬜ Not built | Host, Code | 📄 host |
 | OPS-03 | Published support contact address only, no uptime or incident promise (D-02) | Must | Smaller | 🧑 Your action | You | ⚖ light |
 | BIZ-01 | Decide the "soon" claims on the plan cards | Must | Smaller | 🧑 Your action | You | ⚖ claims |
-| BIZ-02 | Decide whether Starter includes PDF and Excel | Must | Smaller | 🧑 Your action | You | none |
 | LEG-02b | Enforced retention deletion (split from LEG-02, D-02). Partly done: sessions, links, audit rows and unconfirmed accounts are purged. Must if counsel says the law requires it at launch | Should | Big | ⬜ Not built | Code, Counsel | ⚖ |
 | LEG-05 | Google OAuth verification, `drive.file` scope (Must if Sheets ships) | Should | Small | 🧑 Your action | Google, You | 📄 Google |
 | PAY-08b | Mechanism to refund or withdraw unspent balance | Should | Big | ⬜ Not built | Code, Counsel | ⚖ 📄 |
@@ -176,6 +176,7 @@ Deferred by you (⏸) or left for the next version (🔭).
 | DEF-02 | Founding members, money-back guarantee, time-limited trial (D-04) | Won't | Small | ⏸ Deferred by you | ⚖ guarantee |
 | DEF-03 | Selling outside Cameroon (D-04) | Won't | Bigger | ⏸ Deferred by you | ⚖ 📄 |
 | DEF-04 | Gift payout rail for Nigeria, Kenya and Ghana (D-04) | Won't | Bigger | ⏸ Deferred by you | 📄 |
+| LEG-03 | Is the prepaid wallet regulated as e-money? Not asked for the first public version, which has no gift and no wallet features (D-14); counsel's answer is needed before they return | Won't | Bigger | ⏸ Deferred by you | ⚖ 📄 |
 | FUT-01 | Builder Bot | Won't | Bigger | 🔭 Next version | none |
 | FUT-02 | WhatsApp Flows | Won't | Bigger | 🔭 Next version | none |
 | FUT-03 | Per-segment features | Won't | Big | 🔭 Next version | none |
@@ -236,7 +237,7 @@ For every row: what it fixes, the risks it brings (with a label), and how they a
 | DSN-01 | No dark theme | UX: a dark theme half done reads worse than none. COST: Storybook adds about 600 packages to the audit gate | Not started: it needs every screen turned from fixed colours to tokens and looked at (the token export, DSN-02, is the first step and is built) |
 | LEG-02 | Unclear consent responsibility | DATA: consent proof is more personal data | Timestamp and owner only |
 | LEG-02b | Data kept longer than promised | DATA: irreversible deletion | A grace period, counsel sets the periods, a dry-run report first |
-| LEG-03 | Holding customer money without a licence | PAY: may force a licensed-partner redesign | Decide before any real top-up |
+| LEG-03 | Holding customer money without a licence | PAY: may force a licensed-partner redesign | No longer a gate for the first public version (D-14: no gifts, no wallet there); decide before any real top-up and before gifts return |
 | LEG-04 | No data-handling contract with customers | LEGAL: breach-notice duties | A short template reviewed by counsel |
 | LEG-05 | Google review delay | UX: `drive.file` changes how Sheets sync works | Switch scope, confirm with Google |
 | PAY-01 | A loss on every gift | UX/COST: a higher price may deter | The fee shown in the cost panel, separate card and Mobile Money fees |
@@ -296,6 +297,9 @@ Your decisions that rows cite. A row that is deferred, or that changed its MoSCo
 | D-11 | 2026-11-02 | WA-06, BIZ-03, DSN-01, LEG-01, LEG-02, PAY-09, WA-05, PAY-12 and OPS-05 are to be built, with the containment in section D. Where an item cannot be completed by code (LEG-01, LEG-02 are counsel's; DSN-01's dark theme and Storybook were not done), the row says so. WA-05 waits for "your four answers", which were not in the conversation: the defaults used are (1) anyone with the link may join, the number being proven by WhatsApp itself; (2) the link ends after 30 days unless the owner sets another end, and has no maximum unless set; (3) people who join get no gift unless the owner switches it on; (4) no country limit unless the owner lists countries. | "Build the following: WA-06, BIZ-03, DSN-01, LEG-01, LEG-02, PAY-09, WA-05, PAY-12, OPS-05 and update everything and/or all the docs" |
 | D-12 | 2026-11-04 | WA-01 is closed: the check ran against the Meta test app and its result is recorded in `docs/META_CHECK.md`. It moves from "Your action" to "Built, check open" because what it did not cover is named in its Open check column and belongs to WA-02 (Embedded Signup, Tech Provider status) and to a test with a participant who is not the owner. | "Yes, close WA-01." |
 | D-13 | 2026-11-04 | WA-08, WA-09 and WA-10 are added as proposals, not built, after Meta's pricing of 1 October 2026 (`docs/META_PRICING.md`): WA-08 warns owners about the payment-method rule and does not warn accounts Meta marks exempt (the exemption check is folded into it, not a row of its own); WA-09 detects and explains a stop in delivery; WA-10 reads Meta's billing data from the status messages. Order: WA-08 and WA-09 first, WA-10 after. The classes (Should, Should, Could) are mine and yours to change. | "Yes add them." |
+| D-14 | 2026-11-05 | The first public version has no gift and no prepaid-wallet features (gift automation, discount codes, prize draws, receipts, wallet top-up and balance, payouts, and the rows of section H). They are built and tested in `full`, and return only after counsel and the licence question are settled. LEG-03 therefore moves from "Your action" to Deferred, Won't this release. | "for the launch all the features related to gift and prepaid wallet features won't be part of the first version" |
+| D-15 | 2026-11-05 | BIZ-02: Starter includes PDF and Excel; the Starter PDF is light, without rich data or design; Growth and Business get a high-quality designed PDF and more. | "Starter includes PDF (but the quality of the PDF content must be light, with no rich data or design. quality of the PDF content in growth and Business tiers deserve high quality design and more) and Excel" |
+| D-16 | 2026-11-05 | The admin backend (ADM-01 to ADM-06) is built after all the features for SurveyFlow's customers are built and tested. It stays required for a public launch (D-03, D-08). | "We'll build all the ADM features once we'll done with all the features for the surveyflow customers and tested it." |
 
 ## F. Open questions for you
 
@@ -331,3 +335,29 @@ For SurveyFlow staff: money operations, customer support, analytics, maintenance
 **Mechanics.** The requester of a sensitive action cannot approve it. Personal data is masked by default, and revealing it needs a reason and is logged. Elevated access is time-boxed. Every record access is checked, not just every route.
 
 **Dependencies.** The admin backend delivers PAY-07, the screen of PAY-02, the handling side of DAT-01 and the data for BIZ-03. It needs the audit log (SEC-08, included in ADM-01), staff 2FA (included in ADM-01), revocable sessions (SEC-03) and, helpfully, a tested owner filter (SEC-12).
+
+## H. Gift and prepaid-wallet features: built for testing, not in the first public version
+
+Holding other people's money for them (the wallet) may need an e-money licence, and paying people out of it may need a payment-institution licence or a licensed partner. You decided (D-14) that the first public version has none of this. Everything stays in the code and is built and tested in the `full` profile; how the `public` profile switches it off is the proposal in `docs/PUBLIC_PROFILE.md`, which still waits for your "yes" (nothing is switched off by code yet).
+
+| ID | Item | Why a licence or counsel is involved | In `full` (tests, pilot) | First public version | Needed before it returns |
+| --- | --- | --- | --- | --- | --- |
+| core | Gift automation (airtime, Mobile Money, discount codes, prize draws), the gift wallet (top-up, balance, debit), receipts | stored value; payouts; lotteries | built | off | the decisions below |
+| LEG-03 | Is the prepaid wallet regulated as e-money? | the licence question itself | Deferred (D-14) | not asked | counsel's written answer |
+| PAY-01 | Real gift fee from the actual tariffs | the payout provider's price | built with an assumed fee | off | Campay's tariffs |
+| PAY-04 | Verify the Campay gift payout path | money transmission | not verified live | off | sandbox, then a live pass |
+| PAY-05 | Live exchange rate: payout conversion and the wallet in other currencies | exchange or transfer service | built | off | the rate source's terms |
+| PAY-06 | Unfunded gifts expire after about 30 days | stored value | not built | off | build it, counsel's terms |
+| PAY-02 | Daily reconciliation, wallets against the ledger | exists only because wallets exist | built | not needed | none |
+| PAY-07 | Resolution of "to verify" gifts and payments | payouts | built (command line, no screen) | not needed | the ADM-02 screen |
+| PAY-13 | Payout limits and the hold on young accounts | limits payouts | built | not needed | none |
+| PAY-08a | Refund policy for unspent wallet balance | stored value | not written | off | counsel's text |
+| PAY-08b | Mechanism to refund or withdraw unspent balance | stored value, money-laundering rules | not built | off | counsel, then code |
+| PAY-11 | Provider-statement reconciliation, automatic refunds and payouts | money movement | not built | off | provider statements, counsel |
+| WA-06 | Gift ceiling for people who join by link | limits gifts | built | off | none |
+| DEF-04 | Gift payout rail for Nigeria, Kenya and Ghana | money transmission abroad | deferred | off | counsel per country |
+| FUT-04 | Loyalty points, charity donations, voucher APIs (survey branching in the same row is **not** wallet-related) | stored value, money movement | next version | off | counsel |
+| ADM-02 | Money and customer operations console | the money half exists for the wallet | not built | not needed for the money half | after ADM-01 (D-16) |
+
+What stays in the first public version because no stored value or payout is involved: subscriptions paid through the providers (SurveyFlow is the merchant for its own service), overage invoices (PAY-09), the credit on an upgrade (PAY-12), and the join link without gifts (WA-05).
+
