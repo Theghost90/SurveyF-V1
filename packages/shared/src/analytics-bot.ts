@@ -212,7 +212,7 @@ const S = {
   fr: {
     asOf: (t: string) => `à ${t}`,
     sent: 'Invitations envoyées', started: 'Commencé', completed: 'Terminé', abandoned: 'Abandonné', inProgress: 'En cours', noReply: 'Sans réponse', declined: 'Refus',
-    optedOut: 'Désabonnés (plus jamais contactés)', rate: 'Taux de complétion', rateNote: 'terminés ÷ commencés',
+    optedOut: 'Désabonnés (plus jamais contactés)', rate: 'Taux d’achèvement', rateNote: 'terminés ÷ commencés',
     inProgressNote: 'Les personnes en cours sont comptées comme abandons après 24 h de silence.',
     dropTitle: 'Où les gens s’arrêtent', answered: 'ont passé la question', stopped: 's’arrêtent ici',
     stillIn: (n: number) => `⏳ ${n} encore en cours : comptés comme abandons seulement après 24 h de silence.`,
@@ -242,7 +242,7 @@ const S = {
     allMoved: 'La liste complète, avec tous les numéros et un export CSV, est dans SurveyFlow :',
     results: 'Résultats', resultsNote: 'Les pourcentages sont calculés sur les personnes qui ont répondu à cette question.', top: 'Premier choix', average: 'Moyenne', answersOf: (a: number) => `${a} réponse${a === 1 ? '' : 's'}`, comments: (n: number) => `${n} commentaire${n === 1 ? '' : 's'}`, noAnswersYet: 'pas encore de réponse',
     mutedOk: '🔕 Les alertes sont coupées pour ce téléphone. Envoyez ALERTES OUI pour les remettre. STATS et les autres commandes fonctionnent toujours.', unmutedOk: '🔔 Alertes activées : je vous écris aux paliers (100, 500, 1 000 réponses…) et quand les réponses ralentissent. Envoyez SILENCE pour les arrêter.',
-    alertMilestone: (n: number, title: string, rate: string) => `🎉 *${n} réponses atteintes*\n${title}\nTaux de complétion à ce jour : ${rate}%`, alertSlow: (h: number, title: string) => `⚠️ *Les réponses ralentissent*\nAucune nouvelle réponse depuis ${h} heures sur « ${title} ». Répondez SANSREPONSE pour voir qui n’a pas commencé.`,
+    alertMilestone: (n: number, title: string, rate: string) => `🎉 *${n} réponses atteintes*\n${title}\nTaux d’achèvement à ce jour : ${rate}%`, alertSlow: (h: number, title: string) => `⚠️ *Les réponses ralentissent*\nAucune nouvelle réponse depuis ${h} heures sur « ${title} ». Répondez SANSREPONSE pour voir qui n’a pas commencé.`,
     alertFoot: 'Répondez STATS pour le résumé complet. SILENCE pour arrêter les alertes.',
   },
 } as const;
@@ -380,6 +380,6 @@ export const botMuted = (on: boolean, locale: BotLocale): OutboundMessage => ({ 
 export const OWNER_ALERT_TEMPLATE = 'owner_alert';
 export const OWNER_ALERT_DEFS = [
   { name: OWNER_ALERT_TEMPLATE, language: 'en' as const, category: 'UTILITY' as const, body: 'SurveyFlow alert: {{1}} Tap STATS for the full summary.', examples: ['100 responses reached on Customer Satisfaction. Completion rate so far: 68.8%.'], buttons: ['STATS', 'Mute alerts'] },
-  { name: OWNER_ALERT_TEMPLATE, language: 'fr' as const, category: 'UTILITY' as const, body: 'Alerte SurveyFlow : {{1}} Touchez STATS pour le résumé complet.', examples: ['100 réponses atteintes sur Satisfaction client. Taux de complétion à ce jour : 68,8%.'], buttons: ['STATS', 'Couper les alertes'] },
+  { name: OWNER_ALERT_TEMPLATE, language: 'fr' as const, category: 'UTILITY' as const, body: 'Alerte SurveyFlow : {{1}} Touchez STATS pour le résumé complet.', examples: ['100 réponses atteintes sur Satisfaction client. Taux d’achèvement à ce jour : 68,8%.'], buttons: ['STATS', 'Couper les alertes'] },
 ];
 export const OWNER_ALERT_PAYLOADS = [botButtonId('stats'), botButtonId('mute')];

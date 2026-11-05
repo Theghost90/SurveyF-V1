@@ -328,7 +328,7 @@ export const fr: Record<keyof typeof en, string> = {
   'surveys.col.title': 'Sondage',
   'surveys.col.sent': 'Envoyés',
   'surveys.col.completed': 'Terminés',
-  'surveys.col.rate': 'Complétion',
+  'surveys.col.rate': 'Achèvement',
   'surveys.open': 'Ouvrir',
   'surveys.analytics': 'Statistiques',
   'surveys.duplicate': 'Dupliquer',

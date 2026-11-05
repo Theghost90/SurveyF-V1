@@ -262,7 +262,7 @@ describe('which survey, how it is asked', () => {
     const w = await mixedWorld();
     await prisma.user.update({ where: { id: w.owner.userId }, data: { locale: 'fr' } });
     await link(w.owner);
-    for (const [word, expect_] of [['Statistiques', /Invitations envoyées: 12/], ['ABANDONS', /Où les gens s’arrêtent/], ['sans réponse', /N’ont pas répondu: 4/], ['  aide ', /SurveyFlow Analytics/], ['TERMINÉS', /Terminé: 3/], ['stats', /Taux de complétion/]] as const) {
+    for (const [word, expect_] of [['Statistiques', /Invitations envoyées: 12/], ['ABANDONS', /Où les gens s’arrêtent/], ['sans réponse', /N’ont pas répondu: 4/], ['  aide ', /SurveyFlow Analytics/], ['TERMINÉS', /Terminé: 3/], ['stats', /Taux d’achèvement/]] as const) {
       await clearChat(OWNER_PHONE);
       await ownerSays(OWNER_PHONE, word);
       expect((await botSaid(OWNER_PHONE)).map((m) => m.body).join('\n'), word).toMatch(expect_);
