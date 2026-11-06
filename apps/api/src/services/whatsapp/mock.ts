@@ -54,7 +54,9 @@ export class MockGateway implements WhatsAppGateway {
   async subscribeApp() {}
 
   async getPhoneInfo(creds: WaCreds) {
-    return { displayPhone: creds.phoneNumberId.startsWith('mock-') ? '+237 600 00 00 00 (simulated)' : '', verifiedName: 'Simulated number' };
+    // `mock-<digits>` and `mock-app-<digits>` are numbers a person typed into the simulated Embedded Signup: that number is shown back. Any other simulated id keeps the placeholder.
+    const typed = /^mock-(?:app-)?(\d{8,15})$/.exec(creds.phoneNumberId)?.[1];
+    return { displayPhone: typed ? `+${typed} (simulated)` : creds.phoneNumberId.startsWith('mock-') ? '+237 600 00 00 00 (simulated)' : '', verifiedName: 'Simulated number' };
   }
 
   /** Simulated numbers whose id starts with `mock-app-` stand for a number that is in a WhatsApp Business app (Mireille); the others are new numbers (Armand). */

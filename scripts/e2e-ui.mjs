@@ -4,6 +4,7 @@ import { chromium } from 'playwright-core';
 import { chromePath } from './lib/browser-path.mjs';
 import { confirmAndSignIn } from './lib/signup.mjs';
 import { mkdirSync, statSync } from 'node:fs';
+import { connectSimulated } from './lib/sim-signup.mjs';
 
 const exe = await chromePath();
 const [out = '/tmp/e2e', base = 'http://localhost:4222'] = process.argv.slice(2);
@@ -86,7 +87,7 @@ await step('onboarding 1/2: the customer segment is required and gates everythin
 
 await step('onboarding 2/2: connect the simulated WhatsApp number, then go to the dashboard', async () => {
   await page.getByTestId('situation-new').click(); // the question before the Connect button (D-19)
-  await page.getByTestId('sim-new').click();
+  await connectSimulated(page);
   await page.getByTestId('ob-connected').waitFor({ timeout: 15000 });
   await page.getByRole('button', { name: /go to dashboard/i }).click();
   await page.waitForURL(/\/dashboard/, { timeout: 15000 }); // (the plan query was dropped by the test's own detour through /dashboard)

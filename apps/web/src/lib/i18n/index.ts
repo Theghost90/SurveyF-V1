@@ -7,6 +7,7 @@ import { en as accountEn, fr as accountFr } from './account';
 import { en as walletEn, fr as walletFr } from './wallet';
 import { en as securityEn, fr as securityFr } from './security';
 import { en as connectEn, fr as connectFr } from './connect';
+import { en as simEn, fr as simFr } from './signup-sim';
 
 export const LOCALES = ['en', 'fr'] as const;
 export type Locale = (typeof LOCALES)[number];
@@ -14,8 +15,8 @@ export const DEFAULT_LOCALE: Locale = 'en';
 export const LOCALE_COOKIE = 'sf_lang';
 
 const dictionaries = {
-  en: { ...marketingEn, ...appEn, ...builderEn, ...insightsEn, ...accountEn, ...walletEn, ...securityEn, ...growthEn, ...connectEn },
-  fr: { ...marketingFr, ...appFr, ...builderFr, ...insightsFr, ...accountFr, ...walletFr, ...securityFr, ...growthFr, ...connectFr },
+  en: { ...marketingEn, ...appEn, ...builderEn, ...insightsEn, ...accountEn, ...walletEn, ...securityEn, ...growthEn, ...connectEn, ...simEn },
+  fr: { ...marketingFr, ...appFr, ...builderFr, ...insightsFr, ...accountFr, ...walletFr, ...securityFr, ...growthFr, ...connectFr, ...simFr },
 } as const;
 
 export type TKey = keyof (typeof dictionaries)['en'];

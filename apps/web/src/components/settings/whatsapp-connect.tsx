@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { dateTime } from '@/lib/format';
+import { SimulatedSignup } from './simulated-signup';
 import { useLocale, useT } from '@/lib/i18n/client';
 
 interface Config { mode: 'mock' | 'live'; graphVersion: string; embeddedSignup: { appId: string; configId: string; version: string } | null; webhookUrl: string }
@@ -120,6 +121,7 @@ export function WhatsAppConnect({ compact = false, onConnected }: { compact?: bo
   const [error, setError] = useState<string | null>(null);
   const [situation, setSituation] = useState<NumberSituation | null>(null);
   const [attest, setAttest] = useState(false);
+  const [simOpen, setSimOpen] = useState(false);
 
   if (!cfg || !data) return <Skeleton className="h-40" />;
   const acct = data.items[0];
@@ -140,12 +142,6 @@ export function WhatsAppConnect({ compact = false, onConnected }: { compact?: bo
     } finally {
       setBusy(null);
     }
-  }
-  async function mock(scenario: 'new' | 'business_app') {
-    setBusy(`mock-${scenario}`);
-    try { await api('/whatsapp/accounts/mock', { method: 'POST', body: { scenario, declared: situation } }); toast.success(t('w.connected')); await done(); }
-    catch (err) { toast.error(errorMessage(err, t)); }
-    finally { setBusy(null); }
   }
   async function post(path: string, key: string, body?: unknown) {
     setBusy(key);
@@ -173,12 +169,7 @@ export function WhatsAppConnect({ compact = false, onConnected }: { compact?: bo
       <div className="flex flex-wrap gap-3">
         {cfg.embeddedSignup && <EmbeddedSignup cfg={{ ...cfg.embeddedSignup, graphVersion: cfg.graphVersion }} situation={situation} onDone={done} />}
         <Button size="lg" variant="outline" className="h-12" onClick={() => setManualOpen(true)}><PlugZap className="h-5 w-5" aria-hidden />{t('w.manual')}</Button>
-        {cfg.mode === 'mock' && (
-          <>
-            <Button size="lg" variant="brand" className="h-12" disabled={!situation} loading={busy === 'mock-new'} onClick={() => mock('new')} data-testid="sim-new"><Smartphone className="h-5 w-5" aria-hidden />{t('wc.sim.new')}</Button>
-            <Button size="lg" variant="brand" className="h-12" disabled={!situation} loading={busy === 'mock-business_app'} onClick={() => mock('business_app')} data-testid="sim-app"><Smartphone className="h-5 w-5" aria-hidden />{t('wc.sim.app')}</Button>
-          </>
-        )}
+        {cfg.mode === 'mock' && <Button size="lg" variant="brand" className="h-12" disabled={!situation} onClick={() => setSimOpen(true)} data-testid="sim-open"><Smartphone className="h-5 w-5" aria-hidden />{t('ss.open')}</Button>}
       </div>
       {cfg.mode === 'mock' && <p className="rounded-xl bg-amber-soft p-3 text-sm text-amber-ink">{t('w.mockNote')}</p>}
       {!cfg.embeddedSignup && cfg.mode === 'live' && <p className="text-sm text-muted-foreground">{t('w.noEmbedded')}</p>}
@@ -198,11 +189,14 @@ export function WhatsAppConnect({ compact = false, onConnected }: { compact?: bo
     </div>
   );
 
+  const sim = cfg.mode === 'mock' ? <SimulatedSignup open={simOpen} onOpenChange={setSimOpen} situation={situation} onFinished={() => void done()} /> : null;
+
   if (!acct) {
     return (
       <div className="flex flex-col gap-4">
         <p className="text-body">{t(cfg.embeddedSignup ? 'w.intro' : 'w.introManual')}</p>
         {connectPanel}
+        {sim}
       </div>
     );
   }
@@ -220,6 +214,7 @@ export function WhatsAppConnect({ compact = false, onConnected }: { compact?: bo
 
   return (
     <div className="flex flex-col gap-5">
+      {sim}
       {disc && (
         <div role="alert" className="flex flex-col gap-3 rounded-2xl border border-destructive/40 bg-destructive/5 p-4" data-testid="disconnected-banner">
           <p className="flex items-center gap-2 font-bold text-destructive"><AlertTriangle className="h-5 w-5" aria-hidden />{t('wc.disc.title')}</p>

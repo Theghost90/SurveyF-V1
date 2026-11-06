@@ -10,6 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import { chromePath } from './lib/browser-path.mjs';
 import { confirmAndSignIn } from './lib/signup.mjs';
+import { connectSimulated } from './lib/sim-signup.mjs';
 
 const exe = await chromePath();
 const [out = '/tmp/e2e-new', base = 'http://localhost:4222'] = process.argv.slice(2);
@@ -73,7 +74,7 @@ await step('set up: an owner on a paid plan with a simulated number, three conta
   await page.getByRole('radio', { name: /Businesses/ }).click();
   await page.getByRole('heading', { name: 'Connect WhatsApp' }).waitFor({ timeout: 10000 });
   await page.getByTestId('situation-new').click(); // the question before the Connect button (D-19)
-  await page.getByTestId('sim-new').click();
+  await connectSimulated(page);
   await page.getByTestId('ob-connected').waitFor({ timeout: 15000 });
   await page.getByRole('button', { name: /go to dashboard/i }).click();
   await page.waitForURL(/\/dashboard/, { timeout: 15000 });

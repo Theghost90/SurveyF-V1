@@ -8,6 +8,7 @@
 import { chromium } from 'playwright-core';
 import { chromePath } from './lib/browser-path.mjs';
 import { confirmAndSignIn } from './lib/signup.mjs';
+import { connectSimulated } from './lib/sim-signup.mjs';
 import { mkdirSync } from 'node:fs';
 
 const exe = await chromePath();
@@ -20,7 +21,7 @@ let page;
 let liveSurvey = null;
 let n = 0;
 const newPage = async () => {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 1000 }, locale: 'en-GB' });
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 1300 }, locale: 'en-GB' });
   page = await ctx.newPage();
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
   page.on('response', (r) => { if (r.status() >= 500) problems.push(`HTTP ${r.status()} ${r.url().replace(base, '')}`); });
@@ -36,6 +37,7 @@ const step = async (name, fn) => {
 };
 const expect = (cond, msg) => { if (!cond) throw new Error(msg); };
 const shot = (name) => page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
+const shotDialog = (name) => page.getByTestId('sim-dialog').screenshot({ path: `${out}/${name}.png` });
 const call = (method, path, body) => page.evaluate(async ([m, p, b]) => {
   const r = await fetch('/proxy' + p, { method: m, headers: { 'content-type': 'application/json' }, body: b ? JSON.stringify(b) : undefined });
   const t = await r.text();
@@ -52,32 +54,79 @@ async function register(email, business) {
 }
 
 // ---------------------------------------------------------------- Armand
+const stamp = String(Date.now()).slice(-6);
+const rowsText = async () => (await page.getByTestId('sim-rows').innerText().catch(() => '')) || '';
+const traceKeys = async () => page.locator('[data-testid^="sim-trace-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid').replace('sim-trace-', '')));
 await newPage();
-await step('ARMAND: the Connect step asks where the number is, and cannot go on until it is answered', async () => {
+await step('ARMAND: the Connect step asks where the number is, and the simulation cannot start until it is answered', async () => {
   await register(`armand${Date.now()}@example.com`, 'Armand Thesis');
   await page.getByTestId('situation').waitFor({ timeout: 15000 });
-  expect(await page.getByTestId('sim-new').isDisabled(), 'the simulated-number buttons wait for the answer');
-  expect(await page.getByTestId('sim-app').isDisabled(), 'both of them');
+  expect(await page.getByTestId('sim-open').isDisabled(), 'the simulated Facebook button waits for the answer');
   expect((await page.getByTestId('app-limits').count()) === 0, 'the app limits are not shown yet');
   await shot('01-armand-question');
 });
 
-await step('ARMAND: "never on WhatsApp" shows no app limits, and connects as a number used through SurveyFlow only', async () => {
+await step('ARMAND: Meta’s popup, screen by screen: login, access, a number in the ordinary WhatsApp app is refused, a new number gets an SMS code', async () => {
   await page.getByTestId('situation-new').click();
   expect((await page.getByTestId('app-limits').count()) === 0, 'no limits for a new number');
-  await page.getByTestId('sim-new').click();
+  await page.getByTestId('sim-open').click();
+  expect(/SIMULATION/.test(await page.getByTestId('sim-banner').innerText()), 'the window says it is a simulation');
+  await shotDialog('02-popup-login');
+  await page.getByTestId('sim-login-btn').click();
+  await shotDialog('03-popup-access');
+  await page.getByTestId('sim-auth-btn').click();
+  await page.getByTestId('sim-phone').fill(`+237 699 ${stamp}3`); // ends in 3: in the ordinary WhatsApp app
+  await shotDialog('04-popup-phone');
+  await page.getByTestId('sim-phone-next').click();
+  await page.getByTestId('sim-refused').waitFor();
+  await shotDialog('05-popup-refused');
+  await page.getByTestId('sim-refused-btn').click();
+  expect(!/Phone number/.test(await rowsText()), 'the refused number is not listed as given');
+  await page.getByTestId('sim-phone').fill(`+237 699 ${stamp}1`); // ends in 1: new
+  await page.getByTestId('sim-phone-next').click();
+  await page.getByTestId('sim-sms').waitFor();
+  expect(/482913/.test(await page.getByTestId('sim-sms').innerText()), 'the simulated SMS shows the code');
+  await shotDialog('06-popup-sms');
+  await page.getByTestId('sim-code').fill('000000');
+  await page.getByTestId('sim-verify-btn').click();
+  await page.getByText(/not right/).waitFor();
+  await page.getByTestId('sim-code').fill('482913');
+  await page.getByTestId('sim-verify-btn').click();
+  await shotDialog('07-popup-business');
+  await page.getByTestId('sim-biz-next').click();
+  await shotDialog('08-popup-permissions');
+  await page.getByTestId('sim-perm-btn').click();
+  await shotDialog('09-popup-ready');
+  const rows = await rowsText();
+  expect(/Facebook login: Meta only/.test(rows) && /Meta checks it/.test(rows) && /The SMS code: Meta only/.test(rows) && /Business name, country, website: Meta only/.test(rows), `who receives what: ${rows.slice(0, 400)}`);
+});
+
+await step('ARMAND: Finish: what the popup tells SurveyFlow, then SurveyFlow’s own steps (registered with a PIN, no sync), then Meta’s payment method', async () => {
+  await page.getByTestId('sim-done-btn').click();
+  await page.getByTestId('sim-event').waitFor({ timeout: 20000 });
+  const ev = await page.getByTestId('sim-event').innerText();
+  expect(/"event": "FINISH"/.test(ev) && /"is_on_biz_app": false/.test(ev) && /messaging_account_ids/.test(ev), `popup event: ${ev.slice(0, 300)}`);
+  await page.getByTestId('sim-work-continue').waitFor({ timeout: 30000 });
+  const keys = await traceKeys();
+  expect(keys.join(',') === 'token,details,mode,subscribe,register,drafts,templates,done', `trace: ${keys.join(',')}`);
+  const side = await page.getByTestId('sim-trace').innerText();
+  expect(/no\. Standard onboarding/.test(side) && /random PIN/.test(side) && /\+237699\d+1 \(simulated\)/.test(side) && !/sync|chat history/i.test(side.replace(/is_on_biz_app/g, '')), `trace text: ${side.slice(0, 500)}`);
+  await shotDialog('10-armand-behind-the-scenes');
+  await page.getByTestId('sim-work-continue').click();
+  await shotDialog('11-popup-billing');
+  await page.getByTestId('sim-bill-later').click();
+  expect(/1,000 service conversations/.test(await page.getByTestId('sim-bill-warn').innerText()), 'the consequence of no payment method is said');
+  await page.getByTestId('sim-bill-close').click();
   await page.getByTestId('ob-connected').waitFor({ timeout: 20000 });
   await page.getByRole('button', { name: /go to dashboard/i }).click();
   await page.waitForURL('**/dashboard**', { timeout: 15000 });
   await page.goto(`${base}/settings?tab=whatsapp`);
   await page.getByTestId('mode').waitFor({ timeout: 15000 });
   expect(/Used through SurveyFlow only/.test(await page.getByTestId('mode').innerText()), 'mode says SurveyFlow only');
-  expect((await page.getByTestId('sync').count()) === 0, 'no sync card for a new number');
-  expect((await page.getByTestId('mock-events').count()) === 0, 'no coexistence simulator for a new number');
-  expect((await page.getByTestId('register-failed').count()) === 0, 'registered');
+  expect((await page.getByTestId('sync').count()) === 0 && (await page.getByTestId('mock-events').count()) === 0 && (await page.getByTestId('register-failed').count()) === 0, 'no sync card, no coexistence panel, registered');
   const a = await call('GET', '/whatsapp/accounts');
-  expect(a.json.items[0].mode === 'cloud' && a.json.items[0].registered === true && a.json.items[0].signupVersion === 'v5', `account: ${JSON.stringify(a.json.items[0]).slice(0, 300)}`);
-  await shot('02-armand-connected');
+  expect(a.json.items[0].mode === 'cloud' && a.json.items[0].registered === true && a.json.items[0].signupVersion === 'v5' && /^\+237699\d+1 \(simulated\)$/.test(a.json.items[0].displayPhone), `account: ${JSON.stringify(a.json.items[0]).slice(0, 300)}`);
+  await shot('12-armand-connected');
 });
 
 // ---------------------------------------------------------------- Mireille
@@ -90,11 +139,42 @@ await step('MIREILLE: choosing "in my WhatsApp Business app" shows what changes 
   await limits.waitFor();
   const text = await limits.innerText();
   expect(/linked to the app/.test(text) && /Broadcast lists/.test(text) && /20 per second/.test(text) && /14 days/.test(text) && /2\.24\.17/.test(text), `five limits: ${text.slice(0, 400)}`);
-  await shot('03-mireille-limits');
+  await shot('13a-mireille-limits');
 });
 
-await step('MIREILLE: connects in coexistence: her app is kept, the sync card says so, and she is told to keep the app open', async () => {
-  await page.getByTestId('sim-app').click();
+await step('MIREILLE: Meta’s popup for a number in the WhatsApp Business app: profile, business, QR scan, time zone; then SurveyFlow’s steps (no registration, sync asked)', async () => {
+  await page.getByTestId('sim-open').click();
+  await page.getByTestId('sim-login-btn').click();
+  await page.getByTestId('sim-auth-btn').click();
+  await page.getByTestId('sim-phone').fill(`+237 699 ${stamp}2`); // ends in 2: in a WhatsApp Business app
+  await page.getByTestId('sim-phone-next').click();
+  await page.getByTestId('sim-profile-btn').waitFor();
+  await shotDialog('13-popup-business-app-profile');
+  await page.getByTestId('sim-profile-btn').click();
+  await page.getByTestId('sim-biz-next').click();
+  await page.getByTestId('sim-qr-btn').waitFor();
+  await shotDialog('14-popup-qr');
+  await page.getByTestId('sim-qr-btn').click();
+  expect((await page.getByTestId('sim-tz-next').isDisabled()), 'the terms must be ticked');
+  await page.getByTestId('sim-tz-terms').click();
+  await shotDialog('15-popup-time-zone-terms');
+  await page.getByTestId('sim-tz-next').click();
+  const rows = await rowsText();
+  expect(/profile of your WhatsApp Business app/.test(rows) && /QR scan from inside your app: Meta only/.test(rows) && /Time zone and Meta’s terms: Meta only/.test(rows) && !/SMS code/.test(rows), `rows: ${rows.slice(0, 500)}`);
+  await page.getByTestId('sim-done-btn').click();
+  await page.getByTestId('sim-event').waitFor({ timeout: 20000 });
+  const ev = await page.getByTestId('sim-event').innerText();
+  expect(/FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING/.test(ev) && /"is_on_biz_app": true/.test(ev), `popup event: ${ev.slice(0, 300)}`);
+  await page.getByTestId('sim-work-continue').waitFor({ timeout: 30000 });
+  const keys = await traceKeys();
+  expect(keys.join(',') === 'token,details,mode,subscribe,register_skipped,sync,drafts,templates,done', `trace: ${keys.join(',')}`);
+  const side = await page.getByTestId('sim-trace').innerText();
+  expect(/yes\. Coexistence/.test(side) && /Does not register the number/.test(side) && /contacts and chat history/.test(side), `trace text: ${side.slice(0, 600)}`);
+  await shotDialog('16-mireille-behind-the-scenes');
+  await page.getByTestId('sim-work-continue').click();
+  await page.getByTestId('sim-bill-add').click();
+  expect(/Messages can go out/.test(await page.getByTestId('sim-bill-added').innerText()), 'payment added');
+  await page.getByTestId('sim-bill-close').click();
   await page.getByTestId('ob-connected').waitFor({ timeout: 20000 });
   await page.getByTestId('sync').waitFor({ timeout: 15000 });
   expect(/Waiting for WhatsApp to send your contacts/.test(await page.getByTestId('sync-text').innerText()), 'pending text');
@@ -105,7 +185,7 @@ await step('MIREILLE: connects in coexistence: her app is kept, the sync card sa
   await page.getByTestId('mode').waitFor({ timeout: 15000 });
   expect(/Also in your WhatsApp Business app/.test(await page.getByTestId('mode').innerText()), 'mode says also in the app');
   expect((await page.getByTestId('mismatch').count()) === 0, 'she said app and it is in the app: no warning');
-  await shot('04-mireille-connected');
+  await shot('17-mireille-connected');
 });
 
 await step('MIREILLE: her contacts arrive and wait for her confirmation; the button needs the tick; confirming clears the card', async () => {
@@ -151,7 +231,7 @@ await step('MIREILLE: she reconnects from the banner: same account, banner gone,
   const before = (await call('GET', '/whatsapp/accounts')).json.items[0].id;
   const b = page.getByTestId('disconnected-banner');
   await b.getByTestId('situation-business_app').click();
-  await b.getByTestId('sim-app').click();
+  await connectSimulated(page, { app: true });
   await b.waitFor({ state: 'detached', timeout: 20000 });
   const a = (await call('GET', '/whatsapp/accounts')).json.items[0];
   expect(a.id === before && a.status === 'active' && a.mode === 'coexistence' && a.sync.state === 'pending', `reconnected in place: ${JSON.stringify(a).slice(0, 300)}`);

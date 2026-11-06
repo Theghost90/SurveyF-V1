@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { modeOf, parseCoexistenceEvents, parseSignupEvent, shareDeepLink, shareMessage, signupLaunchOptions, situationCheck } from './embedded-signup';
+import { demoNumberKind, modeOf, parseCoexistenceEvents, parseSignupEvent, shareDeepLink, shareMessage, signupLaunchOptions, situationCheck } from './embedded-signup';
 
 describe('launch options', () => {
   it('names v5 explicitly, so the launch is not served as v4 with coexistence off', () => {
@@ -98,5 +98,13 @@ describe('share kit', () => {
     expect(shareMessage('fr', ' Avis  clients ', l)).toBe(`Votre avis compte : Avis clients. Répondez ici en quelques minutes, directement sur WhatsApp : ${l}`);
     expect(shareMessage('en', 'Customer feedback', l)).toContain(l);
     expect(shareDeepLink('a b&c')).toBe('https://wa.me/?text=a%20b%26c');
+  });
+});
+
+describe('the simulated Meta (demo mode)', () => {
+  it('decides from the last digit of the typed number, as a stand-in for Meta looking the number up', () => {
+    expect(demoNumberKind('+237 699 00 00 02')).toBe('business_app');
+    expect(demoNumberKind('237699000003')).toBe('personal_app');
+    for (const n of ['+237 699 00 00 01', '237699000009', '699000000', '']) expect(demoNumberKind(n)).toBe('new');
   });
 });

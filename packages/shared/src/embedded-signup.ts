@@ -170,3 +170,18 @@ export function disconnectExplanation(reason: string | null | undefined, initiat
   const pair = why[reason ?? ''] ?? ['WhatsApp a coupé la liaison avec SurveyFlow.', 'WhatsApp cut the link with SurveyFlow.'];
   return { why: fr ? pair[0] : pair[1], fix };
 }
+
+// ---- demo mode only: the simulated Embedded Signup (the customer's view of Meta's screens) ------------------------------------------------------------------
+
+/**
+ * What the SIMULATED Meta says about a typed number (a real Meta decides this itself, from the number): a number ending in 2 is in a WhatsApp Business app, one ending in 3 is in the
+ * ordinary WhatsApp app (refused), any other is new. Lets every story, including the refusal, be played by typing a number, as a customer would.
+ */
+export function demoNumberKind(phone: string): 'new' | 'business_app' | 'personal_app' {
+  const last = (phone ?? '').replace(/\D/g, '').slice(-1);
+  return last === '2' ? 'business_app' : last === '3' ? 'personal_app' : 'new';
+}
+
+/** What SurveyFlow did with Meta after the popup closed, step by step (returned by the connection, so the screen shows what really happened and not a script). */
+export type SignupTraceKey = 'token' | 'details' | 'mode' | 'subscribe' | 'register' | 'register_skipped' | 'sync' | 'drafts' | 'templates' | 'done';
+export interface SignupTraceStep { key: SignupTraceKey; info?: string }

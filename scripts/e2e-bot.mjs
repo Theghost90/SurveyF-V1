@@ -6,6 +6,7 @@ import { chromium } from 'playwright-core';
 import { chromePath } from './lib/browser-path.mjs';
 import { confirmAndSignIn } from './lib/signup.mjs';
 import { mkdirSync, readFileSync } from 'node:fs';
+import { connectSimulated } from './lib/sim-signup.mjs';
 
 const exe = await chromePath();
 const [out = '/tmp/e2e-bot', base = 'http://localhost:4222'] = process.argv.slice(2);
@@ -46,7 +47,7 @@ await step('register, pick a segment, connect the simulated number', async () =>
   await confirmAndSignIn(page, base, { email });
   await page.getByRole('radio', { name: /Businesses/ }).click();
   await page.getByTestId('situation-new').click(); // the question before the Connect button (D-19)
-  await page.getByTestId('sim-new').click();
+  await connectSimulated(page);
   await page.getByTestId('ob-connected').waitFor({ timeout: 15000 });
   await page.getByRole('button', { name: /go to dashboard/i }).click();
   await page.waitForURL('**/dashboard**', { timeout: 15000 });

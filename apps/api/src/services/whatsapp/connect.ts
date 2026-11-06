@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import type { WhatsAppAccount } from '@prisma/client';
-import { SIGNUP_VERSION, type NumberSituation } from '@surveyflow/shared';
+import { SIGNUP_VERSION, type NumberSituation, type SignupTraceStep } from '@surveyflow/shared';
 import { env } from '../../config/env';
 import { encryptSecret } from '../../lib/crypto';
 import { badRequest, conflict } from '../../lib/errors';
@@ -19,6 +19,8 @@ export interface AttachOptions {
   embedded?: { declared: NumberSituation | null; browserIsOnBizApp: boolean | null };
   /** Tests and the simulated number only: what the mock should be told about the number. */
   ctx?: AuditContext;
+  /** Filled in as the connection goes: what was really done, in order (the simulated Embedded Signup shows it to the owner). */
+  trace?: SignupTraceStep[];
 }
 
 /**
@@ -54,13 +56,16 @@ export async function attachAccount(userId: string, input: AttachInput, opts: At
   let isOnApp: boolean | null;
   try {
     displayPhone = (await gw.getPhoneInfo(creds)).displayPhone; // proves the token + ids work before we store anything
+    opts.trace?.push({ key: 'details', info: displayPhone });
     const graph = await gw.getAppStatus(creds);
     if (opts.embedded && graph.isOnBizApp !== null && opts.embedded.browserIsOnBizApp !== null && graph.isOnBizApp !== opts.embedded.browserIsOnBizApp) {
       log.warn({ graph: graph.isOnBizApp, browser: opts.embedded.browserIsOnBizApp }, 'Meta and the browser disagree about is_on_biz_app: Meta wins');
     }
     isOnApp = graph.isOnBizApp ?? opts.embedded?.browserIsOnBizApp ?? null;
     if (opts.embedded && isOnApp === null) throw badRequest('mode_unknown', 'Meta did not say whether this number is also in the WhatsApp Business app, so nothing was changed. Try again in a minute.');
+    opts.trace?.push({ key: 'mode', info: isOnApp ? 'coexistence' : 'cloud' });
     await gw.subscribeApp(creds); // route this WABA's webhooks to our app
+    opts.trace?.push({ key: 'subscribe' });
   } catch (err) {
     if (err instanceof WaError) throw badRequest('whatsapp_rejected', `Meta rejected these credentials: ${err.message}`);
     throw err;
@@ -74,8 +79,8 @@ export async function attachAccount(userId: string, input: AttachInput, opts: At
   let registeredAt: Date | null = null;
   if (opts.embedded && mode === 'cloud') {
     pin = String(randomInt(100_000, 1_000_000));
-    try { await gw.registerPhone(creds, pin); registeredAt = new Date(); } catch { registerFailed = true; }
-  }
+    try { await gw.registerPhone(creds, pin); registeredAt = new Date(); opts.trace?.push({ key: 'register' }); } catch { registerFailed = true; }
+  } else if (opts.embedded) opts.trace?.push({ key: 'register_skipped' });
 
   const data = {
     wabaId: input.wabaId, phoneNumberId, displayPhone: displayPhone || null, accessToken: encryptSecret(input.accessToken),
@@ -87,12 +92,14 @@ export async function attachAccount(userId: string, input: AttachInput, opts: At
   };
   const account = existing ? await prisma.whatsAppAccount.update({ where: { id: existing.id }, data }) : await prisma.whatsAppAccount.create({ data: { userId, ...data } });
 
-  if (opts.embedded && mode === 'coexistence') await startSync(account);
+  if (opts.embedded && mode === 'coexistence') { await startSync(account); opts.trace?.push({ key: 'sync' }); }
   // Surveys drafted before connecting get attached to the new number.
-  await prisma.survey.updateMany({ where: { userId, whatsappAccountId: null }, data: { whatsappAccountId: account.id } });
+  const drafts = await prisma.survey.updateMany({ where: { userId, whatsappAccountId: null }, data: { whatsappAccountId: account.id } });
+  opts.trace?.push({ key: 'drafts', info: String(drafts.count) });
   // ~16 Graph calls: against the real Meta that must not hold the owner's click, so it runs behind the response; the mock is instant and tests read the templates right away.
   if (env.waMode === 'live') ensureTemplates(account).catch((err) => log.warn({ err: (err as Error).message }, 'template submission failed after connect'));
   else await ensureTemplates(account);
+  opts.trace?.push({ key: 'templates', info: String(await prisma.messageTemplate.count({ where: { accountId: account.id } })) });
   await track(userId, 'whatsapp_connected');
   if (opts.ctx) await audit(opts.ctx, { action: existing ? 'whatsapp_reconnected' : 'whatsapp_connected', targetType: 'whatsapp_account', targetId: account.id, meta: { mode, embedded: !!opts.embedded, declared: opts.embedded?.declared ?? null, registerFailed } }, log);
   return prisma.whatsAppAccount.findUniqueOrThrow({ where: { id: account.id } });

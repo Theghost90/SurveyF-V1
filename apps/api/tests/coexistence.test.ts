@@ -300,6 +300,50 @@ describe('WA-14: handing the survey out from the owner’s own number', () => {
   });
 });
 
+describe('the simulated Embedded Signup (demo mode): a typed number decides its own story, and the connection reports what it did', () => {
+  it('a new number: the typed number is shown back, and the trace says token, details, mode, subscribe, register, drafts, templates, done (no sync)', async () => {
+    const o = await bare();
+    const r = await o.post('/api/whatsapp/accounts/mock', { phone: '237699000001', declared: 'new' });
+    expect(r.status).toBe(201);
+    expect(r.items[0]).toMatchObject({ displayPhone: '+237699000001 (simulated)', mode: 'cloud', registered: true });
+    expect(r.trace.map((t: { key: string }) => t.key)).toEqual(['token', 'details', 'mode', 'subscribe', 'register', 'drafts', 'templates', 'done']);
+    expect(r.trace.find((t: { key: string }) => t.key === 'mode').info).toBe('cloud');
+    expect(Number(r.trace.find((t: { key: string }) => t.key === 'templates').info)).toBeGreaterThanOrEqual(16);
+  });
+
+  it('a number in a WhatsApp Business app: coexistence, the registration is skipped and the sync is asked for', async () => {
+    const o = await bare();
+    const r = await o.post('/api/whatsapp/accounts/mock', { phone: '237699000002', declared: 'business_app' });
+    expect(r.status).toBe(201);
+    expect(r.items[0]).toMatchObject({ displayPhone: '+237699000002 (simulated)', mode: 'coexistence', sync: { state: 'pending' } });
+    expect(r.trace.map((t: { key: string }) => t.key)).toEqual(['token', 'details', 'mode', 'subscribe', 'register_skipped', 'sync', 'drafts', 'templates', 'done']);
+    expect(mockCalls.some((c) => c.op === 'register')).toBe(false);
+  });
+
+  it('a number in the ordinary WhatsApp app is refused and nothing is stored', async () => {
+    const o = await bare();
+    const r = await o.post('/api/whatsapp/accounts/mock', { phone: '237699000003' });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe('number_not_eligible');
+    expect(await prisma.whatsAppAccount.count({ where: { userId: o.userId } })).toBe(0);
+  });
+
+  it('the same number cannot be connected to two owners, as with Meta', async () => {
+    const a = await bare(); const b = await bare();
+    expect((await a.post('/api/whatsapp/accounts/mock', { phone: '237699000011' })).status).toBe(201);
+    const again = await b.post('/api/whatsapp/accounts/mock', { phone: '237699000011' });
+    expect(again.status).toBe(409);
+    expect(again.body.error).toBe('number_in_use');
+  });
+
+  it('the trace counts the drafts it attached: none for a new owner (a survey cannot be made before a number is connected)', async () => {
+    const o = await bare();
+    expect((await o.post('/api/surveys', { title: 'Brouillon', language: 'fr', questions: [{ type: 'text', text: 'Q ?', required: true }] })).status).toBe(409);
+    const r = await o.post('/api/whatsapp/accounts/mock', { phone: '237699000021' });
+    expect(r.trace.find((t: { key: string }) => t.key === 'drafts').info).toBe('0');
+  });
+});
+
 describe('the config the web app reads', () => {
   it('names v5 so the launch is not served as v4 with coexistence off', async () => {
     const o = await bare();

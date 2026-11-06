@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
-import { NUMBER_SITUATIONS, SIGNUP_VERSION } from '@surveyflow/shared';
+import { NUMBER_SITUATIONS, SIGNUP_VERSION, demoNumberKind, type SignupTraceStep } from '@surveyflow/shared';
 import { env } from '../config/env';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { prisma } from '../lib/prisma';
@@ -79,11 +79,16 @@ export default async function whatsappRoutes(app: FastifyInstance) {
    */
   app.post('/api/whatsapp/accounts/mock', { preHandler: app.authenticateVerified }, async (req, reply) => {
     if (env.waMode !== 'mock') throw notFound('Route');
-    const body = z.object({ scenario: z.enum(['new', 'business_app']).default('new'), declared: situation.nullish() }).parse(req.body ?? {});
-    const id = body.scenario === 'business_app' ? `mock-app-${nanoid(10)}` : `mock-${nanoid(10)}`;
-    await attachAccount(req.userId, { wabaId: `mock-waba-${nanoid(6)}`, phoneNumberId: id, accessToken: 'mock-token-for-local-development' }, { embedded: { declared: body.declared ?? (body.scenario === 'business_app' ? 'business_app' : 'new'), browserIsOnBizApp: body.scenario === 'business_app' }, ctx: auditContext(req) }, app.log);
+    const body = z.object({ scenario: z.enum(['new', 'business_app']).default('new'), declared: situation.nullish(), phone: z.string().regex(/^\d{8,15}$/).optional() }).parse(req.body ?? {});
+    // A typed number decides its own story (the simulated Meta looks at it, `demoNumberKind`); a number in the ordinary WhatsApp app is refused, as Meta may do.
+    const kind = body.phone ? demoNumberKind(body.phone) : body.scenario;
+    if (kind === 'personal_app') throw badRequest('number_not_eligible', 'This number is in the ordinary WhatsApp app: WhatsApp may refuse it. Use another number, or switch it to the WhatsApp Business app first.');
+    const trace: SignupTraceStep[] = [{ key: 'token' }];
+    const id = body.phone ? `mock-${kind === 'business_app' ? 'app-' : ''}${body.phone}` : kind === 'business_app' ? `mock-app-${nanoid(10)}` : `mock-${nanoid(10)}`;
+    await attachAccount(req.userId, { wabaId: `mock-waba-${nanoid(6)}`, phoneNumberId: id, accessToken: 'mock-token-for-local-development' }, { embedded: { declared: body.declared ?? (kind === 'business_app' ? 'business_app' : 'new'), browserIsOnBizApp: kind === 'business_app' }, ctx: auditContext(req), trace }, app.log);
+    trace.push({ key: 'done' });
     reply.code(201);
-    return { items: await listAccounts(req.userId) };
+    return { items: await listAccounts(req.userId), trace };
   });
 
   /**

@@ -155,26 +155,34 @@ npm run dev
 
 Wait until both lines say they are ready (the website on `http://localhost:4222`, the API on `http://localhost:4223`).
 
-**1c. The real-browser run (optional, needs Chrome installed):** in a second window `node scripts/e2e-coexistence.mjs $env:TEMP\e2e-coexistence`. It must print `all 10 steps passed` and leaves screenshots in that folder. (If it cannot find Chrome, skip it and do 1d.)
+**1c. The real-browser run (optional, needs Chrome installed):** in a second window `node scripts/e2e-coexistence.mjs $env:TEMP\e2e-coexistence`. It must print `all 11 steps passed` and leaves screenshots in that folder. (If it cannot find Chrome, skip it and do 1d.)
 
-**1d. By hand, Armand (a number that never had WhatsApp)**
+**1d. By hand, Armand (a number that never had WhatsApp).** The "Connect with Facebook (simulation)" button opens a window that plays **Meta's popup**, with a "Behind the scenes" panel next to it. The popup follows the order Meta documents; the screens are a stand-in (not seen). The panel says who receives each answer.
 
 1. Open `http://localhost:4222/register`, sign up with a made-up business, a made-up e-mail such as `armand-test@example.com`, a password of 10+ characters. The "check your e-mail" page shows the message in demo mode: press its button, confirm with your password, sign in.
-2. Onboarding step 1: pick **Businesses**. Step 2 "Connect WhatsApp": **the question "Where is this phone number today?" shows three answers and the two green "Simulate…" buttons are greyed out** until you choose one.
-3. Choose **"It has never been on WhatsApp"**. The yellow "What changes in your WhatsApp Business app" box must **not** appear. Press **"Simulate a new number (Armand)"**.
-4. The green "connected" line appears. Press **Go to dashboard**, then open **Settings → WhatsApp**. Under the number you must read **"Used through SurveyFlow only"**, and there must be **no** "Importing from your WhatsApp Business app" box and **no** grey "Simulate what WhatsApp sends…" panel.
+2. Onboarding step 1: pick **Businesses**. Step 2 "Connect WhatsApp": the question "Where is this phone number today?" shows three answers and **"Connect with Facebook (simulation)" is greyed out** until you choose one.
+3. Choose **"It has never been on WhatsApp"** (no yellow list appears), press the button. A window opens with an amber "SIMULATION" banner.
+4. Walk it: **Continue as <your name>** (Meta's login: nothing to type) → **Continue** (what SurveyFlow asks for) → type a number such as `+237 699 123 453` (ends in **3**). In this demo a number ending in **3** stands for "in the ordinary WhatsApp app": the window says it can't be used. Press **Use another number**.
+5. Type `+237 699 123 451` (ends in **1** = new). Meta "sends" an SMS: the code (**482913**) is shown in a grey box. Type a wrong code first (the window says it's not right), then the right one.
+6. **Your business** (name, country, website) → **Next** → **Review what you are sharing** → **Finish** → "Your WhatsApp business account is ready" → **Finish**.
+7. In the right panel, read: for each step who receives it ("Meta only", "SurveyFlow only receives an ID"). After the last Finish a dark box shows **what Meta's popup tells SurveyFlow** (`FINISH`, `is_on_biz_app: false`, two ids, a one-time code) and a list "SurveyFlow now does, in the background", ticking one line after another: exchanges the code · asks Meta for the number's details · asks whether it is in a Business app (**no, standard onboarding**) · subscribes webhooks · **registers the number with a random PIN** · attaches drafts · submits **16** templates · connected. (The pace is simulated; the lines are what the code returned.)
+8. **Continue** → the last screen is **Meta's payment method, outside SurveyFlow**. Press **I will do it later**: it warns that about 1,000 service conversations a month go out and then delivery stops. **Back to SurveyFlow**.
+9. The green "connected" line appears. Go to the dashboard, open **Settings → WhatsApp**: **"Used through SurveyFlow only"**, the number you typed with "(simulated)", no import box, no grey "Simulate what WhatsApp sends…" panel.
 
-**1e. By hand, Mireille (a number in a WhatsApp Business app).** Sign out, register a second made-up owner (`mireille-test@example.com`), pick **Businesses**.
+**1e. By hand, Mireille (a number in a WhatsApp Business app).** Sign out, register `mireille-test@example.com`, pick **Businesses**.
 
-1. Choose **"It is in my WhatsApp Business app, and I keep using the app"**. The yellow box lists five changes (linked devices, broadcast lists, 20 per second, 14 days, version 2.24.17). Press **"Simulate a number in the WhatsApp Business app (Mireille)"**.
-2. A box "Importing from your WhatsApp Business app" says "Waiting for WhatsApp to send your contacts" and "Keep the app open on your phone for a few minutes".
-3. Go to the dashboard, open **Settings → WhatsApp**. The number reads **"Also in your WhatsApp Business app"**. At the bottom, press the grey buttons in this order:
+1. Choose **"It is in my WhatsApp Business app, and I keep using the app"**. The yellow box lists five changes. Press **Connect with Facebook (simulation)**.
+2. Walk the window with a number ending in **2** (for example `+237 699 123 452`): the login and access screens as before, then **"This number is in a WhatsApp Business app"** (a profile card, **Yes, connect this account**) → **Your business** → **Scan the QR code with your WhatsApp Business app** (a decorative code, not scannable; press **I scanned it in my app (simulated)**) → **Almost there** (time zone; the button is greyed out until you tick Meta's terms) → **Finish**.
+3. In the right panel there is **no SMS row** (a number in the app is proved by the QR), and the dark box says `FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING` and `is_on_biz_app: true`. The background list says: asks whether it is in a Business app (**yes, coexistence**) · **does not register the number** (Meta's rule) · **asks Meta for your contacts and chat history** · submits 16 templates. **Continue** → **Add a card (simulated)** → **Back to SurveyFlow**.
+4. The import box says "Waiting for WhatsApp to send your contacts" and "Keep the app open on your phone for a few minutes". In **Settings → WhatsApp** the number reads **"Also in your WhatsApp Business app"**. At the bottom, press the grey buttons in this order:
    - **Contacts arrive**: a box "4 contacts came from your WhatsApp Business app … none can be sent a survey until you confirm" appears. Try the blue button: it is greyed out. Tick "I confirm that these people agreed…", press **Confirm 4 contacts**: a green "4 contacts confirmed" appears and the box goes away. (Before confirming, a survey sent "to all" finds nobody: that is the check that an address book is not consent.)
    - **History arrives**: the import box says "Import finished: 4 contacts."
    - **Owner writes in the app**: "App last used: <time>" appears under the number.
    - **Inactive for 14 days**: a red banner "Your WhatsApp number was disconnected" says the app "has not been opened for about 14 days" and that sending is paused. Open **Surveys** and try to publish a draft: it is refused. The wording must not contain `PRIMARY_INACTIVITY`.
-   - In the banner choose again the second answer and press the green Mireille button: the banner disappears, the **same** number is back, the import box is "Waiting…" again. (**Reconnected** is the button for when Meta says on its own that the link is back.)
-4. Open a published survey, switch on its **join link** (the card "Link to share"): **"Share on WhatsApp"** opens `https://wa.me/?text=…` in a new tab with the message and the link inside; **"Copy the message"** copies the same text.
+   - In the banner choose again the second answer and walk the window again (a number ending in 2): the banner disappears, the **same** number is back, the import box is "Waiting…" again. (**Reconnected** is the button for when Meta says on its own that the link is back.)
+5. Open a published survey, switch on its **join link** (the card "Link to share"): **"Share on WhatsApp"** opens `https://wa.me/?text=…` in a new tab with the message and the link inside; **"Copy the message"** copies the same text.
+
+**What these buttons are:** the simulated popup and the grey panel exist **only in demo mode** (`WHATSAPP_MODE=mock`; production refuses to start in it). A real customer sees Meta's own popup, not this one.
 
 **Round 1 is green when** every "must" above happened. Anything else: send me the step number and a screenshot.
 
