@@ -493,3 +493,25 @@ The webhook already refuses unsigned or wrongly signed requests (`apps/api/src/r
 **Share kit.** The message is a title and the join link and nothing else; the link opens in a new tab with `rel="noopener noreferrer"`; it carries the join code's own limits (WA-05: expiry, maximum, countries).
 
 **Not covered.** The real flow has not been run. A real `account_update` could carry a reason we do not know (it is kept as `OTHER`, with a generic cause). If Meta's `history` webhook for a declined share is shaped differently from its page, the account would show the history as "partial" instead of "declined", which changes a label and nothing else. The per-customer onboarding ceiling and the 20 messages-per-second ceiling of a coexistence number are Meta's and are not enforced here. A Tech Provider's access token for a customer's account is as sensitive as before: it is stored encrypted and never shown.
+
+## 28. What the published Privacy policy promises, and what backs each promise (LEG-01, D-20, 6 November 2026)
+
+The Privacy policy (`/privacy`, section 10 and section 8) states measures and periods as facts. This is where each one is backed, so that a change in the code that breaks a promise is found by whoever changes it. A promise with no backing here would be a statement the product cannot prove.
+
+| The page says | Backed by |
+|---|---|
+| Passwords hashed with argon2id, never readable | `apps/api/src/lib/password.ts`, `apps/api/tests/security-auth.test.ts` |
+| Participants' names and numbers, WhatsApp and Google tokens and authenticator secrets encrypted (AES-256-GCM, key ring) | `apps/api/src/lib/crypto.ts`, `apps/api/tests/security-crypto.test.ts` |
+| Each Customer's data isolated from every other's, tested automatically | `apps/api/tests/security-isolation.test.ts` (every route) |
+| Sensitive actions ask for a confirmation; two-step verification is available | `apps/api/tests/security-2fa-stepup.test.ts` |
+| Viewer sees counts and results; editor also sees participants; neither exports, reveals full numbers, sees money or manages the team | `apps/api/tests/team.test.ts` |
+| Download of all data in one file; closing waits 30 days read-only, can be cancelled, then erases | `apps/api/tests/account-data.test.ts`; `ACCOUNT_DELETION_GRACE_DAYS` (default 30) |
+| Security log kept 400 days; accounts never confirmed deleted after 24 hours | `AUDIT_RETENTION_DAYS` (default 400), `UNVERIFIED_PURGE_HOURS` (default 24) in `apps/api/src/config/env.ts` |
+| Encrypted backups on a rotation of about 30 days | `scripts/lib/backup.mjs`, `scripts/tests/backup.test.mjs`; `BACKUP_KEEP_DAYS` (default 30, set by the operator) |
+| Names and numbers masked on screen; showing one is limited and logged | `apps/api/tests/security-ops.test.ts` (reveal), `apps/api/tests/security-reads.test.ts` (the cap on reading names and answers) |
+| No advertising or tracking cookies; a session cookie and a language cookie only | no analytics or tracking code in `apps/web` (checked 2026-11-06); `apps/web/src/lib/auth.ts` (session), `apps/web/src/lib/i18n/index.ts` (`sf_lang`) |
+| SurveyFlow takes no automated decision about a person and builds no profile | none exists in the code; if one is ever added, the page must change first (s. 44, 65) |
+| The first message to somebody who joins carries the link to the participants' notice | `packages/shared/src/join.test.ts`, `apps/api/tests/join-links.test.ts` |
+| The French and the English say the same, and cite only sections of the law that were read | `apps/web/tests/legal-pages.test.ts` |
+
+**Not backed, and therefore not claimed:** disk encryption at the host (DAT-02, host half; the page says backups and fields are encrypted and that connections use HTTPS, nothing about the disk); where the host is; a breach procedure (the page promises to tell the Customer, the Authority and the persons without delay, s. 22, and no written procedure exists yet); a register of processing operations (s. 29); the 10-year keeping of the financial record, a default marked "to confirm" in the facts sheet and stated on the page as the period applied.

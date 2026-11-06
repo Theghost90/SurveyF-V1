@@ -90,7 +90,10 @@ export const en = {
   'register.submit': 'Create account',
   'register.have': 'Already have an account?',
   'register.signin': 'Sign in',
-  'register.accept': 'By creating an account you agree to the Terms and the Privacy policy.',
+  'register.acceptA': 'By creating an account you agree to the',
+  'register.terms': 'Terms of service',
+  'register.acceptB': 'and the',
+  'register.privacy': 'Privacy policy',
 
   // ---- app shell
   'app.nav.dashboard': 'Dashboard',
@@ -262,7 +265,10 @@ export const fr: Record<keyof typeof en, string> = {
   'register.submit': 'Créer le compte',
   'register.have': 'Vous avez déjà un compte ?',
   'register.signin': 'Se connecter',
-  'register.accept': 'En créant un compte, vous acceptez les Conditions et la Politique de confidentialité.',
+  'register.acceptA': 'En créant un compte, vous acceptez les',
+  'register.terms': 'Conditions d’utilisation',
+  'register.acceptB': 'et la',
+  'register.privacy': 'Politique de confidentialité',
 
   'app.nav.dashboard': 'Tableau de bord',
   'app.nav.surveys': 'Sondages',

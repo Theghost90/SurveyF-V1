@@ -83,6 +83,9 @@ describe('joining', () => {
     expect(said).toMatch(/STOP/);
     expect(said).toMatch(/START/);
     expect(said).toMatch(/answers and this WhatsApp number/);
+    // Law No. 2024/017 s. 21: who handles the data, where it goes and the person's rights are given at collection; the message points to the participants' notice.
+    expect(said).toContain('/privacy#participants');
+    expect(said.indexOf('/privacy#participants')).toBeLessThan(said.indexOf('START'));
     expect(await prisma.response.count()).toBe(0);
 
     await send(w, 1, 'START');

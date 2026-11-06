@@ -67,4 +67,15 @@ describe('the first message to somebody who joined', () => {
     expect(fr).toContain('START');
     expect(fr).toMatch(/réponses et ce numéro/);
   });
+
+  it('carries the link to the participants’ notice before the START line when there is one, and is unchanged without it', () => {
+    const url = 'https://surveyflow.example/privacy#participants';
+    for (const lang of ['en', 'fr'] as const) {
+      const withUrl = joinConsentText(lang, 'Café Test', 'Delivery', url);
+      expect(withUrl).toContain(url);
+      expect(withUrl.indexOf(url)).toBeLessThan(withUrl.indexOf('START'));
+      expect(withUrl.indexOf('STOP')).toBeLessThan(withUrl.indexOf(url));
+      expect(joinConsentText(lang, 'Café Test', 'Delivery')).not.toContain('http');
+    }
+  });
 });

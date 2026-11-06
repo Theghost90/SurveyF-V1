@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import QRCode from 'qrcode';
 import type { Prisma, WhatsAppAccount } from '@prisma/client';
 import { joinConsentText, joinInvalidText, joinLink, joinRefusal, sys, type SurveyLang } from '@surveyflow/shared';
+import { env } from '../../config/env';
 import { badRequest, notFound } from '../../lib/errors';
 import { phoneIndex, prisma } from '../../lib/prisma';
 import { redis, withLock } from '../../lib/redis';
@@ -117,7 +118,8 @@ export async function handleJoin(account: WhatsAppAccount & { user: { locale: st
     if (!recipient) {
       recipient = await prisma.surveyRecipient.create({ data: { surveyId: survey.id, contactId: contact.id, status: 'sent', sentAt: now, via: 'join' } });
     }
-    await sendInConversation(account, from, [{ kind: 'text', body: joinConsentText(surveyLang, survey.user.businessName || survey.user.name, survey.title) }], log);
+    // The notice is the privacy policy's participants' section. The link is the same in both languages: the page shows itself in the visitor's language (cookie, then browser) and has a switch.
+    await sendInConversation(account, from, [{ kind: 'text', body: joinConsentText(surveyLang, survey.user.businessName || survey.user.name, survey.title, `${env.webBaseUrl}/privacy#participants`) }], log);
   });
 }
 

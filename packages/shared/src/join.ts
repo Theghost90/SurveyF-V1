@@ -59,17 +59,21 @@ export function joinRefusal(s: JoinSettings, o: { surveyActive: boolean; joined:
 
 const T = {
   en: {
-    consent: (business: string, title: string) =>
-      `Hello! ${business} invites you to answer a short survey: “${title}”.\n\nIf you go ahead, ${business} will keep your answers and this WhatsApp number to read the results. You can stop at any time by replying STOP.\n\nReply START to begin.`,
+    consent: (business: string, title: string, notice?: string) =>
+      `Hello! ${business} invites you to answer a short survey: “${title}”.\n\nIf you go ahead, ${business} will keep your answers and this WhatsApp number to read the results. You can stop at any time by replying STOP.${notice ? `\n\nWho handles your data, where it goes and your rights: ${notice}` : ''}\n\nReply START to begin.`,
     invalid: 'Sorry, this link is not valid any more.',
   },
   fr: {
-    consent: (business: string, title: string) =>
-      `Bonjour ! ${business} vous invite à répondre à un court sondage : « ${title} ».\n\nSi vous continuez, ${business} conservera vos réponses et ce numéro WhatsApp pour lire les résultats. Vous pouvez arrêter à tout moment en répondant STOP.\n\nRépondez START pour commencer.`,
+    consent: (business: string, title: string, notice?: string) =>
+      `Bonjour ! ${business} vous invite à répondre à un court sondage : « ${title} ».\n\nSi vous continuez, ${business} conservera vos réponses et ce numéro WhatsApp pour lire les résultats. Vous pouvez arrêter à tout moment en répondant STOP.${notice ? `\n\nQui traite vos données, où elles vont et vos droits : ${notice}` : ''}\n\nRépondez START pour commencer.`,
     invalid: 'Désolé, ce lien n’est plus valide.',
   },
 } as const;
 
-/** The first message to somebody who joined: who is asking, what is kept, how to stop, and what to type. */
-export const joinConsentText = (lang: SurveyLang, business: string, title: string): string => T[lang].consent(business, title);
+/**
+ * The first message to somebody who joined: who is asking, what is kept, how to stop, and what to type.
+ * `notice` is the address of the participants' notice (the privacy policy's "participants" section): Law No. 2024/017 s. 21 asks for the controller's identity,
+ * the purposes, the recipients, the rights and the possible transfer abroad to be given at collection, which a short message cannot carry.
+ */
+export const joinConsentText = (lang: SurveyLang, business: string, title: string, notice?: string): string => T[lang].consent(business, title, notice);
 export const joinInvalidText = (lang: SurveyLang): string => T[lang].invalid;

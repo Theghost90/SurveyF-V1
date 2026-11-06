@@ -59,6 +59,13 @@ function RegisterForm() {
     <Card className="w-full max-w-lg p-8">
       <h1 className="text-3xl font-extrabold tracking-[-0.03em]">{t('register.title')}</h1>
       <p className="mt-1.5 text-muted-foreground">{t('register.sub')}</p>
+      {/* Above both ways of creating an account (Google and the form): the Law asks for the person's consent first (s. 9, 50), and this is where it is given. */}
+      <p className="mt-3 text-xs text-muted-foreground" data-testid="register-accept">
+        {t('register.acceptA')}{' '}
+        <Link href="/terms" target="_blank" rel="noopener" className="font-semibold text-leaf hover:underline">{t('register.terms')}</Link>{' '}
+        {t('register.acceptB')}{' '}
+        <Link href="/privacy" target="_blank" rel="noopener" className="font-semibold text-leaf hover:underline">{t('register.privacy')}</Link>.
+      </p>
       {config?.googleSignIn && (
         <>
           <Button type="button" variant="outline" size="lg" className="mt-6 h-12 w-full text-base" onClick={() => void signIn('google', { callbackUrl: '/onboarding' })}>{t('login.google')}</Button>
@@ -84,7 +91,6 @@ function RegisterForm() {
         {config?.captcha && <div className="sm:col-span-2"><Captcha siteKey={config.captcha.siteKey} onToken={setCaptchaToken} resetKey={captchaRound} /></div>}
         {formError && <p role="alert" className="text-sm font-medium text-destructive sm:col-span-2">{formError}</p>}
         <Button type="submit" size="lg" loading={busy} disabled={!!config?.captcha && !captchaToken} className="h-12 text-base sm:col-span-2">{t('register.submit')}</Button>
-        <p className="text-xs text-muted-foreground sm:col-span-2">{t('register.accept')}</p>
       </form>
       <p className="mt-5 text-center text-sm text-muted-foreground">
         {t('register.have')} <Link href="/login" className="font-semibold text-leaf hover:underline">{t('register.signin')}</Link>
