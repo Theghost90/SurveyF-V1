@@ -205,6 +205,8 @@ Wait until both lines say they are ready (the website on `http://localhost:4222`
 5. In the root `.env` (never paste its values in a chat): `WHATSAPP_MODE=live`, `META_APP_ID=<App settings → Basic → App ID>`, `META_EMBEDDED_SIGNUP_CONFIG_ID=<the ID from step 2>`, `META_APP_SECRET` (already there), `PUBLIC_API_URL=<API tunnel>`, `WEB_ORIGIN=<website tunnel>`, `NEXTAUTH_URL=<website tunnel>`, `PUBLIC_WEB_URL=<website tunnel>`. Leave `META_GRAPH_VERSION` as it is; **if the connection ends with the message "Meta did not say whether this number is also in the WhatsApp Business app", set `META_GRAPH_VERSION=v27.0` (the version Meta's current pages use) and try again**: that field may not exist on the older version.
 6. Start in **live** mode in a **fresh** PowerShell window (so that no demo setting from Round 1 is left): `npm run dev`. Open the **website tunnel address** (not localhost: the Facebook login only works on the listed domain).
 
+**What happened on 6 November (read before 2A):** the real popup opened but said **"SurveyFlow can't onboard customers right now"** (see DECISIONS, "First real popup"). Until that is lifted, 2A and 2B cannot be run. Check, in this order, in the Meta app dashboard: **Required actions**, then **Publish** (what stops the app going Live), then **Use cases → Customize → Basic setup → Step 3. Business verification** and **Become a Partner → Become Tech Provider**. Send a screenshot of each.
+
 **2A. Armand with a real new number**
 
 1. Register or sign in as an owner (verified e-mail). Open **Settings → WhatsApp** (the owner must have no connected number: disconnect the test number first).
