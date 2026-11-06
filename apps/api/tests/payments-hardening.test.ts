@@ -699,33 +699,33 @@ describe('CRITICAL: the operator tool for payments in review', () => {
     await settleTransaction(tx.id, paid(3000), quiet);
 
     const list = run('list');
-    expect(list.status).toBe(0);
+    expect(list.status, `exit status ${list.status}, signal ${list.signal}, error: ${list.error?.message}\n--- stderr ---\n${list.stderr}\n--- stdout ---\n${list.stdout}`).toBe(0);
     expect(list.stdout).toContain(tx.reference);
     expect(list.stdout).toMatch(/underpaid: provider reports 3000 XAF, asked 39000 XAF/);
     expect(run('show', tx.reference).stdout).toContain('"status": "review"');
 
     const noNote = run('credit', tx.reference);
-    expect(noNote.status).toBe(1);
+    expect(noNote.status, `exit status ${noNote.status}, signal ${noNote.signal}, error: ${noNote.error?.message}\n--- stderr ---\n${noNote.stderr}\n--- stdout ---\n${noNote.stdout}`).toBe(1);
     expect(noNote.stderr).toMatch(/--note/);
     expect(await planOf(o.userId)).toBe('trial');
 
     // PAY-07: a decision needs who and why, and without --yes the command only says what it would do
     const noWho = run('credit', tx.reference, '--note', 'paid the rest in cash', '--yes');
-    expect(noWho.status).toBe(1);
+    expect(noWho.status, `exit status ${noWho.status}, signal ${noWho.signal}, error: ${noWho.error?.message}\n--- stderr ---\n${noWho.stderr}\n--- stdout ---\n${noWho.stdout}`).toBe(1);
     expect(noWho.stderr).toMatch(/--operator/);
     const preview = run('credit', tx.reference, '--operator', 'Chantal', '--note', 'paid the rest in cash');
-    expect(preview.status).toBe(0);
+    expect(preview.status, `exit status ${preview.status}, signal ${preview.signal}, error: ${preview.error?.message}\n--- stderr ---\n${preview.stderr}\n--- stdout ---\n${preview.stdout}`).toBe(0);
     expect(preview.stdout).toMatch(/Nothing was done/);
     expect(await planOf(o.userId)).toBe('trial');
 
     const ok = run('credit', tx.reference, '--operator', 'Chantal', '--note', 'paid the rest in cash', '--yes');
-    expect(ok.status).toBe(0);
+    expect(ok.status, `exit status ${ok.status}, signal ${ok.signal}, error: ${ok.error?.message}\n--- stderr ---\n${ok.stderr}\n--- stdout ---\n${ok.stdout}`).toBe(0);
     expect(ok.stdout).toMatch(/credited/);
     expect(await planOf(o.userId)).toBe('growth');
     expect(run('list').stdout).toMatch(/Nothing in "review"/);
 
     const again = run('credit', tx.reference, '--operator', 'Chantal', '--note', 'again', '--yes');
-    expect(again.status).toBe(1);
+    expect(again.status, `exit status ${again.status}, signal ${again.signal}, error: ${again.error?.message}\n--- stderr ---\n${again.stderr}\n--- stdout ---\n${again.stdout}`).toBe(1);
     expect(again.stderr).toMatch(/not "review"/);
     expect(run('reject', 'does-not-exist', '--note', 'x').status).toBe(1);
   }, 120_000);
