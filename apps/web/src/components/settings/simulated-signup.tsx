@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Circle, Facebook, Loader2, MessageSquareText, ShieldCheck, Smartphone } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Circle, Facebook, Loader2, MessageSquareText, ShieldCheck, Smartphone } from 'lucide-react';
 import { demoNumberKind, type NumberSituation, type SignupTraceStep } from '@surveyflow/shared';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -119,7 +119,16 @@ export function SimulatedSignup({ open, onOpenChange, situation, onFinished }: {
   }
 
   const stepLabel = (s: SignupTraceStep) => (s.key === 'mode' ? t(`ss.t.mode.${s.info === 'coexistence' ? 'coexistence' : 'cloud'}` as TKey) : t(`ss.t.${s.key}` as TKey, { info: s.info ?? '' }));
-  const rows: Array<[string, string]> = reached.map((k) => [k, t(`ss.row.${k}` as TKey, { phone: phoneShown })]);
+  // The customer's checklist (right side): plain words, what to give and why, ticked once done. Eight steps for a new number, five for a number in the WhatsApp Business app.
+  const plan: 'new' | 'app' = reached.includes('phone') ? (kind === 'business_app' ? 'app' : 'new') : situation === 'business_app' ? 'app' : 'new';
+  const doneKeys: Record<string, boolean> = {
+    login: reached.includes('login'), auth: reached.includes('auth'), phone: reached.includes('phone'), verify: reached.includes('verify'), biz: reached.includes('biz'), perm: reached.includes('perm'),
+    access: reached.includes('auth'), number: reached.includes('biz'), scan: reached.includes('tz'),
+    pay: paid === 'added', ready: connected && paid !== null,
+  };
+  const keys = plan === 'new' ? ['login', 'auth', 'phone', 'verify', 'biz', 'perm', 'pay', 'ready'] : ['access', 'number', 'scan', 'pay', 'ready'];
+  const currentKey = keys.find((k) => !doneKeys[k]);
+  const itemState = (k: string): 'done' | 'current' | 'attention' | 'todo' => (doneKeys[k] ? 'done' : k === 'pay' && paid === 'later' ? 'attention' : k === currentKey ? 'current' : 'todo');
   const perms = (<ul className="list-disc space-y-1 pl-5 text-sm"><li>{t('ss.auth.p1')}</li><li>{t('ss.auth.p2')}</li>{step === 'perm' && <li>{t('ss.perm.p3')}</li>}</ul>);
   const field = 'h-11';
 
@@ -219,15 +228,50 @@ export function SimulatedSignup({ open, onOpenChange, situation, onFinished }: {
             </div>
           </div>
 
-          {/* who receives what, and what SurveyFlow does */}
-          <aside className="flex min-w-0 flex-col gap-4" data-testid="sim-side">
-            <div><h3 className="flex items-center gap-2 font-display text-lg font-bold"><ShieldCheck className="h-5 w-5 text-leaf" aria-hidden />{t('ss.side.title')}</h3><p className="text-sm text-muted-foreground">{t('ss.side.sub')}</p></div>
-            {rows.length === 0 && <p className="text-sm text-muted-foreground">{t('ss.side.empty')}</p>}
-            <ul className="flex flex-col gap-2 text-sm" data-testid="sim-rows">{rows.map(([k, text]) => <li key={k} className="flex gap-2 rounded-lg border border-line p-2.5"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-leaf" aria-hidden /><span>{text}</span></li>)}</ul>
-            {event && (<div className="rounded-xl bg-ink p-3 text-xs text-white" data-testid="sim-event"><p className="mb-1 font-bold">{t('ss.event.title')}</p><pre className="overflow-x-auto whitespace-pre-wrap break-all">{JSON.stringify(event, null, 2)}</pre><p className="mt-2 text-white/70">{t('ss.event.note')}</p></div>)}
-            {trace && (<div data-testid="sim-trace"><h4 className="mb-2 font-semibold">{t('ss.t.title')}</h4>
-              <ol className="flex flex-col gap-2 text-sm">{trace.map((s, i) => (<li key={`${s.key}-${i}`} className={`flex gap-2 ${i < shown ? '' : 'opacity-30'}`} data-testid={i < shown ? `sim-trace-${s.key}` : undefined}>{i < shown ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-leaf" aria-hidden /> : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />}<span>{stepLabel(s)}</span></li>))}</ol>
-              <p className="mt-2 text-xs text-muted-foreground">{t('ss.work.note')}</p></div>)}
+          {/* the customer's checklist: what to give, why, and what is done */}
+          <aside className="flex min-w-0 flex-col gap-4 rounded-2xl bg-mint/50 p-5" data-testid="sim-side" data-plan={plan}>
+            <div>
+              <h3 className="flex items-center gap-2 font-display text-2xl font-bold"><ShieldCheck className="h-6 w-6 text-leaf" aria-hidden />{t('ss.c.title')}</h3>
+              <p className="mt-1 text-base text-body">{t('ss.c.sub')}</p>
+            </div>
+            {step === 'working' && !error && <p className="flex items-center gap-2 rounded-xl bg-white p-3 text-base font-semibold" role="status" data-testid="sim-connecting">{(!trace || shown < trace.length) ? <Loader2 className="h-5 w-5 animate-spin text-leaf" aria-hidden /> : <CheckCircle2 className="h-5 w-5 text-leaf" aria-hidden />}{t('ss.c.connecting')}</p>}
+            <ol className="flex flex-col gap-2.5" data-testid="sim-items">
+              {keys.map((k) => {
+                const st = itemState(k);
+                const ready = k === 'ready';
+                return (
+                  <li key={k} data-testid={`sim-item-${k}`} data-state={st}
+                    className={`flex gap-3 rounded-xl p-3.5 ${ready && st === 'done' ? 'bg-leaf text-white' : st === 'current' ? 'border-2 border-leaf bg-white' : st === 'attention' ? 'border-2 border-amber bg-amber-soft text-amber-ink' : st === 'done' ? 'bg-white/70' : 'bg-white/40 text-muted-foreground'}`}>
+                    {st === 'done' ? <CheckCircle2 className={`mt-0.5 h-6 w-6 shrink-0 ${ready ? 'text-white' : 'text-leaf'}`} aria-label={t('ss.c.done')} />
+                      : st === 'attention' ? <AlertTriangle className="mt-0.5 h-6 w-6 shrink-0 text-amber" aria-hidden />
+                      : <Circle className={`mt-0.5 h-6 w-6 shrink-0 ${st === 'current' ? 'text-leaf' : 'text-muted-foreground'}`} aria-hidden />}
+                    <div className="min-w-0">
+                      <p className="flex flex-wrap items-center gap-2 text-[17px] font-bold leading-snug">
+                        {t(`ss.c.${plan}.${k}` as TKey)}
+                        {st === 'current' && <span className="rounded-full bg-leaf px-2 py-0.5 text-xs font-semibold text-white">{t('ss.c.now')}</span>}
+                        {st === 'attention' && <span className="rounded-full bg-amber px-2 py-0.5 text-xs font-semibold text-white">{t('ss.c.required')}</span>}
+                      </p>
+                      {(st !== 'done' || ready) && <p className="mt-1 text-[15px] leading-snug">{t(`ss.c.${plan}.${k}.why` as TKey)}</p>}
+                      {ready && st === 'done' && (
+                        <div className="mt-2 flex flex-col gap-1.5 text-sm text-white/90" data-testid="sim-notices">
+                          <p>{t('ss.c.notice.templates')}</p>
+                          {plan === 'app' && <p>{t('ss.c.notice.sync')}</p>}
+                          {paid === 'later' && <p>{t('ss.c.notice.pay')}</p>}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+            {trace && event && (
+              <details className="rounded-xl border border-dashed border-line bg-white/60 p-3 text-xs" data-testid="sim-tester">
+                <summary className="cursor-pointer font-semibold">{t('ss.t.title')}</summary>
+                <div className="mt-2 rounded-lg bg-ink p-2 text-white" data-testid="sim-event"><p className="mb-1 font-bold">{t('ss.event.title')}</p><pre className="overflow-x-auto whitespace-pre-wrap break-all">{JSON.stringify(event, null, 2)}</pre><p className="mt-1 text-white/70">{t('ss.event.note')}</p></div>
+                <ol className="mt-2 flex flex-col gap-1.5" data-testid="sim-trace">{trace.map((s, i) => (<li key={`${s.key}-${i}`} className="flex gap-2" data-testid={`sim-trace-${s.key}`}><CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-leaf" aria-hidden /><span>{stepLabel(s)}</span></li>))}</ol>
+                <p className="mt-2 text-muted-foreground">{t('ss.work.note')}</p>
+              </details>
+            )}
           </aside>
         </div>
       </DialogContent>

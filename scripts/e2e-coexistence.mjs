@@ -55,7 +55,9 @@ async function register(email, business) {
 
 // ---------------------------------------------------------------- Armand
 const stamp = String(Date.now()).slice(-6);
-const rowsText = async () => (await page.getByTestId('sim-rows').innerText().catch(() => '')) || '';
+const itemState = async (k) => page.getByTestId(`sim-item-${k}`).getAttribute('data-state');
+const itemCount = async () => page.locator('[data-testid^="sim-item-"]').count();
+const openTester = async () => { await page.getByTestId('sim-tester').locator('summary').click(); }; // the technical list is for testers: closed unless asked
 const traceKeys = async () => page.locator('[data-testid^="sim-trace-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid').replace('sim-trace-', '')));
 await newPage();
 await step('ARMAND: the Connect step asks where the number is, and the simulation cannot start until it is answered', async () => {
@@ -71,6 +73,9 @@ await step('ARMAND: Meta’s popup, screen by screen: login, access, a number in
   expect((await page.getByTestId('app-limits').count()) === 0, 'no limits for a new number');
   await page.getByTestId('sim-open').click();
   expect(/SIMULATION/.test(await page.getByTestId('sim-banner').innerText()), 'the window says it is a simulation');
+  const first = await page.getByTestId('sim-side').innerText();
+  expect(/never sees your password/.test(first) && /Now/.test(first), `first step explained while it is the one to do: ${first.slice(0, 300)}`);
+  expect(!/is_on_biz_app|WA_EMBEDDED|webhook|token|FINISH/.test(first), 'no technical text on the customer side');
   await shotDialog('02-popup-login');
   await page.getByTestId('sim-login-btn').click();
   await shotDialog('03-popup-access');
@@ -81,7 +86,7 @@ await step('ARMAND: Meta’s popup, screen by screen: login, access, a number in
   await page.getByTestId('sim-refused').waitFor();
   await shotDialog('05-popup-refused');
   await page.getByTestId('sim-refused-btn').click();
-  expect(!/Phone number/.test(await rowsText()), 'the refused number is not listed as given');
+  expect((await itemState('phone')) !== 'done', 'the refused number is not ticked as given');
   await page.getByTestId('sim-phone').fill(`+237 699 ${stamp}1`); // ends in 1: new
   await page.getByTestId('sim-phone-next').click();
   await page.getByTestId('sim-sms').waitFor();
@@ -97,25 +102,36 @@ await step('ARMAND: Meta’s popup, screen by screen: login, access, a number in
   await shotDialog('08-popup-permissions');
   await page.getByTestId('sim-perm-btn').click();
   await shotDialog('09-popup-ready');
-  const rows = await rowsText();
-  expect(/Facebook login: Meta only/.test(rows) && /Meta checks it/.test(rows) && /The SMS code: Meta only/.test(rows) && /Business name, country, website: Meta only/.test(rows), `who receives what: ${rows.slice(0, 400)}`);
+  expect((await itemCount()) === 8, 'eight steps for a new number');
+  const states = [];
+  for (const k of ['login', 'auth', 'phone', 'verify', 'biz', 'perm', 'pay', 'ready']) states.push(await itemState(k));
+  expect(states.join(',') === 'done,done,done,done,done,done,current,todo', `ticks: ${states.join(',')}`);
+  const side = await page.getByTestId('sim-side').innerText();
+  expect(/Add a payment method \(required\)/.test(side) && /Visa and Mastercard cards linked to your Mobile Money/.test(side) && /SurveyFlow never sees your card/.test(side), `customer text: ${side.slice(0, 600)}`);
+  expect(!/is_on_biz_app|WA_EMBEDDED|PIN|webhook|token|FINISH/.test(side), `no technical text on the customer side: ${side}`);
 });
 
 await step('ARMAND: Finish: what the popup tells SurveyFlow, then SurveyFlow’s own steps (registered with a PIN, no sync), then Meta’s payment method', async () => {
   await page.getByTestId('sim-done-btn').click();
-  await page.getByTestId('sim-event').waitFor({ timeout: 20000 });
+  await page.getByTestId('sim-connecting').waitFor({ timeout: 20000 });
+  await page.getByTestId('sim-work-continue').waitFor({ timeout: 30000 });
+  await openTester();
   const ev = await page.getByTestId('sim-event').innerText();
   expect(/"event": "FINISH"/.test(ev) && /"is_on_biz_app": false/.test(ev) && /messaging_account_ids/.test(ev), `popup event: ${ev.slice(0, 300)}`);
-  await page.getByTestId('sim-work-continue').waitFor({ timeout: 30000 });
   const keys = await traceKeys();
   expect(keys.join(',') === 'token,details,mode,subscribe,register,drafts,templates,done', `trace: ${keys.join(',')}`);
-  const side = await page.getByTestId('sim-trace').innerText();
+  const side = await page.getByTestId('sim-tester').innerText();
   expect(/no\. Standard onboarding/.test(side) && /random PIN/.test(side) && /\+237699\d+1 \(simulated\)/.test(side) && !/sync|chat history/i.test(side.replace(/is_on_biz_app/g, '')), `trace text: ${side.slice(0, 500)}`);
   await shotDialog('10-armand-behind-the-scenes');
   await page.getByTestId('sim-work-continue').click();
+  expect((await itemState('pay')) === 'current', 'the payment method is now the step to do');
   await shotDialog('11-popup-billing');
   await page.getByTestId('sim-bill-later').click();
-  expect(/1,000 service conversations/.test(await page.getByTestId('sim-bill-warn').innerText()), 'the consequence of no payment method is said');
+  expect(/Still required/.test(await page.getByTestId('sim-bill-warn').innerText()) && /1,000 conversations/.test(await page.getByTestId('sim-bill-warn').innerText()), 'the consequence of no payment method is said');
+  expect((await itemState('pay')) === 'attention' && (await itemState('ready')) === 'done', 'the payment step stays flagged as required while the number is connected');
+  const notices = await page.getByTestId('sim-notices').innerText();
+  expect(/few minutes, sometimes up to a day/.test(notices) && /payment method is still missing/.test(notices) && !/Keep the app open/.test(notices), `waiting notices: ${notices}`);
+  await shotDialog('11b-popup-connected-without-card');
   await page.getByTestId('sim-bill-close').click();
   await page.getByTestId('ob-connected').waitFor({ timeout: 20000 });
   await page.getByRole('button', { name: /go to dashboard/i }).click();
@@ -159,21 +175,28 @@ await step('MIREILLE: Meta’s popup for a number in the WhatsApp Business app: 
   await page.getByTestId('sim-tz-terms').click();
   await shotDialog('15-popup-time-zone-terms');
   await page.getByTestId('sim-tz-next').click();
-  const rows = await rowsText();
-  expect(/profile of your WhatsApp Business app/.test(rows) && /QR scan from inside your app: Meta only/.test(rows) && /Time zone and Meta’s terms: Meta only/.test(rows) && !/SMS code/.test(rows), `rows: ${rows.slice(0, 500)}`);
+  expect((await itemCount()) === 5, 'five steps for a number in the WhatsApp Business app');
+  const mst = []; for (const k of ['access', 'number', 'scan', 'pay', 'ready']) mst.push(await itemState(k));
+  expect(mst.join(',') === 'done,done,done,current,todo', `ticks: ${mst.join(',')}`);
+  expect(!/code by SMS/.test(await page.getByTestId('sim-side').innerText()), 'no SMS step for a number in the app');
   await page.getByTestId('sim-done-btn').click();
-  await page.getByTestId('sim-event').waitFor({ timeout: 20000 });
+  await page.getByTestId('sim-work-continue').waitFor({ timeout: 30000 });
+  await openTester();
   const ev = await page.getByTestId('sim-event').innerText();
   expect(/FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING/.test(ev) && /"is_on_biz_app": true/.test(ev), `popup event: ${ev.slice(0, 300)}`);
-  await page.getByTestId('sim-work-continue').waitFor({ timeout: 30000 });
   const keys = await traceKeys();
   expect(keys.join(',') === 'token,details,mode,subscribe,register_skipped,sync,drafts,templates,done', `trace: ${keys.join(',')}`);
-  const side = await page.getByTestId('sim-trace').innerText();
+  const side = await page.getByTestId('sim-tester').innerText();
   expect(/yes\. Coexistence/.test(side) && /Does not register the number/.test(side) && /contacts and chat history/.test(side), `trace text: ${side.slice(0, 600)}`);
   await shotDialog('16-mireille-behind-the-scenes');
   await page.getByTestId('sim-work-continue').click();
   await page.getByTestId('sim-bill-add').click();
   expect(/Messages can go out/.test(await page.getByTestId('sim-bill-added').innerText()), 'payment added');
+  const all = []; for (const k of ['access', 'number', 'scan', 'pay', 'ready']) all.push(await itemState(k));
+  expect(all.every((x) => x === 'done'), `everything ticked: ${all.join(',')}`);
+  const mnotes = await page.getByTestId('sim-notices').innerText();
+  expect(/Keep the app open/.test(mnotes) && /few minutes, sometimes up to a day/.test(mnotes) && !/payment method is still missing/.test(mnotes), `notices: ${mnotes}`);
+  await shotDialog('16b-mireille-all-done');
   await page.getByTestId('sim-bill-close').click();
   await page.getByTestId('ob-connected').waitFor({ timeout: 20000 });
   await page.getByTestId('sync').waitFor({ timeout: 15000 });
