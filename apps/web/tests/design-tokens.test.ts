@@ -11,7 +11,8 @@ const css = readFileSync(path.join(__dirname, '../src/app/globals.css'), 'utf8')
 
 describe('design tokens', () => {
   it('the committed file is exactly what the configuration produces (run `npm run tokens` after changing the palette)', () => {
-    const committed = readFileSync(path.join(__dirname, '../design-tokens.json'), 'utf8');
+    // Git on Windows may check the file out with CRLF line endings (core.autocrlf): the content is what is compared, not the line endings.
+    const committed = readFileSync(path.join(__dirname, '../design-tokens.json'), 'utf8').replace(/\r\n/g, '\n');
     expect(committed).toBe(serializeTokens(css));
   });
 
