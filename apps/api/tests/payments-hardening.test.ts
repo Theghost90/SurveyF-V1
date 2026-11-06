@@ -59,7 +59,10 @@ const quiet = { warn: () => undefined };
 
 // `npx` is `npx.cmd` on Windows (needs a shell) and file URLs must be converted, not `.pathname`d ("/C:/..." is not a directory).
 const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
-const runNpx = (args: string[], opts: SpawnSyncOptions) => spawnSync('npx', args, { shell: process.platform === 'win32', cwd: REPO_ROOT, encoding: 'utf8', ...opts });
+// On Windows the command runs through a shell, which splits an argument that contains spaces ("paid the rest in cash" became the note "paid", which the tool
+// rightly refuses as too short: found on a Windows machine, 6 November 2026). So an argument with a space or a quote is wrapped in double quotes there.
+const shellArg = (a: string) => (process.platform === 'win32' && /[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
+const runNpx = (args: string[], opts: SpawnSyncOptions) => spawnSync('npx', process.platform === 'win32' ? args.map(shellArg) : args, { shell: process.platform === 'win32', cwd: REPO_ROOT, encoding: 'utf8', ...opts });
 const OS_ENV = Object.fromEntries(['PATH', 'Path', 'HOME', 'USERPROFILE', 'SystemRoot', 'ComSpec', 'PATHEXT', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP'].filter((k) => process.env[k]).map((k) => [k, process.env[k] as string]));
 
 describe('MINOR: what the customer sees and what we log', () => {
