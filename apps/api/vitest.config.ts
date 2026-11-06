@@ -76,6 +76,15 @@ export default defineConfig({
       CAMERPAY_WEBHOOK_SECRET: '',
       PSP_FEES: '',
       DEV_GEO_COUNTRY: '',
+      // Hermetic, second part: every number the code reads from the environment is pinned to its documented default, so a developer's own .env (a payout hold for a pilot,
+      // lower caps, a shorter session) cannot change what a test sees. Found on 5 November 2026: PAYOUT_HOLD_DAYS or lowered payout caps in a .env made 6 gift and wallet tests fail.
+      PAYOUT_HOLD_DAYS: '0', PAYOUT_ACCOUNT_MAX_XAF_PER_DAY: '100000', PAYOUT_PHONE_MAX_XAF_PER_DAY: '5000', PAYOUT_PHONE_MAX_COUNT_PER_DAY: '3', GIFT_FEE_PERCENT: '5',
+      SESSION_TTL_HOURS: '12', SESSION_TIMEOUT_HOURS: '24', EXPORT_DAILY_LIMIT: '20', EXPORT_DAILY_ROWS: '50000', STEP_UP_EXPORT_ROWS: '50', STEP_UP_BULK_ROWS: '20', STEP_UP_MINUTES: '15',
+      REVEAL_PER_DAY: '300', READ_SOFT_PEOPLE: '1000', READ_HARD_PEOPLE: '20000', SHEETS_AUTOSYNC_DAYS: '30', AUDIT_RETENTION_DAYS: '400', ACCOUNT_DELETION_GRACE_DAYS: '30',
+      PRORATION_ENABLED: 'true', OVERAGE_DUE_DAYS: '14', OVERAGE_BLOCK_SENDS_AFTER_DAYS: '0', FINANCIAL_RETENTION_YEARS: '10', ACCOUNT_EXPORT_PER_DAY: '3', UNVERIFIED_PURGE_HOURS: '24',
+      SIGNUP_PER_IP_HOUR: '30', RATE_LIMIT_SESSION_PER_MINUTE: '300', META_GRAPH_VERSION: 'v22.0', CAMPAY_ENV: 'demo', PAYUNIT_MODE: 'test', CAMERPAY_PLAN: 'starter',
+      FX_CACHE_MINUTES: '360', FX_MAX_STALE_HOURS: '72', RECONCILE_MIN_SHORTFALL_XAF: '5000', RECONCILE_MIN_SHORTFALL_PERCENT: '2', RECONCILE_BALANCE_MAX_AGE_HOURS: '48',
+      BALANCE_SOURCES: '', TEAM_INVITE_DAYS: '7', WHATSAPP_PLATFORM_PHONE: '',
     },
   },
 });
