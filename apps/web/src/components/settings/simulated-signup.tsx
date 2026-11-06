@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Circle, Facebook, Loader2, MessageSquareText, ShieldCheck, Smartphone } from 'lucide-react';
-import { demoNumberKind, type NumberSituation, type SignupTraceStep } from '@surveyflow/shared';
+import { demoNumberKind, type NumberSituation } from '@surveyflow/shared';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -62,27 +62,25 @@ export function SimulatedSignup({ open, onOpenChange, situation, onFinished }: {
   const [site, setSite] = useState('');
   const [zone, setZone] = useState(ZONES[0]!);
   const [terms, setTerms] = useState(false);
-  const [trace, setTrace] = useState<SignupTraceStep[] | null>(null);
-  const [shown, setShown] = useState(0);
-  const [event, setEvent] = useState<Record<string, unknown> | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [settled, setSettled] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paid, setPaid] = useState<null | 'added' | 'later'>(null);
-  const connected = !!trace;
 
   // a fresh run every time the window opens
   useEffect(() => {
     if (!open) return;
     setStep('login'); setReached([]); setPhone('+237 6'); setPhoneError(false); setKind('new'); setCode(''); setCodeWrong(false); setVoiced(false);
     setBizName(account?.user.businessName ?? ''); setCountry(account?.user.country ?? 'CM'); setSite(''); setZone(ZONES[0]!); setTerms(false);
-    setTrace(null); setShown(0); setEvent(null); setError(null); setPaid(null);
+    setConnected(false); setSettled(false); setError(null); setPaid(null);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // the steps appear one after the other so a person can read them; what they say is what the connection returned
+  // a short pause so the customer sees that something is being done before the next screen (the pace is simulated)
   useEffect(() => {
-    if (!trace || shown >= trace.length) return;
-    const id = setTimeout(() => setShown((n) => n + 1), 550);
+    if (!connected || settled) return;
+    const id = setTimeout(() => setSettled(true), 1400);
     return () => clearTimeout(id);
-  }, [trace, shown]);
+  }, [connected, settled]);
 
   const reach = (k: string) => setReached((r) => (r.includes(k) ? r : [...r, k]));
   const go = (k: string, next: Step) => { reach(k); setStep(next); };
@@ -103,12 +101,10 @@ export function SimulatedSignup({ open, onOpenChange, situation, onFinished }: {
     go('verify', 'biz');
   }
   async function finish() {
-    setStep('working'); setError(null); setTrace(null); setShown(0); reach('perm');
+    setStep('working'); setError(null); setConnected(false); setSettled(false); reach('perm');
     try {
-      const r = await api<{ items: Array<{ wabaId: string; phoneNumberId: string }>; trace: SignupTraceStep[] }>('/whatsapp/accounts/mock', { method: 'POST', body: { phone: digitsOf(phone), declared: situation, scenario: kind === 'business_app' ? 'business_app' : 'new' } });
-      const a = r.items[0]!;
-      setEvent({ type: 'WA_EMBEDDED_SIGNUP', event: kind === 'business_app' ? 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' : 'FINISH', data: { phone_number_id: a.phoneNumberId, is_on_biz_app: kind === 'business_app', messaging_account_ids: [a.wabaId] }, code: '<one-time code>' });
-      setTrace(r.trace);
+      await api('/whatsapp/accounts/mock', { method: 'POST', body: { phone: digitsOf(phone), declared: situation, scenario: kind === 'business_app' ? 'business_app' : 'new' } });
+      setConnected(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : errorMessage(err, t));
     }
@@ -118,7 +114,6 @@ export function SimulatedSignup({ open, onOpenChange, situation, onFinished }: {
     onOpenChange(v);
   }
 
-  const stepLabel = (s: SignupTraceStep) => (s.key === 'mode' ? t(`ss.t.mode.${s.info === 'coexistence' ? 'coexistence' : 'cloud'}` as TKey) : t(`ss.t.${s.key}` as TKey, { info: s.info ?? '' }));
   // The customer's checklist (right side): plain words, what to give and why, ticked once done. Eight steps for a new number, five for a number in the WhatsApp Business app.
   const plan: 'new' | 'app' = reached.includes('phone') ? (kind === 'business_app' ? 'app' : 'new') : situation === 'business_app' ? 'app' : 'new';
   const doneKeys: Record<string, boolean> = {
@@ -214,8 +209,8 @@ export function SimulatedSignup({ open, onOpenChange, situation, onFinished }: {
                   <Button className="mt-auto h-11" variant="outline" onClick={() => setStep('phone')} data-testid="sim-work-back">{t('ss.work.back')}</Button>
                 </>) : (<>
                   <p className="text-sm text-muted-foreground">{t('ss.work.sub')}</p>
-                  {(!trace || shown < trace.length) ? <p className="flex items-center gap-2 text-sm font-semibold"><Loader2 className="h-4 w-4 animate-spin" aria-hidden />{t('ss.work.title')}…</p> : <p className="flex items-center gap-2 text-sm font-semibold text-leaf" data-testid="sim-work-ok"><CheckCircle2 className="h-5 w-5" aria-hidden />{t('ss.work.ok')}</p>}
-                  {trace && shown >= trace.length && <Button className="mt-auto h-11 bg-[#1877F2] text-white hover:bg-[#1666d4]" onClick={() => setStep('bill')} data-testid="sim-work-continue">{t('ss.work.continue')}</Button>}
+                  {(!connected || !settled) ? <p className="flex items-center gap-2 text-sm font-semibold"><Loader2 className="h-4 w-4 animate-spin" aria-hidden />{t('ss.work.title')}…</p> : <p className="flex items-center gap-2 text-sm font-semibold text-leaf" data-testid="sim-work-ok"><CheckCircle2 className="h-5 w-5" aria-hidden />{t('ss.work.ok')}</p>}
+                  {connected && settled && <Button className="mt-auto h-11 bg-[#1877F2] text-white hover:bg-[#1666d4]" onClick={() => setStep('bill')} data-testid="sim-work-continue">{t('ss.work.continue')}</Button>}
                 </>)}
               </>)}
               {step === 'bill' && (<>
@@ -234,7 +229,7 @@ export function SimulatedSignup({ open, onOpenChange, situation, onFinished }: {
               <h3 className="flex items-center gap-2 font-display text-2xl font-bold"><ShieldCheck className="h-6 w-6 text-leaf" aria-hidden />{t('ss.c.title')}</h3>
               <p className="mt-1 text-base text-body">{t('ss.c.sub')}</p>
             </div>
-            {step === 'working' && !error && <p className="flex items-center gap-2 rounded-xl bg-white p-3 text-base font-semibold" role="status" data-testid="sim-connecting">{(!trace || shown < trace.length) ? <Loader2 className="h-5 w-5 animate-spin text-leaf" aria-hidden /> : <CheckCircle2 className="h-5 w-5 text-leaf" aria-hidden />}{t('ss.c.connecting')}</p>}
+            {step === 'working' && !error && <p className="flex items-center gap-2 rounded-xl bg-white p-3 text-base font-semibold" role="status" data-testid="sim-connecting">{(!connected || !settled) ? <Loader2 className="h-5 w-5 animate-spin text-leaf" aria-hidden /> : <CheckCircle2 className="h-5 w-5 text-leaf" aria-hidden />}{t('ss.c.connecting')}</p>}
             <ol className="flex flex-col gap-2.5" data-testid="sim-items">
               {keys.map((k) => {
                 const st = itemState(k);
@@ -264,14 +259,6 @@ export function SimulatedSignup({ open, onOpenChange, situation, onFinished }: {
                 );
               })}
             </ol>
-            {trace && event && (
-              <details className="rounded-xl border border-dashed border-line bg-white/60 p-3 text-xs" data-testid="sim-tester">
-                <summary className="cursor-pointer font-semibold">{t('ss.t.title')}</summary>
-                <div className="mt-2 rounded-lg bg-ink p-2 text-white" data-testid="sim-event"><p className="mb-1 font-bold">{t('ss.event.title')}</p><pre className="overflow-x-auto whitespace-pre-wrap break-all">{JSON.stringify(event, null, 2)}</pre><p className="mt-1 text-white/70">{t('ss.event.note')}</p></div>
-                <ol className="mt-2 flex flex-col gap-1.5" data-testid="sim-trace">{trace.map((s, i) => (<li key={`${s.key}-${i}`} className="flex gap-2" data-testid={`sim-trace-${s.key}`}><CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-leaf" aria-hidden /><span>{stepLabel(s)}</span></li>))}</ol>
-                <p className="mt-2 text-muted-foreground">{t('ss.work.note')}</p>
-              </details>
-            )}
           </aside>
         </div>
       </DialogContent>

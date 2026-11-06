@@ -57,8 +57,11 @@ async function register(email, business) {
 const stamp = String(Date.now()).slice(-6);
 const itemState = async (k) => page.getByTestId(`sim-item-${k}`).getAttribute('data-state');
 const itemCount = async () => page.locator('[data-testid^="sim-item-"]').count();
-const openTester = async () => { await page.getByTestId('sim-tester').locator('summary').click(); }; // the technical list is for testers: closed unless asked
-const traceKeys = async () => page.locator('[data-testid^="sim-trace-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid').replace('sim-trace-', '')));
+const noTechnical = async () => { // nothing technical anywhere in the window, for anybody: no tester fold, no event, no list of what the code did
+  expect((await page.getByTestId('sim-tester').count()) === 0 && (await page.getByTestId('sim-event').count()) === 0 && (await page.getByTestId('sim-trace').count()) === 0, 'no tester fold, no event, no technical list');
+  const all = await page.getByTestId('sim-dialog').innerText();
+  expect(!/For testers|WA_EMBEDDED|is_on_biz_app|messaging_account_ids|one-time code>|webhook|access token|random PIN/.test(all), `technical wording in the window: ${all.slice(0, 300)}`);
+};
 await newPage();
 await step('ARMAND: the Connect step asks where the number is, and the simulation cannot start until it is answered', async () => {
   await register(`armand${Date.now()}@example.com`, 'Armand Thesis');
@@ -111,17 +114,14 @@ await step('ARMAND: Meta’s popup, screen by screen: login, access, a number in
   expect(!/is_on_biz_app|WA_EMBEDDED|PIN|webhook|token|FINISH/.test(side), `no technical text on the customer side: ${side}`);
 });
 
-await step('ARMAND: Finish: what the popup tells SurveyFlow, then SurveyFlow’s own steps (registered with a PIN, no sync), then Meta’s payment method', async () => {
+await step('ARMAND: Finish, then Meta’s payment method; nothing technical is shown, and the account is a registered standard number with no sync', async () => {
   await page.getByTestId('sim-done-btn').click();
   await page.getByTestId('sim-connecting').waitFor({ timeout: 20000 });
   await page.getByTestId('sim-work-continue').waitFor({ timeout: 30000 });
-  await openTester();
-  const ev = await page.getByTestId('sim-event').innerText();
-  expect(/"event": "FINISH"/.test(ev) && /"is_on_biz_app": false/.test(ev) && /messaging_account_ids/.test(ev), `popup event: ${ev.slice(0, 300)}`);
-  const keys = await traceKeys();
-  expect(keys.join(',') === 'token,details,mode,subscribe,register,drafts,templates,done', `trace: ${keys.join(',')}`);
-  const side = await page.getByTestId('sim-tester').innerText();
-  expect(/no\. Standard onboarding/.test(side) && /random PIN/.test(side) && /\+237699\d+1 \(simulated\)/.test(side) && !/sync|chat history/i.test(side.replace(/is_on_biz_app/g, '')), `trace text: ${side.slice(0, 500)}`);
+  await noTechnical();
+  // what really happened is read from the account, not from the screen: a new number is registered, nothing is synced
+  const acct = (await call('GET', '/whatsapp/accounts')).json.items[0];
+  expect(acct.mode === 'cloud' && acct.registered === true && acct.sync.state === 'none' && acct.signupVersion === 'v5', `account: ${JSON.stringify(acct).slice(0, 300)}`);
   await shotDialog('10-armand-behind-the-scenes');
   await page.getByTestId('sim-work-continue').click();
   expect((await itemState('pay')) === 'current', 'the payment method is now the step to do');
@@ -158,7 +158,7 @@ await step('MIREILLE: choosing "in my WhatsApp Business app" shows what changes 
   await shot('13a-mireille-limits');
 });
 
-await step('MIREILLE: Meta’s popup for a number in the WhatsApp Business app: profile, business, QR scan, time zone; then SurveyFlow’s steps (no registration, sync asked)', async () => {
+await step('MIREILLE: Meta’s popup for a number in the WhatsApp Business app: profile, business, QR scan, time zone; then the account is in coexistence, not registered, sync asked, and nothing technical is shown', async () => {
   await page.getByTestId('sim-open').click();
   await page.getByTestId('sim-login-btn').click();
   await page.getByTestId('sim-auth-btn').click();
@@ -181,13 +181,9 @@ await step('MIREILLE: Meta’s popup for a number in the WhatsApp Business app: 
   expect(!/code by SMS/.test(await page.getByTestId('sim-side').innerText()), 'no SMS step for a number in the app');
   await page.getByTestId('sim-done-btn').click();
   await page.getByTestId('sim-work-continue').waitFor({ timeout: 30000 });
-  await openTester();
-  const ev = await page.getByTestId('sim-event').innerText();
-  expect(/FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING/.test(ev) && /"is_on_biz_app": true/.test(ev), `popup event: ${ev.slice(0, 300)}`);
-  const keys = await traceKeys();
-  expect(keys.join(',') === 'token,details,mode,subscribe,register_skipped,sync,drafts,templates,done', `trace: ${keys.join(',')}`);
-  const side = await page.getByTestId('sim-tester').innerText();
-  expect(/yes\. Coexistence/.test(side) && /Does not register the number/.test(side) && /contacts and chat history/.test(side), `trace text: ${side.slice(0, 600)}`);
+  await noTechnical();
+  const macct = (await call('GET', '/whatsapp/accounts')).json.items[0];
+  expect(macct.mode === 'coexistence' && macct.registered === false && macct.sync.state === 'pending', `account: ${JSON.stringify(macct).slice(0, 300)}`);
   await shotDialog('16-mireille-behind-the-scenes');
   await page.getByTestId('sim-work-continue').click();
   await page.getByTestId('sim-bill-add').click();
