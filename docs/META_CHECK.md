@@ -194,6 +194,7 @@ Wait until both lines say they are ready (the website on `http://localhost:4222`
 - **For Armand: a phone number that has never had WhatsApp** (a new SIM). A number registered to a WhatsApp account is refused by Meta (what happened to +237 677 27 34 95 on 5 November) unless you delete that WhatsApp account first.
 - **For Mireille: a phone with the WhatsApp Business app, version 2.24.17 or later, on a number that is not the shop's real number.** Connecting links that app to the Cloud API: limits above apply to it (linked devices unlinked once, broadcast lists read-only). If you want to reuse +237 677 27 34 95, installing WhatsApp Business on that SIM and registering the number moves its WhatsApp account into the Business app (WhatsApp offers to move the chats): you would lose its use in the ordinary WhatsApp app. Do not do it with a number you need.
 - A mobile phone with you for the SMS code (Armand) and the QR code (Mireille).
+- **A second business portfolio for the "customer"** (found on 6 November in Meta's Facebook Login for Business page): the app must be tied to a portfolio you fully control, **separate from the portfolio of the business client** that logs in. Your app's portfolio is "SurveyFlow". In the popup, do **not** pick "SurveyFlow" for the test customer: create a new portfolio there (Armand and Mireille each can), or use another one. How Meta reacts if the same portfolio is used is not known; use a separate one.
 
 **Set up, once (about 45 minutes)** ◇
 
