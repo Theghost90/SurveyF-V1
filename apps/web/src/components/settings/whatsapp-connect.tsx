@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { dateTime } from '@/lib/format';
+import { fbLogin } from '@/lib/fb-login';
 import { SimulatedSignup } from './simulated-signup';
 import { useLocale, useT } from '@/lib/i18n/client';
 
@@ -60,13 +61,13 @@ function EmbeddedSignup({ cfg, situation, onDone }: { cfg: NonNullable<Config['e
     if (!window.FB) return toast.error(t('w.sdkLoading'));
     setBusy(true);
     session.current = null;
-    window.FB.login(
-      async (resp: { authResponse?: { code?: string } }) => {
+    try {
+      fbLogin(window.FB, signupLaunchOptions(cfg.configId), async (resp: { authResponse?: { code?: string } }) => {
         const code = resp.authResponse?.code;
         // the `message` event can arrive just after the login callback: wait for it, up to five seconds
         for (let i = 0; i < 25 && !session.current; i++) await new Promise((r) => setTimeout(r, 200));
         const s = session.current;
-        if (!code || !s) { setBusy(false); return toast.error(t('w.signupCancelled')); }
+        if (!code || !s) { setBusy(false); return void toast.error(t('w.signupCancelled')); }
         try {
           await api('/whatsapp/embedded-signup', { body: { code, wabaId: s.wabaId, phoneNumberId: s.phoneNumberId, isOnBizApp: s.isOnBizApp, declared: situation } });
           toast.success(t('w.connected'));
@@ -76,9 +77,11 @@ function EmbeddedSignup({ cfg, situation, onDone }: { cfg: NonNullable<Config['e
         } finally {
           setBusy(false);
         }
-      },
-      signupLaunchOptions(cfg.configId),
-    );
+      });
+    } catch {
+      setBusy(false);
+      toast.error(t('wc.signupError'));
+    }
   }
   return <Button size="lg" onClick={launch} loading={busy} disabled={!situation} className="h-12 bg-[#1877F2] text-white hover:bg-[#1666d4]"><Facebook className="h-5 w-5" aria-hidden />{t('w.embedded')}</Button>;
 }
